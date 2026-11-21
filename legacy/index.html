@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open-EM4</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>🚒 Open-EM4</h1>
+  <div id="stats">
+    <span>Score: <b id="score">0</b></span>
+    <span>Reputatie: <b id="rep">100</b>%</span>
+    <span>Tijd: <b id="time">0:00</b></span>
+    <span>Opgelost: <b id="solved">0</b></span>
+  </div>
+  <div id="controls">
+    <button data-sel="fire">🚒 Brandweer</button>
+    <button data-sel="ambulance">🚑 Ambulance</button>
+    <button data-sel="police">🚓 Politie</button>
+    <button id="pause">⏸ Pauze</button>
+  </div>
+</header>
+<main>
+  <canvas id="game" width="1024" height="704"></canvas>
+  <aside>
+    <h2>Meldingen</h2>
+    <ul id="incidents"></ul>
+    <h2>Besturing</h2>
+    <p>Klik of sleep om eenheden te selecteren (Shift = toevoegen).<br>
+    Klik op de kaart om te rijden, klik op een melding om erheen te sturen.<br>
+    Spatie = pauze.</p>
+  </aside>
+</main>
+<div id="overlay" class="hidden"><div><h2 id="ovTitle"></h2><p id="ovText"></p><button id="restart">Opnieuw</button></div></div>
+<script src="game.js"></script>
+</body>
+</html>
