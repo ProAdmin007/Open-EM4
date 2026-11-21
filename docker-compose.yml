@@ -1,0 +1,7 @@
+services:
+  openrescue:
+    build: .
+    image: openrescue-rts:latest
+    ports:
+      - "8080:80"
+    restart: unless-stopped

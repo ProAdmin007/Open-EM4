@@ -1,39 +1,45 @@
 <!doctype html>
 <html lang="nl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open-EM4</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenRescue RTS</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23c62828'/%3E%3Cpath d='M16 5v22M5 16h22' stroke='white' stroke-width='5'/%3E%3C/svg%3E">
 </head>
 <body>
-<header>
-  <h1>🚒 Open-EM4</h1>
-  <div id="stats">
-    <span>Score: <b id="score">0</b></span>
-    <span>Reputatie: <b id="rep">100</b>%</span>
-    <span>Tijd: <b id="time">0:00</b></span>
-    <span>Opgelost: <b id="solved">0</b></span>
+  <div id="game-root"></div>
+
+  <div id="ui" class="hidden">
+    <div id="topbar">
+      <div class="brand">🚒 OpenRescue</div>
+      <div class="stat">⏱ <b id="st-time">00:00</b></div>
+      <div class="stat">⭐ Score <b id="st-score">0</b></div>
+      <div class="stat">💶 Middelen <b id="st-budget">0</b></div>
+      <div class="stat">🏛 Reputatie <span class="bar"><i id="st-rep"></i></span> <b id="st-rep-n">100</b>%</div>
+      <div class="stat">✔ <b id="st-solved">0</b></div>
+      <div class="spacer"></div>
+      <div class="speed">
+        <button data-act="pause" id="btn-pause" title="Pauze (spatie)">⏸</button>
+        <button data-act="speed1" title="Normaal (1)">1×</button>
+        <button data-act="speed2" title="Snel (2)">2×</button>
+        <button data-act="speed4" title="Sneller (3)">4×</button>
+        <button data-act="menu" title="Menu">☰</button>
+      </div>
+    </div>
+    <div id="pause-banner" class="hidden">PAUZE</div>
+    <div id="toasts"></div>
+    <div id="incidents-panel"><h3>Meldingen</h3><div id="incident-list"></div></div>
+    <div id="bottom">
+      <div id="unit-panel" class="panel"></div>
+      <div id="dispatch" class="panel"><div id="tabs"></div><div id="vehicle-list"></div></div>
+      <div id="map-panel" class="panel">
+        <canvas id="minimap" width="220" height="165"></canvas>
+        <div id="cam-controls"><button data-act="zoomin" title="Inzoomen">＋</button><button data-act="zoomout" title="Uitzoomen">－</button><button data-act="home" title="Naar geselecteerde eenheid (F)">◎</button></div>
+      </div>
+    </div>
   </div>
-  <div id="controls">
-    <button data-sel="fire">🚒 Brandweer</button>
-    <button data-sel="ambulance">🚑 Ambulance</button>
-    <button data-sel="police">🚓 Politie</button>
-    <button id="pause">⏸ Pauze</button>
-  </div>
-</header>
-<main>
-  <canvas id="game" width="1024" height="704"></canvas>
-  <aside>
-    <h2>Meldingen</h2>
-    <ul id="incidents"></ul>
-    <h2>Besturing</h2>
-    <p>Klik of sleep om eenheden te selecteren (Shift = toevoegen).<br>
-    Klik op de kaart om te rijden, klik op een melding om erheen te sturen.<br>
-    Spatie = pauze.</p>
-  </aside>
-</main>
-<div id="overlay" class="hidden"><div><h2 id="ovTitle"></h2><p id="ovText"></p><button id="restart">Opnieuw</button></div></div>
-<script src="game.js"></script>
+
+  <div id="screen" class="hidden"></div>
+  <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

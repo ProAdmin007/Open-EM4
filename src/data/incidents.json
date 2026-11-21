@@ -1,0 +1,252 @@
+[
+  {
+    "id": "house_fire",
+    "name": "Woningbrand",
+    "category": "fire",
+    "weight": 4,
+    "spawn": {
+      "on": "building",
+      "buildingTypes": [
+        "residential",
+        "apartment"
+      ]
+    },
+    "severity": {
+      "min": 1,
+      "max": 3
+    },
+    "requires": [
+      "fire",
+      "ambulance"
+    ],
+    "fire": {
+      "start": 22,
+      "growth": 0.7,
+      "spread": 1.0
+    },
+    "victims": {
+      "min": 0,
+      "max": 1,
+      "location": "trapped",
+      "health": [
+        45,
+        85
+      ],
+      "decay": 0.25
+    },
+    "objectives": [
+      "fire_out",
+      "victims_safe"
+    ],
+    "escalation": {
+      "everySec": 70
+    },
+    "failAfterSec": 300,
+    "reward": {
+      "score": 250,
+      "budget": 600
+    },
+    "icon": "🔥"
+  },
+  {
+    "id": "industrial_fire",
+    "name": "Industriebrand",
+    "category": "fire",
+    "weight": 1.5,
+    "spawn": {
+      "on": "building",
+      "buildingTypes": [
+        "industrial",
+        "commercial"
+      ]
+    },
+    "severity": {
+      "min": 2,
+      "max": 3
+    },
+    "requires": [
+      "fire"
+    ],
+    "fire": {
+      "start": 30,
+      "growth": 1.1,
+      "spread": 1.6
+    },
+    "victims": {
+      "min": 0,
+      "max": 0,
+      "location": "trapped",
+      "health": [
+        50,
+        90
+      ],
+      "decay": 0.3
+    },
+    "objectives": [
+      "fire_out"
+    ],
+    "escalation": {
+      "everySec": 55
+    },
+    "failAfterSec": 330,
+    "reward": {
+      "score": 400,
+      "budget": 900
+    },
+    "icon": "🏭"
+  },
+  {
+    "id": "car_accident",
+    "name": "Auto-ongeluk met slachtoffer",
+    "category": "ambulance",
+    "weight": 3,
+    "spawn": {
+      "on": "road"
+    },
+    "severity": {
+      "min": 1,
+      "max": 3
+    },
+    "requires": [
+      "ambulance",
+      "police"
+    ],
+    "victims": {
+      "min": 1,
+      "max": 2,
+      "location": "scene",
+      "health": [
+        35,
+        75
+      ],
+      "decay": 0.3
+    },
+    "obstacle": {
+      "tiles": 1
+    },
+    "objectives": [
+      "victims_safe",
+      "area_secured"
+    ],
+    "escalation": {
+      "everySec": 80
+    },
+    "failAfterSec": 280,
+    "reward": {
+      "score": 220,
+      "budget": 500
+    },
+    "icon": "💥"
+  },
+  {
+    "id": "medical_emergency",
+    "name": "Medisch noodgeval",
+    "category": "ambulance",
+    "weight": 3,
+    "spawn": {
+      "on": "building",
+      "buildingTypes": [
+        "residential",
+        "apartment",
+        "commercial"
+      ]
+    },
+    "severity": {
+      "min": 1,
+      "max": 2
+    },
+    "requires": [
+      "ambulance"
+    ],
+    "victims": {
+      "min": 1,
+      "max": 1,
+      "location": "scene",
+      "health": [
+        30,
+        60
+      ],
+      "decay": 0.22
+    },
+    "objectives": [
+      "victims_safe"
+    ],
+    "escalation": {
+      "everySec": 90
+    },
+    "failAfterSec": 260,
+    "reward": {
+      "score": 160,
+      "budget": 350
+    },
+    "icon": "🚑"
+  },
+  {
+    "id": "crime",
+    "name": "Verdachte / misdrijf",
+    "category": "police",
+    "weight": 3,
+    "spawn": {
+      "on": "building",
+      "buildingTypes": [
+        "commercial",
+        "residential",
+        "industrial"
+      ]
+    },
+    "severity": {
+      "min": 1,
+      "max": 2
+    },
+    "requires": [
+      "police"
+    ],
+    "suspects": {
+      "min": 1,
+      "max": 2
+    },
+    "objectives": [
+      "suspects_arrested"
+    ],
+    "escalation": {
+      "everySec": 75
+    },
+    "failAfterSec": 240,
+    "reward": {
+      "score": 180,
+      "budget": 400
+    },
+    "icon": "🚨"
+  },
+  {
+    "id": "road_blockage",
+    "name": "Verkeersblokkade",
+    "category": "tech",
+    "weight": 2,
+    "spawn": {
+      "on": "road"
+    },
+    "severity": {
+      "min": 1,
+      "max": 2
+    },
+    "requires": [
+      "tech"
+    ],
+    "obstacle": {
+      "tiles": 2
+    },
+    "objectives": [
+      "obstacle_cleared"
+    ],
+    "escalation": {
+      "everySec": 100
+    },
+    "failAfterSec": 260,
+    "reward": {
+      "score": 140,
+      "budget": 300
+    },
+    "icon": "🚧"
+  }
+]
