@@ -31,6 +31,7 @@ docker compose up -d --build     # http://localhost:8080
 | Opdracht | rechtermuisknop: rijden / lopen, of gericht op brand, slachtoffer, verdachte, obstakel, ziekenhuis |
 | Uitstappen / instappen / stop | `E` / `R` / `X` of de knoppen in het eenheidspaneel |
 | Pauze, snelheid | `Spatie`, `1` `2` `3` of de knoppen rechtsboven |
+| Geluid | `M` of de 🔊-knop; volume in Instellingen |
 
 Voorbeeld: selecteer de tankautospuit → rechtermuisknop op de brandende woning → **Uitstappen** → **Blussen** (of rechtermuisknop op de brand) → de melding verdwijnt zodra het vuur uit is.
 Een ongeluk: ambulancepersoneel behandelt het slachtoffer (rechtermuisknop), laadt het in (nogmaals rechtermuisknop), stapt in en rijdt naar het ziekenhuis; de politie zet de plaats af.
@@ -43,12 +44,15 @@ Zie [docs/architecture.md](docs/architecture.md). Kort: een kaart van 64×48 teg
 6 incidenttypes (woningbrand, industriebrand, auto-ongeluk, medisch noodgeval, misdrijf, verkeersblokkade), brand met uitbreiding, slachtoffers met gezondheid en vervoer, A*-routes,
 burgerverkeer met verkeerslichten en voorrang voor hulpdiensten, voetgangers, minimap, mod-systeem met validatie, opslaan/laden.
 
+**Geluid** is volledig procedureel (Web Audio, geen bestanden): sirenes per dienst die met afstand en richting meebewegen, brandgeknetter, waterstraal, verkeersgeruis en effecten voor nieuwe/escalerende/afgeronde meldingen, bevelen, uitstappen en overlijden. Volume en mute worden onthouden.
+Daarnaast: de bevelvoerder (uitgestapt, binnen 10 tegels) maakt blussers 25% effectiever, slangen en afzetlint zijn zichtbaar, en Freeplay laat je de kaart kiezen (ook uit mods).
+
 ## Nog niet af
 
-- Echte isometrische weergave (nu bovenaanzicht met 2.5D-gebouwen), geluid, animaties van personen.
-- Naar binnen gaan in gebouwen (redden is een abstracte actie bij de deur), slangen als zichtbaar object, omstanders wegsturen, verkeer regelen, afzetlint tekenen.
-- `coordinate`-rol (bevelvoerder) heeft nog geen effect; "Middelen" is nu alleen een scoremaat.
-- Mods kunnen kaarten bevatten, maar het menu kiest nog geen andere kaart; geen Tiled-import.
+- Echte isometrische weergave (nu bovenaanzicht met 2.5D-gebouwen) en animaties van personen. Geluid is synthetisch en eenvoudig (geen opgenomen samples).
+- Naar binnen gaan in gebouwen (redden is een abstracte actie bij de deur), omstanders wegsturen en verkeer regelen.
+- "Middelen" is nu alleen een scoremaat.
+- Geen Tiled-import (kaarten zijn JSON, zie docs/modding.md).
 - 60 FPS is niet gemeten op een echte GPU (zie [docs/performance.md](docs/performance.md)).
 - Multiplayer (de simulatie is er wel op voorbereid).
 

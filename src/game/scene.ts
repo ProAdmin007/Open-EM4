@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SIM_DT, World, type WorldOptions, type SaveGame, type OrderTarget } from '../sim/world';
 import type { Ability, Building, Content, GameEvent } from '../sim/types';
 import { ART_SCALE } from './assets';
+import type { AudioEngine } from './audio';
 
 export const T = 32;
 const S = 1 / ART_SCALE;
@@ -49,6 +50,7 @@ export class GameScene extends Phaser.Scene {
   private dragging = false;
   private panning: { x: number; y: number; sx: number; sy: number } | null = null;
   fps = 60;
+  audio: AudioEngine | null = null;
 
   constructor() {
     super('game');
@@ -128,7 +130,7 @@ export class GameScene extends Phaser.Scene {
     let vehicles = this.selectedVehicleIds();
     if (!vehicles.length) vehicles = [...new Set(this.selectedResponderIds().map(id => w.responders.get(id)!.vehicleId))];
     const out = w.orderDismount(vehicles);
-    if (out.length) this.selected = new Set(out);
+    if (out.length) { this.selected = new Set(out); this.audio?.play('dismount'); }
   }
   cmdBoard(): void {
     this.world!.orderBoard([...this.selected]);
@@ -171,6 +173,7 @@ export class GameScene extends Phaser.Scene {
       if (p.middleButtonDown()) { this.panning = { x: p.x, y: p.y, sx: this.cameras.main.scrollX, sy: this.cameras.main.scrollY }; return; }
       if (p.rightButtonDown()) {
         const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+        if (this.selected.size) this.audio?.play('order');
         this.world.contextOrder([...this.selected], wp.x / T, wp.y / T);
         return;
       }
@@ -406,6 +409,8 @@ export class GameScene extends Phaser.Scene {
     }
     this.normaliseSelection();
     this.render(time, dt);
+    const wv = this.cameras.main.worldView;
+    this.audio?.update(w, { x: wv.centerX / T, y: wv.centerY / T }, this.state === 'playing', this.speed === 0);
   }
 
   private normaliseSelection(): void {
@@ -539,6 +544,25 @@ export class GameScene extends Phaser.Scene {
       const tx = Math.max(b.x, Math.min(b.x + b.w, r.x)) * T, ty = Math.max(b.y, Math.min(b.y + b.h, r.y)) * T - b.height * 0.5;
       fx.lineStyle(3, 0x90caf9, 0.8).lineBetween(ix(r), iy(r), tx, ty);
       if (live) { const k = Math.random(); this.emitParticle('drop', lerp(ix(r), tx, k), lerp(iy(r), ty, k)); }
+    }
+    // hoses: from the engine to every responder who is working with water
+    for (const r of w.responders.values()) {
+      if (r.task?.type !== 'extinguish' || r.inVehicle) continue;
+      const veh = w.vehicles.get(r.vehicleId);
+      if (veh) fx.lineStyle(3, 0xf9a825, 0.95).lineBetween(ix(veh), iy(veh), ix(r), iy(r));
+    }
+    // police tape around secured incident locations
+    for (const inc of w.incidents.values()) {
+      if (!inc.secured) continue;
+      const x0 = (inc.x - 1.8) * T, y0 = (inc.y - 1.8) * T, size = 3.6 * T, seg = 10;
+      for (let k = 0; k < (size * 4) / seg; k++) {
+        const d = k * seg, side = Math.floor(d / size), o = d % size;
+        const px = side === 0 ? x0 + o : side === 1 ? x0 + size : side === 2 ? x0 + size - o : x0;
+        const py = side === 0 ? y0 : side === 1 ? y0 + o : side === 2 ? y0 + size : y0 + size - o;
+        const nx = side === 0 ? px + seg : side === 1 ? px : side === 2 ? px - seg : px;
+        const ny = side === 0 ? py : side === 1 ? py + seg : side === 2 ? py : py - seg;
+        fx.lineStyle(3, k % 2 ? 0xffffff : 0xe53935, 0.9).lineBetween(px, py, nx, ny);
+      }
     }
     // selection + paths
     for (const id of this.selected) {

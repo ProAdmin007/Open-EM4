@@ -11,6 +11,9 @@ export const KMH_TO_TILES = 1 / 12;
 const FIRE_POWER_SCALE = 0.12;
 const HOSE_LENGTH = 16;
 const DEPLOY_TIME = 2.5;
+/** A dismounted responder with the `coordinate` ability (bevelvoerder) within this range makes others 25% more effective. */
+export const COMMANDER_RANGE = 10;
+export const COMMANDER_BONUS = 1.25;
 
 export const DIFFICULTY: Record<Difficulty, { maxConcurrent: number; interval: [number, number]; timeScale: number; repLoss: number }> = {
   easy: { maxConcurrent: 2, interval: [45, 75], timeScale: 1.35, repLoss: 8 },
@@ -368,7 +371,7 @@ export class World {
         t.deploy += dt;
         if (t.deploy >= DEPLOY_TIME) {
           const bonus = (veh && this.vehicleDef(veh).firePowerBonus) || 1;
-          b.fire = Math.max(0, b.fire - role.power * bonus * FIRE_POWER_SCALE * dt);
+          b.fire = Math.max(0, b.fire - role.power * bonus * (this.commanderNear(r) ? COMMANDER_BONUS : 1) * FIRE_POWER_SCALE * dt);
         }
         break;
       }
@@ -455,6 +458,13 @@ export class World {
         break;
       }
     }
+  }
+
+  commanderNear(r: Responder): boolean {
+    for (const o of this.responders.values()) {
+      if (o !== r && !o.inVehicle && this.roleDef(o).abilities.includes('coordinate') && dist(o, r) <= COMMANDER_RANGE) return true;
+    }
+    return false;
   }
 
   private clearObstacle(inc: Incident): void {

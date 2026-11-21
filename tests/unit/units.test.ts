@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { newWorld, run } from './helpers';
+import { content, newWorld, run } from './helpers';
+import { World } from '../../src/sim/world';
 
 describe('unit state', () => {
   it('vehicles cannot drive while the crew is outside, and can after boarding', () => {
@@ -51,8 +52,27 @@ describe('unit state', () => {
   });
 });
 
-import { World } from '../../src/sim/world';
-import { content } from './helpers';
 function await_import(): World {
   return World.create(content, { seed: 4, difficulty: 'normal', freeplay: false, traffic: true });
 }
+
+describe('commander and maps', () => {
+  it('a dismounted fire officer (bevelvoerder) makes nearby firefighters more effective', () => {
+    const w = newWorld(5);
+    const v = [...w.vehicles.values()].find(x => x.defId === 'fire_engine')!;
+    const ids = w.orderDismount([v.id]);
+    const officer = ids.map(id => w.responders.get(id)!).find(r => r.role === 'fire_officer')!;
+    const fighter = ids.map(id => w.responders.get(id)!).find(r => r.role === 'firefighter')!;
+    expect(w.commanderNear(fighter)).toBe(true);
+    expect(w.commanderNear(officer)).toBe(false);
+    officer.inVehicle = true;
+    expect(w.commanderNear(fighter)).toBe(false);
+  });
+  it('a world can be created on any validated map and remembers it in saves', () => {
+    const map = { ...content.maps.default_city, id: 'copy_city', name: 'Copy' };
+    const c = { ...content, maps: { ...content.maps, copy_city: map } };
+    const w = World.create(c, { seed: 1, difficulty: 'easy', freeplay: false, traffic: false, mapId: 'copy_city' });
+    expect(w.map.id).toBe('copy_city');
+    expect(World.fromSave(c, JSON.parse(JSON.stringify(w.serialize()))).map.id).toBe('copy_city');
+  });
+});
