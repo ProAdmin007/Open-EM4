@@ -12,6 +12,7 @@ src/
   data/           JSON content: roles, vehicles, incidents, default map
   game/           Phaser layer (rendering only)
     assets.ts       SVG art generation + rasterisation
+    audio.ts        AudioEngine: procedural Web Audio (sirens, fire, water, traffic, SFX)
     scene.ts        GameScene: camera, input/selection, sprite sync + interpolation,
                     effects (pooled particles), static city rendering
   ui/ui.ts        DOM HUD (Dutch): top bar, incidents, unit panel, dispatch bar, minimap, menus
@@ -52,3 +53,8 @@ Because `World` has no rendering dependencies and all mutations are orders + `ti
 - Ambulance chain: rescue (fire, if trapped) → treat → carry to ambulance → drive to hospital (hand-over happens within 3.5 tiles of a hospital).
 - Police: arrest (4 s next to the suspect), secure an accident area (5 s).
 - Tech: clear wrecks/blockades (8 s, faster with a crane); traffic is rerouted while a road is blocked.
+
+## Audio
+
+`src/game/audio.ts` synthesises everything with the Web Audio API (oscillators and filtered noise), so no sound files exist. The `AudioContext` is created on the first pointer/key event (autoplay policy).
+Each frame the scene calls `audio.update(world, cameraCentre, playing, paused)`: it computes the loudest moving emergency vehicle per service (distance attenuation + stereo pan), total fire intensity near the camera and active water spray, and sets the gain of persistent voices (4 sirens with service-specific patterns, fire crackle, spray, traffic hum). Nothing is allocated per frame. One-shot effects are triggered from game events (`incident_*`, `info`, `warn`) and from UI actions (orders, dismount, clicks). Volume and mute live in `Settings` (localStorage) and `audio.debug()` exposes levels for tests.

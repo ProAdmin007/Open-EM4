@@ -4,7 +4,8 @@ import { loadBuiltinContent } from './data';
 import { buildSvgs, rasterise } from './game/assets';
 import { GameScene, boot } from './game/scene';
 import { UI } from './ui/ui';
-import { loadMods } from './storage';
+import { loadMods, loadSettings } from './storage';
+import { AudioEngine } from './game/audio';
 import { mergeContent } from './sim/content';
 
 async function main(): Promise<void> {
@@ -31,8 +32,13 @@ async function main(): Promise<void> {
   game.events.once('ready', () => {
     const scene = game.scene.getScene('game') as unknown as GameScene;
     const start = () => {
+      const st = loadSettings();
+      const audio = new AudioEngine(st.volume, st.muted);
+      scene.audio = audio;
+      const unlock = () => audio.unlock();
+      for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, unlock, { capture: true });
       const ui = new UI(scene);
-      (window as unknown as Record<string, unknown>).__openrescue = { game, scene, ui, get world() { return scene.world; } };
+      (window as unknown as Record<string, unknown>).__openrescue = { game, scene, ui, audio, get world() { return scene.world; } };
     };
     if (scene.world) start();
     else scene.events.once('create', start);

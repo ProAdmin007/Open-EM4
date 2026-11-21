@@ -59,7 +59,7 @@ To make a vehicle appear in the game it must be listed in a station's `fleet` (s
 { "id": "firefighter", "name": "Brandweerman", "category": "fire", "abilities": ["extinguish", "rescue"], "speed": 2.6, "color": "#ffb300", "power": 9 }
 ```
 
-`abilities`: `extinguish, rescue, treat, carry, arrest, secure, clear, coordinate` (the last has no effect yet). `speed` is tiles/second on foot. `power` scales extinguishing; for `treat` a value ≥ 2 doubles treatment speed.
+`abilities`: `extinguish, rescue, treat, carry, arrest, secure, clear, coordinate` (`coordinate`: while dismounted and within 10 tiles, other responders extinguish 25% faster). `speed` is tiles/second on foot. `power` scales extinguishing; for `treat` a value ≥ 2 doubles treatment speed.
 
 ## Incident
 
@@ -108,4 +108,4 @@ Building `type`: `residential, apartment, commercial, industrial, station, hospi
 building rectangle. `tools/genmap.mjs` shows how the default city is generated. Roads should be 2 tiles wide so cars can pass obstacles; intersections
 are detected automatically.
 
-Maps added by a mod are validated, but the menu currently always starts `default_city`; select another via `WorldOptions.mapId` in code.
+Maps added by a mod are validated and appear in the *Freeplay* map selector ("Nieuw spel" always uses `default_city`).

@@ -8,8 +8,11 @@ export interface Settings {
   hints: boolean;
   difficulty: Difficulty;
   seed: string;
+  volume: number;
+  muted: boolean;
+  mapId: string;
 }
-export const DEFAULT_SETTINGS: Settings = { edgeScroll: false, defaultSpeed: 1, hints: true, difficulty: 'normal', seed: '2006' };
+export const DEFAULT_SETTINGS: Settings = { edgeScroll: false, defaultSpeed: 1, hints: true, difficulty: 'normal', seed: '2006', volume: 0.6, muted: false, mapId: 'default_city' };
 
 const K_SETTINGS = 'openrescue.settings', K_SAVE = 'openrescue.save', K_MODS = 'openrescue.mods';
 

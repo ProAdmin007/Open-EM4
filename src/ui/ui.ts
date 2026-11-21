@@ -44,10 +44,20 @@ export class UI {
 
   constructor(private scene: GameScene) {
     scene.edgeScroll = this.settings.edgeScroll;
-    scene.onEvent(e => this.toast(e));
+    scene.onEvent(e => { this.toast(e); scene.audio?.onGameEvent(e); });
     this.bind();
+    this.applyAudio();
+    document.addEventListener('keydown', ev => { if ((ev.target as HTMLElement).tagName === 'INPUT') return; if (ev.key === 'm' || ev.key === 'M') this.act('mute'); });
     this.showScreen('main');
     setInterval(() => this.refresh(), 250);
+  }
+
+  private applyAudio(): void {
+    const a = this.scene.audio;
+    if (!a) return;
+    a.setVolume(this.settings.volume);
+    a.setMuted(this.settings.muted);
+    this.el('btn-mute').textContent = this.settings.muted ? '🔇' : '🔊';
   }
 
   // ---------- generic ----------
@@ -66,6 +76,7 @@ export class UI {
     document.addEventListener('pointerdown', ev => {
       const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-act],[data-vid],[data-iid],[data-tab],[data-ability]');
       if (!target || ev.button !== 0) return;
+      this.scene.audio?.play('click');
       const s = this.scene, w = s.world;
       if (!w) return;
       const d = target.dataset;
@@ -101,6 +112,7 @@ export class UI {
       case 'speed1': s.setSpeed(1); break;
       case 'speed2': s.setSpeed(2); break;
       case 'speed4': s.setSpeed(4); break;
+      case 'mute': this.settings.muted = !this.settings.muted; this.applyAudio(); saveSettings(this.settings); break;
       case 'menu': this.openPause(); break;
       case 'zoomin': s.zoomBy(1.2); break;
       case 'zoomout': s.zoomBy(1 / 1.2); break;
@@ -275,14 +287,16 @@ export class UI {
         break;
       case 'freeplay':
         card(`<h2>Freeplay</h2><div class="col"><label>Moeilijkheid<select id="f-diff">${(['easy', 'normal', 'hard'] as Difficulty[]).map(d => `<option value="${d}" ${d === this.settings.difficulty ? 'selected' : ''}>${{ easy: 'Easy – weinig incidenten', normal: 'Normal', hard: 'Hard – veel & snelle escalatie' }[d]}</option>`).join('')}</select></label>
+          <label>Kaart<select id="f-map">${Object.values(this.scene.content.maps).map(m => `<option value="${esc(m.id)}" ${m.id === this.settings.mapId ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
           <label>Seed<input id="f-seed" type="text" value="${esc(this.settings.seed)}"></label>
           <p class="help">Dezelfde seed geeft hetzelfde scenario.</p>
           <button id="f-go" class="primary">▶ Start Freeplay</button><button id="f-back">← Terug</button></div>`);
         on('f-go', () => {
           this.settings.difficulty = (sc.querySelector('#f-diff') as HTMLSelectElement).value as Difficulty;
           this.settings.seed = (sc.querySelector('#f-seed') as HTMLInputElement).value || '1';
+          this.settings.mapId = (sc.querySelector('#f-map') as HTMLSelectElement).value;
           saveSettings(this.settings);
-          this.start({ seed: hashSeed(this.settings.seed), difficulty: this.settings.difficulty, freeplay: true });
+          this.start({ seed: hashSeed(this.settings.seed), difficulty: this.settings.difficulty, freeplay: true, mapId: this.settings.mapId });
         });
         on('f-back', () => this.showScreen('main'));
         break;
@@ -292,6 +306,8 @@ export class UI {
         card(`<h2>Instellingen</h2><div class="col">
           <label>Randscrollen met de muis<input id="s-edge" type="checkbox" ${this.settings.edgeScroll ? 'checked' : ''}></label>
           <label>Hints tonen<input id="s-hints" type="checkbox" ${this.settings.hints ? 'checked' : ''}></label>
+          <label>Geluid uit<input id="s-muted" type="checkbox" ${this.settings.muted ? 'checked' : ''}></label>
+          <label>Volume<input id="s-vol" type="range" min="0" max="100" value="${Math.round(this.settings.volume * 100)}"></label>
           <label>Standaard spelsnelheid<select id="s-speed">${[1, 2, 4].map(n => `<option value="${n}" ${this.settings.defaultSpeed === n ? 'selected' : ''}>${n}×</option>`).join('')}</select></label>
           <hr style="border-color:#34405a;width:100%">
           <div><b>Mods</b> <span class="help">(JSON-bestand met voertuigen, incidenten, rollen of kaarten — zie docs/modding.md)</span></div>
@@ -304,9 +320,14 @@ export class UI {
           this.settings.edgeScroll = (sc.querySelector('#s-edge') as HTMLInputElement).checked;
           this.settings.hints = (sc.querySelector('#s-hints') as HTMLInputElement).checked;
           this.settings.defaultSpeed = Number((sc.querySelector('#s-speed') as HTMLSelectElement).value) as 1 | 2 | 4;
+          this.settings.muted = (sc.querySelector('#s-muted') as HTMLInputElement).checked;
+          this.settings.volume = Number((sc.querySelector('#s-vol') as HTMLInputElement).value) / 100;
           this.scene.edgeScroll = this.settings.edgeScroll;
+          this.applyAudio();
           saveSettings(this.settings);
         };
+        sc.querySelector('#s-vol')?.addEventListener('input', () => { apply(); this.scene.audio?.play('click'); });
+        sc.querySelector('#s-muted')?.addEventListener('change', apply);
         on('s-back', () => { apply(); this.showScreen(extra === 'pause' ? 'pause' : 'main'); });
         on('s-clear', () => { saveMods([]); this.showScreen('settings', { msg: 'Mods verwijderd. Herlaad de pagina om de standaardcontent terug te krijgen.' }); });
         on('s-mod', async ev => {
