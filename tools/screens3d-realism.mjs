@@ -41,7 +41,7 @@ await page.evaluate(() => {
   const amb = [...w.vehicles.values()].find(v => v.defId === 'ambulance');
   w.orderMove([amb.id], inc.x, inc.y + 1);
   window.__m = { inc, ambId: amb.id };
-  or.scene.renderer3d.distance = 30; or.scene.renderer3d.yaw = 3.6; or.scene.centerOn(inc.x + 1, inc.y);
+  or.scene.renderer3d.distance = 30; or.scene.renderer3d.yaw = 5.3; or.scene.centerOn(inc.x + 1, inc.y);
 });
 await page.waitForTimeout(3000);
 await page.screenshot({ path: 'docs/screenshot-3d-accident.png' });

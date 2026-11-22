@@ -9,7 +9,7 @@ Stuur brandweer, ambulances, politie en bergingsvoertuigen aan in een levende st
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-97%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-99%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 [English](README.md) · **Nederlands**
@@ -34,12 +34,13 @@ Het spel is geïnspireerd op de gameplay van *Emergency 4* (2006), maar is een *
 - 🧯 **Realistisch blussen** – elke tankautospuit heeft een watertank (die raakt leeg!) en sluit aan op brandkranen om bij te vullen; branden in hoogbouw vragen om de hoogwerker (zonder is het effect maar 40%), en in 3D klapt de ladder uit richting de brand.
 - 🤖 **Explosievenopruiming** (geïnspireerd door de Los Angeles-mod) – de melding *verdacht pakket*: zet het gebied af met lint, pylonen, afzethekken en fakkels, stuur omstanders weg en laat de EOD-ploeg de robot inzetten.
 - 💥 **Gevolgen** – een verdacht pakket dat je laat liggen ontploft (schade, een nieuwe brand, gewonde omstanders, schermschudden en een knal); een afgezette plek sluit de weg voor burgerverkeer, dat zelf een andere route neemt.
+- 🚨 **Duidelijke voertuigstatus** – elk voertuig meldt wat het doet (*Aanrijdend naar…*, *Ter plaatse bij…*, *Onderweg naar de kazerne*, *Rijdt naar het ziekenhuis*); de sirene gaat uit op de terugweg naar de kazerne, en brandweerploegen lopen naar de brand toe voordat ze gaan blussen.
 - ⏱️ **Ernst telt** – behandel-, arrestatie-, afzet-, ruim- en bluswerk duren langer naarmate de ernst stijgt en verschillen per soort melding. Een melding die je negeert escaleert en mislukt uiteindelijk.
 - 🚦 **Geloofwaardig verkeer** – rechts rijden, keren op de weg, hulpdiensten die nooit door andere voertuigen of mensen heen rijden, parkeervakken bij elke post en bemanning die *naast* het voertuig uitstapt.
 - 🔊 **Volledig gegenereerd geluid** – Nederlandse tweetonige sirenes, knetterend vuur, waterstralen, verkeer en interface-effecten, allemaal met de Web Audio API (geen geluidsbestanden).
 - 🎯 **Spelmodi** – zes missies, eindeloze Freeplay (Easy / Normal / Hard, met seed voor reproduceerbare scenario's), opslaan en laden, lokale highscores.
 - 🧩 **Moddable** – voertuigen, rollen, meldingen, missies en kaarten zijn gevalideerde JSON; er zit een voorbeeldpakket bij.
-- 🧪 **Goed getest** – een deterministische simulatie met 97 unit-tests en 16 browsertests (Playwright), waaronder het complete scenario "rij naar een brand, stap uit, blus, melding verdwijnt" in zowel de 2D- als de 3D-weergave.
+- 🧪 **Goed getest** – een deterministische simulatie met 99 unit-tests en 16 browsertests (Playwright), waaronder het complete scenario "rij naar een brand, stap uit, blus, melding verdwijnt" in zowel de 2D- als de 3D-weergave.
 - 🧊 **Experimentele 3D-weergave** – een procedurele three.js-stad (gebouwen, voertuigen, mensen, vuur/rook, verkeerslichten) met een RTS-camera, naast de originele 2D-weergave; omschakelen via Instellingen of het hoofdmenu. Wordt pas geladen zodra je hem aanzet, dus kost niets als je hem nooit gebruikt ([docs/3d.md](docs/3d.md)).
 
 De experimentele 3D-weergave (procedureel, three.js, geen externe assets):

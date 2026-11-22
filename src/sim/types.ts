@@ -127,6 +127,8 @@ export interface Vehicle extends Entity {
   home: Vec;
   /** True while the vehicle is on its way back to the station (set by the 'terug naar kazerne' order). */
   returning: boolean;
+  /** Driving back to the station without sirens (set once the return route is planned). */
+  silent: boolean;
   /** True while heading for a hospital with patients on board. */
   toHospital: boolean;
   /** Emergency vehicle may drive against the lane direction (set after it got blocked). */

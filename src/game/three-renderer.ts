@@ -4,8 +4,10 @@ import type { RenderSnapshot, SnapCar, SnapPerson, SnapVehicle } from '../sim/sn
 import type { Category } from '../sim/types';
 import type { GameRenderer } from './renderer';
 import { TILE_METERS, tileToWorld3D, world3DToTile } from '../sim/space';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Commands, type SelectionHost } from './selection';
-import { buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
+import { paint, buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
 import { ParticlePool, setSegment } from './three-fx';
 import { bakeGroundChunks, buildGroundMeshes, groundHeight } from './three-ground';
 import { planarRoofUVs, roofTexture, scaleBoxUVs, wallTexture } from './three-textures';
@@ -35,12 +37,20 @@ const BUILDING_COLORS: Record<string, { wall: number; roof: number }> = {
 const PED_COLORS: Record<string, number> = { red: 0xc0392b, blue: 0x2e6bd6, green: 0x27ae60, yellow: 0xf1c40f, purple: 0x8e44ad, orange: 0xe67e22, white: 0xecf0f1, black: 0x2c3e50 };
 
 const sharedBoxes = new Map<string, THREE.BufferGeometry>();
-function sharedBox(w: number, h: number, d: number): THREE.BufferGeometry {
-  const k = `${w},${h},${d}`;
+function sharedCapsule(r: number, len: number, shiftY = 0): THREE.BufferGeometry {
+  const k = `c${r},${len},${shiftY}`;
   let g = sharedBoxes.get(k);
-  if (!g) { g = new THREE.BoxGeometry(w, h, d); g.userData.shared = true; sharedBoxes.set(k, g); }
+  if (!g) { g = new THREE.CapsuleGeometry(r, len, 4, 8); if (shiftY) g.translate(0, shiftY, 0); g.userData.shared = true; sharedBoxes.set(k, g); }
   return g;
 }
+function sharedRounded(w: number, h2: number, d: number, r: number): THREE.BufferGeometry {
+  const k = `r${w},${h2},${d},${r}`;
+  let g = sharedBoxes.get(k);
+  if (!g) { g = new RoundedBoxGeometry(w, h2, d, 2, r); g.userData.shared = true; sharedBoxes.set(k, g); }
+  return g;
+}
+let hairGeo: THREE.BufferGeometry | null = null;
+function sharedHair(): THREE.BufferGeometry { if (!hairGeo) { hairGeo = new THREE.SphereGeometry(0.16, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.55); hairGeo.userData.shared = true; } return hairGeo; }
 let sphereGeo: THREE.BufferGeometry | null = null, helmetGeo: THREE.BufferGeometry | null = null;
 function sharedSphere(r: number): THREE.BufferGeometry { if (!sphereGeo) { sphereGeo = new THREE.SphereGeometry(r, 10, 8); sphereGeo.userData.shared = true; } return sphereGeo; }
 function sharedHelmet(): THREE.BufferGeometry { if (!helmetGeo) { helmetGeo = new THREE.SphereGeometry(0.17, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2); helmetGeo.userData.shared = true; } return helmetGeo; }
@@ -187,6 +197,12 @@ export class Three3DRenderer implements GameRenderer {
     const fog = new THREE.Fog(0xbcd8f0, 260, 900);
     this.scene.fog = fog;
     this.env = new Environment(this.scene, fog);
+    { // soft image-based lighting so car paint and glass pick up reflections
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      this.scene.environmentIntensity = 0.45;
+      pmrem.dispose();
+    }
     const q = new URLSearchParams(location.search);
     const auto = q.has('e2e') && !q.has('fx'); // automated tests: constant daylight, no shadow pass (software GL is slow)
     this.env.enabled = !auto && localStorage.getItem('openrescue.daynight') !== '0';
@@ -558,22 +574,43 @@ export class Three3DRenderer implements GameRenderer {
   }
   private paleSkin = lambert(0xcdbfb4);
   private makePerson(p: SnapPerson): THREE.Object3D {
-    const color = p.kind === 'responder' ? roleColor(p.model) : p.kind === 'suspect' ? 0x90a4ae : p.kind === 'victim' ? 0xffab91 : pedColor(p.model);
     const group = new THREE.Group();
     const rig = new THREE.Group();
     group.add(rig);
-    const skin = lambert(0xe8c39e), cloth = lambert(color), legs = lambert(p.kind === 'responder' ? 0x20242c : 0x2d3340);
-    const mk = (g: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number): THREE.Mesh => { const mesh = new THREE.Mesh(g, m); mesh.position.set(x, y, z); rig.add(mesh); return mesh; };
-    const legGeo = sharedBox(0.16, 0.5, 0.18), torsoGeo = sharedBox(0.28, 0.5, 0.42), armGeo = sharedBox(0.1, 0.44, 0.1);
-    const headGeo = sharedSphere(0.15);
-    const legA = mk(legGeo, legs, 0, 0.25, 0.1), legB = mk(legGeo, legs, 0, 0.25, -0.1);
-    const torso = mk(torsoGeo, cloth, 0, 0.75, 0);
-    const armL = mk(armGeo, cloth, 0, 0.8, 0.27), armR = mk(armGeo, cloth, 0, 0.8, -0.27);
-    const head = mk(headGeo, skin, 0, 1.15, 0);
-    if (p.kind === 'responder') { // helmet / cap in the service colour, reflective stripe
-      mk(sharedHelmet(), lambert(/fire|rescue/.test(p.model) ? 0xf2c230 : /officer/.test(p.model) ? 0x1b2a55 : 0xf2f2f2), 0, 1.2, 0);
-      mk(sharedBox(0.3, 0.07, 0.44), lambert(0xe8e04a), 0, 0.62, 0);
-      if (/paramedic|doctor/.test(p.model)) mk(sharedBox(0.3, 0.06, 0.44), lambert(0xff7a1a), 0, 0.9, 0); // hi-vis band
+    const isFire = /fire|rescue/.test(p.model), isPolice = /officer/.test(p.model), isMed = /paramedic|doctor/.test(p.model), isTech = /tech|berger/.test(p.model), isBomb = /bomb/.test(p.model);
+    const uniform = p.kind === 'responder' ? roleColor(p.model) : p.kind === 'suspect' ? 0x90a4ae : p.kind === 'victim' ? 0xffab91 : pedColor(p.model);
+    const trousers = p.kind === 'responder' ? (isFire ? 0x1f2430 : isPolice ? 0x1b2236 : isTech ? 0xd96a14 : 0x2a2f38) : [0x2d3340, 0x3a3f4b, 0x4a4036, 0x25303a][p.id % 4];
+    const skinTones = [0xe8c39e, 0xd2a07a, 0xb27a56, 0x8a5a3c, 0xf2d3b3];
+    const skin = lambert(skinTones[p.id % skinTones.length]);
+    const hairCols = [0x2b1d12, 0x4a3320, 0x8a6a3a, 0xc9a45a, 0x1a1a1a, 0x7a3a22];
+    const cloth = paint(uniform);
+    const mk = (g: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = rig): THREE.Mesh => { const mesh = new THREE.Mesh(g, m); mesh.position.set(x, y, z); parent.add(mesh); return mesh; };
+    const legGeo = sharedCapsule(0.075, 0.34), armGeo = sharedCapsule(0.055, 0.28, -0.17), torsoGeo = sharedRounded(0.3, 0.52, 0.46, 0.09);
+    const trouserM = lambert(trousers);
+    const legA = mk(legGeo, trouserM, 0, 0.25, 0.1), legB = mk(legGeo, trouserM, 0, 0.25, -0.1);
+    const boots = lambert(isFire ? 0x3a2f1c : 0x15151a);
+    mk(sharedRounded(0.26, 0.1, 0.14, 0.04), boots, 0.04, 0.05, 0.1); mk(sharedRounded(0.26, 0.1, 0.14, 0.04), boots, 0.04, 0.05, -0.1);
+    const torso = mk(torsoGeo, cloth, 0, 0.78, 0);
+    mk(sharedRounded(0.31, 0.07, 0.47, 0.03), lambert(0x15151a), 0, 0.55, 0); // belt
+    const armL = mk(armGeo, cloth, 0, 1.0, 0.29), armR = mk(armGeo, cloth, 0, 1.0, -0.29);
+    mk(sharedSphere(0.045), skin, 0, 0.75, 0.29, armL); mk(sharedSphere(0.045), skin, 0, 0.75, -0.29, armR); // hands rotate with the arms
+    armL.children.forEach(c => c.position.set(0, -0.3, 0)); armR.children.forEach(c => c.position.set(0, -0.3, 0));
+    mk(sharedCapsule(0.045, 0.06), skin, 0, 1.06, 0); // neck
+    const head = mk(sharedSphere(0.15), skin, 0, 1.2, 0);
+    mk(sharedSphere(0.02), lambert(0x111111), 0.13, 1.22, 0.06); mk(sharedSphere(0.02), lambert(0x111111), 0.13, 1.22, -0.06); // eyes (the face looks along +x)
+    if (p.kind === 'responder') {
+      const helmetCol = isFire ? 0xf2c230 : isPolice ? 0x1b2a55 : isMed ? 0xf2f2f2 : isTech || isBomb ? 0xf08a1a : 0xdddddd;
+      const hm = lambert(helmetCol);
+      mk(sharedHelmet(), hm, 0, 1.25, 0);
+      if (isFire) { mk(sharedRounded(0.12, 0.03, 0.36, 0.01), hm, -0.12, 1.2, 0); mk(sharedRounded(0.05, 0.12, 0.2, 0.02), lambert(0x15151a), 0.15, 1.2, 0); } // neck guard + visor
+      if (isPolice) { mk(sharedRounded(0.16, 0.025, 0.3, 0.01), lambert(0x111522), 0.14, 1.26, 0); } // cap peak
+      mk(sharedRounded(0.32, 0.07, 0.48, 0.02), lambert(0xe8e04a), 0, 0.64, 0); // reflective band
+      mk(sharedRounded(0.32, 0.05, 0.48, 0.02), lambert(0xe8e04a), 0, 0.92, 0);
+      if (isFire) { mk(sharedCapsule(0.09, 0.3), lambert(0xc9ced4), -0.26, 0.82, 0); } // air cylinder
+      if (isMed) mk(sharedRounded(0.32, 0.08, 0.48, 0.02), lambert(0xff7a1a), 0, 0.8, 0);
+    } else {
+      mk(sharedHair(), lambert(hairCols[(p.id * 7) % hairCols.length]), -0.01, 1.24, 0);
+      if (p.kind === 'pedestrian' && p.id % 4 === 0) mk(sharedRounded(0.14, 0.2, 0.28, 0.04), lambert([0x4a3a2a, 0x2a3a4a, 0x7a2a2a][p.id % 3]), -0.24, 0.82, 0); // backpack
     }
     group.userData.arms = [armL, armR];
     group.userData.rig = rig;

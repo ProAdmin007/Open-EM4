@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 /**
  * Procedural 3D models for vehicles, civilian cars and incident props. Everything is built from boxes and cylinders
@@ -16,6 +17,13 @@ function boxGeo(w: number, h: number, d: number): THREE.BufferGeometry {
   if (!g) { g = new THREE.BoxGeometry(w, h, d); g.userData.shared = true; geoCache.set(k, g); }
   return g;
 }
+function rboxGeo(w: number, h: number, d: number, r: number): THREE.BufferGeometry {
+  const rr = Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001);
+  const k = `r${w.toFixed(3)},${h.toFixed(3)},${d.toFixed(3)},${rr.toFixed(3)}`;
+  let g = geoCache.get(k);
+  if (!g) { g = new RoundedBoxGeometry(w, h, d, 3, Math.max(0.005, rr)); g.userData.shared = true; geoCache.set(k, g); }
+  return g;
+}
 function wheelGeo(r: number, w: number): THREE.BufferGeometry {
   const k = `w${r.toFixed(3)},${w.toFixed(3)}`;
   let g = geoCache.get(k);
@@ -28,6 +36,18 @@ export function lambert(color: number): THREE.MeshLambertMaterial {
   if (!m) { m = new THREE.MeshLambertMaterial({ color }); m.userData.shared = true; matCache.set(k, m); }
   return m;
 }
+/** Car paint: slightly metallic so it picks up the environment reflections. */
+export function paint(color: number): THREE.MeshStandardMaterial {
+  const k = `p${color}`;
+  let m = matCache.get(k) as THREE.MeshStandardMaterial | undefined;
+  if (!m) { m = new THREE.MeshStandardMaterial({ color, metalness: 0.28, roughness: 0.4 }); m.userData.shared = true; matCache.set(k, m); }
+  return m;
+}
+function glassMat(): THREE.MeshStandardMaterial {
+  let m = matCache.get('glass') as THREE.MeshStandardMaterial | undefined;
+  if (!m) { m = new THREE.MeshStandardMaterial({ color: 0x0d1822, metalness: 0.75, roughness: 0.1 }); m.userData.shared = true; matCache.set('glass', m); }
+  return m;
+}
 function glow(color: number, intensity = 0.9): THREE.MeshStandardMaterial {
   const k = `g${color}:${intensity}`;
   let m = matCache.get(k) as THREE.MeshStandardMaterial | undefined;
@@ -38,10 +58,18 @@ function glow(color: number, intensity = 0.9): THREE.MeshStandardMaterial {
 /** A private (non-shared) copy of a cached material, so it can be animated and disposed per vehicle. */
 function own(m: THREE.Material): THREE.Material { const c = m.clone(); c.userData = {}; return c; }
 
-const GLASS = 0x16222c, TYRE = 0x151515, RIM = 0x9aa0a6, CHROME = 0x6b7078;
+const TYRE = 0x151515, RIM = 0x9aa0a6, CHROME = 0x6b7078;
 
 function box(parent: THREE.Object3D, w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh {
   const m = new THREE.Mesh(boxGeo(w, h, d), mat);
+  m.position.set(x, y, z);
+  parent.add(m);
+  return m;
+}
+
+/** Rounded box (bodywork). */
+function rbox(parent: THREE.Object3D, w: number, h: number, d: number, r: number, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh {
+  const m = new THREE.Mesh(rboxGeo(w, h, d, r), mat);
   m.position.set(x, y, z);
   parent.add(m);
   return m;
@@ -253,7 +281,7 @@ export function buildVehicle(model: string, category: string, size: { length: nu
   const g = new THREE.Group();
   const parts: VehicleParts = { wheels: [], beacons: [] };
   const wr = spec.shape === 'bike' ? 0.34 : spec.shape === 'car' ? 0.34 : 0.5;
-  const bodyMat = lambert(spec.body), cabMat = lambert(spec.cab ?? spec.body), glass = lambert(GLASS), dark = lambert(0x24262a);
+  const bodyMat = paint(spec.body), dark = lambert(0x24262a);
   const bottom = wr * 0.85;
 
   if (spec.shape === 'bike') {
@@ -273,40 +301,66 @@ export function buildVehicle(model: string, category: string, size: { length: nu
     return { group: g, parts };
   }
 
-  // ---- chassis / body proportions
-  let bodyH = H * 0.8, cabH = H * 0.8, bodyL = L, cabL = L * 0.3, bodyX = 0, cabX = 0;
+  // ---- chassis / body proportions (rounded bodywork, tilted windscreens, side glass)
+  const glassM = glassMat(), paintBody = paint(spec.body), paintCab = paint(spec.cab ?? spec.body), chrome = lambert(CHROME);
+  let bodyH = H * 0.8, cabH = H * 0.8, bodyL = L, cabL = L * 0.3;
+  let doorX = 0, doorLen = 1.2, mirrorX = 0, mirrorY = 0, frontBottom = bottom;
   if (spec.shape === 'truck') {
     cabL = L * 0.3; bodyL = L * 0.68; cabH = H * 0.78; bodyH = H * 0.92;
-    bodyX = -L / 2 + bodyL / 2; cabX = L / 2 - cabL / 2;
+    const bodyX = -L / 2 + bodyL / 2, cabX = L / 2 - cabL / 2;
     box(g, L * 0.98, 0.3, W * 0.82, dark, 0, bottom + 0.15, 0); // chassis rail
-    box(g, bodyL, bodyH - bottom - 0.2, W, bodyMat, bodyX, bottom + 0.2 + (bodyH - bottom - 0.2) / 2, 0);
-    box(g, cabL, cabH - bottom - 0.2, W * 0.98, cabMat, cabX, bottom + 0.2 + (cabH - bottom - 0.2) / 2, 0);
-    box(g, 0.06, cabH * 0.36, W * 0.88, glass, L / 2 - 0.04, cabH * 0.7, 0); // windscreen
-    for (const s of [-1, 1]) box(g, cabL * 0.55, cabH * 0.3, 0.04, glass, cabX + 0.05, cabH * 0.7, s * (W * 0.49 + 0.01));
-    box(g, 0.16, 0.34, W * 0.9, lambert(CHROME), L / 2, bottom + 0.2, 0); // bumper
+    rbox(g, bodyL, bodyH - bottom - 0.2, W, 0.14, paintBody, bodyX, bottom + 0.2 + (bodyH - bottom - 0.2) / 2, 0);
+    rbox(g, cabL, cabH - bottom - 0.2, W * 0.98, 0.22, paintCab, cabX, bottom + 0.2 + (cabH - bottom - 0.2) / 2, 0);
+    const ws = box(g, 0.05, cabH * 0.4, W * 0.86, glassM, L / 2 - 0.12, cabH * 0.7, 0); ws.rotation.z = 0.3; // raked windscreen
+    for (const s2 of [-1, 1]) {
+      rbox(g, cabL * 0.55, cabH * 0.3, 0.05, 0.05, glassM, cabX + 0.05, cabH * 0.7, s2 * (W * 0.49 + 0.012));
+      box(g, 0.03, cabH * 0.55, 0.03, dark, cabX - cabL * 0.12, cabH * 0.5, s2 * (W * 0.49 + 0.015)); // door seam
+    }
+    rbox(g, 0.22, 0.36, W * 0.94, 0.08, chrome, L / 2 + 0.02, bottom + 0.22, 0); // bumper
+    box(g, 0.04, 0.34, W * 0.5, dark, L / 2 - 0.02, cabH * 0.38, 0); // grille
+    for (let i = 0; i < 4; i++) box(g, 0.045, 0.02, W * 0.5, chrome, L / 2 - 0.01, cabH * 0.28 + i * 0.07, 0);
+    doorX = cabX; doorLen = cabL; mirrorX = L / 2 - cabL * 0.9; mirrorY = cabH * 0.62; frontBottom = bottom + 0.2;
   } else if (spec.shape === 'van') {
     const hood = L * 0.18;
     bodyL = L - hood; bodyH = H * 0.88; cabH = bodyH; cabL = L * 0.22;
-    box(g, bodyL, bodyH - bottom, W, bodyMat, -L / 2 + bodyL / 2, bottom + (bodyH - bottom) / 2, 0);
-    box(g, hood, bodyH * 0.55 - bottom, W * 0.98, bodyMat, L / 2 - hood / 2, bottom + (bodyH * 0.55 - bottom) / 2, 0);
-    box(g, 0.06, bodyH * 0.34, W * 0.9, glass, L / 2 - hood - 0.02, bodyH * 0.72, 0);
-    for (const s of [-1, 1]) box(g, cabL * 0.6, bodyH * 0.3, 0.04, glass, L / 2 - hood - cabL * 0.35, bodyH * 0.72, s * (W / 2 + 0.01));
-    box(g, 0.14, 0.3, W * 0.92, lambert(CHROME), L / 2, bottom + 0.15, 0);
-    bodyX = 0; cabX = 0;
-  } else { // car
+    rbox(g, bodyL, bodyH - bottom, W, 0.2, paintBody, -L / 2 + bodyL / 2, bottom + (bodyH - bottom) / 2, 0);
+    rbox(g, hood, bodyH * 0.55 - bottom, W * 0.98, 0.18, paintBody, L / 2 - hood / 2, bottom + (bodyH * 0.55 - bottom) / 2, 0);
+    const ws = box(g, 0.05, bodyH * 0.36, W * 0.88, glassM, L / 2 - hood - 0.02, bodyH * 0.72, 0); ws.rotation.z = 0.5;
+    for (const s2 of [-1, 1]) {
+      rbox(g, cabL * 0.6, bodyH * 0.3, 0.05, 0.05, glassM, L / 2 - hood - cabL * 0.35, bodyH * 0.72, s2 * (W / 2 + 0.012));
+      box(g, 0.03, bodyH * 0.6, 0.03, dark, L / 2 - hood - cabL * 0.8, bodyH * 0.45, s2 * (W / 2 + 0.015));
+      box(g, 0.03, bodyH * 0.6, 0.03, dark, -L * 0.18, bodyH * 0.5, s2 * (W / 2 + 0.015));
+    }
+    rbox(g, 0.18, 0.32, W * 0.94, 0.07, chrome, L / 2 + 0.02, bottom + 0.15, 0);
+    box(g, 0.04, 0.26, W * 0.5, dark, L / 2 - 0.01, bodyH * 0.28, 0);
+    doorX = L / 2 - hood - cabL * 0.35; doorLen = cabL; mirrorX = L / 2 - hood - cabL * 0.7; mirrorY = bodyH * 0.62;
+  } else { // car: low body, tapered cabin, raked glass
     const hoodL = L * 0.28, trunkL = L * 0.2;
     const lowH = H * 0.42;
-    box(g, L, lowH - bottom, W, bodyMat, 0, bottom + (lowH - bottom) / 2, 0);
+    rbox(g, L, lowH - bottom, W, 0.2, paintBody, 0, bottom + (lowH - bottom) / 2, 0);
     const cabinL = L - hoodL - trunkL;
-    box(g, cabinL, H * 0.34, W * 0.9, bodyMat, -L / 2 + trunkL + cabinL / 2 - 0.1, lowH + H * 0.17, 0);
-    box(g, 0.05, H * 0.28, W * 0.82, glass, L / 2 - hoodL - 0.08, lowH + H * 0.17, 0);
-    box(g, 0.05, H * 0.26, W * 0.82, glass, -L / 2 + trunkL - 0.1, lowH + H * 0.17, 0);
-    for (const s of [-1, 1]) box(g, cabinL * 0.8, H * 0.24, 0.04, glass, -L * 0.02, lowH + H * 0.18, s * (W * 0.45 + 0.01));
-    box(g, 0.12, 0.22, W * 0.96, lambert(CHROME), L / 2, bottom + 0.1, 0);
-    box(g, 0.12, 0.22, W * 0.96, lambert(CHROME), -L / 2, bottom + 0.1, 0);
-    bodyX = 0; cabX = 0;
+    const cabX = -L / 2 + trunkL + cabinL / 2 - 0.1;
+    rbox(g, cabinL * 0.86, H * 0.36, W * 0.88, 0.16, paintBody, cabX, lowH + H * 0.16, 0);
+    const wf = box(g, 0.05, H * 0.3, W * 0.8, glassM, cabX + cabinL * 0.43 + 0.06, lowH + H * 0.17, 0); wf.rotation.z = 0.62;
+    const wr2 = box(g, 0.05, H * 0.28, W * 0.8, glassM, cabX - cabinL * 0.43 - 0.04, lowH + H * 0.17, 0); wr2.rotation.z = -0.6;
+    for (const s2 of [-1, 1]) {
+      rbox(g, cabinL * 0.72, H * 0.24, 0.05, 0.05, glassM, cabX, lowH + H * 0.18, s2 * (W * 0.44 + 0.012));
+      box(g, 0.03, lowH * 0.9, 0.03, dark, cabX, lowH * 0.62, s2 * (W / 2 + 0.012)); // door seam
+    }
+    rbox(g, 0.14, 0.24, W * 0.96, 0.06, chrome, L / 2, bottom + 0.1, 0);
+    rbox(g, 0.14, 0.24, W * 0.96, 0.06, chrome, -L / 2, bottom + 0.1, 0);
+    box(g, 0.04, 0.16, W * 0.46, dark, L / 2 - 0.01, lowH * 0.62, 0); // grille
+    doorX = cabX; doorLen = cabinL * 0.5; mirrorX = cabX + cabinL * 0.36; mirrorY = lowH + H * 0.1; frontBottom = bottom;
   }
-  void bodyX; void cabX; void cabL; void bodyL;
+  void cabL; void bodyL; void frontBottom;
+  // wing mirrors, door handles, number plates (Dutch yellow)
+  for (const s2 of [-1, 1]) {
+    rbox(g, 0.14, 0.2, 0.08, 0.03, dark, mirrorX, mirrorY, s2 * (W / 2 + 0.14));
+    box(g, 0.05, 0.05, 0.05, dark, mirrorX, mirrorY - 0.08, s2 * (W / 2 + 0.06));
+    box(g, doorLen * 0.18, 0.04, 0.035, chrome, doorX + doorLen * 0.18, spec.shape === 'car' ? H * 0.3 : bodyH * 0.5, s2 * (W / 2 + 0.02));
+  }
+  box(g, 0.03, 0.14, 0.5, lambert(0xf2c21b), L / 2 + 0.12, bottom + 0.2, 0);
+  box(g, 0.03, 0.14, 0.5, lambert(0xf2c21b), -L / 2 - 0.12, bottom + 0.2, 0);
 
   // ---- livery: stripes on both sides
   if (spec.stripe) {
@@ -319,15 +373,9 @@ export function buildVehicle(model: string, category: string, size: { length: nu
     }
   }
 
-  // ---- wheels
+  // ---- wheels: tyre, alloy rim with spokes, dark arch behind
   const axles: number[] = spec.wheels === 3 ? [L / 2 - L * 0.17, -L / 2 + L * 0.34, -L / 2 + L * 0.14] : [L / 2 - L * 0.2, -L / 2 + L * 0.2];
-  for (const ax of axles) for (const s of [-1, 1]) {
-    const w = new THREE.Mesh(wheelGeo(wr, 0.32), lambert(TYRE));
-    w.position.set(ax, wr, s * (W / 2 - 0.05));
-    g.add(w); parts.wheels.push(w);
-    const rim = new THREE.Mesh(wheelGeo(wr * 0.55, 0.34), lambert(RIM));
-    w.add(rim);
-  }
+  addWheels(g, parts, axles, wr, W, 0.32);
 
   // ---- head and tail lights
   const hl = glow(0xfff3c0, 1.1), tl = glow(0xff2a1a, 0.9);
@@ -356,8 +404,29 @@ export function buildVehicle(model: string, category: string, size: { length: nu
   return { group: g, parts };
 }
 
+/** Wheels (tyre + rim with spokes + hub) on both sides at the given x positions, plus a dark wheel arch each. */
+function addWheels(g: THREE.Group, parts: VehicleParts, axles: number[], wr: number, W: number, width: number): void {
+  const tyre = lambert(TYRE), rim = lambert(RIM), dk = lambert(0x0c0c0e);
+  for (const ax of axles) for (const s2 of [-1, 1]) {
+    const arch = new THREE.Mesh(wheelGeo(wr + 0.09, 0.05), dk);
+    arch.position.set(ax, wr, s2 * (W / 2 + 0.005)); g.add(arch);
+    const w = new THREE.Mesh(wheelGeo(wr, width), tyre);
+    w.position.set(ax, wr, s2 * (W / 2 - width * 0.4));
+    g.add(w); parts.wheels.push(w);
+    const face = new THREE.Mesh(wheelGeo(wr * 0.62, width + 0.02), rim);
+    w.add(face);
+    const hub = new THREE.Mesh(wheelGeo(wr * 0.16, width + 0.06), dk);
+    w.add(hub);
+    for (let i = 0; i < 5; i++) { // spokes on the outer face
+      const sp = box(w, wr * 0.9, 0.03, 0.03, dk, 0, 0, s2 * (width / 2 + 0.012));
+      sp.rotation.z = (i / 5) * Math.PI * 2 + 0.3;
+      sp.position.set(Math.cos(sp.rotation.z) * wr * 0.25, Math.sin(sp.rotation.z) * wr * 0.25, s2 * (width / 2 + 0.012));
+    }
+  }
+}
+
 // ---------- civilian cars ----------
-const CAR_PALETTE = [0xc23b3b, 0x2f66c9, 0x2e8b57, 0xe5c13a, 0x7e57c2, 0xf08a24, 0xe9e9e9, 0x2b2f3a, 0x8d9199, 0x7a4a2a];
+const CAR_PALETTE = [0xb03030, 0x2a5cb8, 0x2a7d4f, 0xdcb830, 0x6e4cb0, 0xe07c1e, 0xe9e9e9, 0x24282f, 0x8d9199, 0x6e4426];
 
 /** A civilian car: sedan, hatchback or delivery van, chosen from the numeric id in the model string. */
 export function buildCivilianCar(model: string, id: number): { group: THREE.Group; parts: VehicleParts } {
@@ -366,29 +435,41 @@ export function buildCivilianCar(model: string, id: number): { group: THREE.Grou
   const kind = id % 5 === 0 ? 'van' : id % 3 === 0 ? 'hatch' : 'sedan';
   const g = new THREE.Group();
   const parts: VehicleParts = { wheels: [], beacons: [] };
-  const body = lambert(color), glass = lambert(GLASS);
+  const body = paint(color), glass = glassMat(), dark = lambert(0x24262a), chrome = lambert(CHROME);
   const L = kind === 'van' ? 5.2 : kind === 'hatch' ? 3.9 : 4.4, W = 1.8, wr = 0.32;
   if (kind === 'van') {
-    box(g, L, 1.25, W, body, -0.1, 0.35 + 0.62, 0);
-    box(g, 1.2, 0.7, W * 0.98, body, L / 2 - 0.5, 0.35 + 0.35, 0);
-    box(g, 0.05, 0.6, W * 0.86, glass, L / 2 - 1.1, 1.55, 0);
-    box(g, L * 0.2, 0.04, W, lambert(0xffffff), -L * 0.3, 1.99, 0);
-  } else {
-    const lowH = 0.62;
-    box(g, L, lowH - 0.25, W, body, 0, 0.25 + (lowH - 0.25) / 2, 0);
-    const cabinL = kind === 'hatch' ? L * 0.62 : L * 0.5;
-    box(g, cabinL, 0.5, W * 0.9, body, kind === 'hatch' ? -L * 0.08 : -L * 0.06, lowH + 0.25, 0);
-    box(g, 0.05, 0.4, W * 0.8, glass, cabinL / 2 + (kind === 'hatch' ? -L * 0.08 : -L * 0.06) - 0.02, lowH + 0.27, 0);
-    box(g, 0.05, 0.38, W * 0.8, glass, -cabinL / 2 + (kind === 'hatch' ? -L * 0.08 : -L * 0.06) + 0.02, lowH + 0.27, 0);
-    for (const s of [-1, 1]) box(g, cabinL * 0.8, 0.34, 0.04, glass, (kind === 'hatch' ? -L * 0.08 : -L * 0.06), lowH + 0.27, s * (W * 0.45 + 0.01));
-  }
-  for (const s of [-1, 1]) {
-    for (const ax of [L / 2 - 0.85, -L / 2 + 0.85]) {
-      const w = new THREE.Mesh(wheelGeo(wr, 0.24), lambert(TYRE));
-      w.position.set(ax, wr, s * (W / 2 - 0.04)); g.add(w); parts.wheels.push(w);
+    rbox(g, L - 1.2, 1.3, W, 0.16, body, -0.6, 0.35 + 0.65, 0);
+    rbox(g, 1.5, 0.75, W * 0.98, 0.14, body, L / 2 - 0.75, 0.35 + 0.37, 0);
+    const ws = box(g, 0.05, 0.6, W * 0.84, glass, L / 2 - 1.5, 1.45, 0); ws.rotation.z = 0.5;
+    for (const s2 of [-1, 1]) {
+      rbox(g, 0.9, 0.42, 0.05, 0.04, glass, L / 2 - 1.9, 1.42, s2 * (W / 2 + 0.012));
+      box(g, 0.03, 1.1, 0.03, dark, L / 2 - 2.5, 0.95, s2 * (W / 2 + 0.012));
+      rbox(g, 0.12, 0.18, 0.08, 0.03, dark, L / 2 - 1.55, 1.1, s2 * (W / 2 + 0.14));
     }
-    box(g, 0.05, 0.12, 0.26, glow(0xfff3c0, 0.9), L / 2 + 0.01, 0.5, s * W * 0.32);
-    box(g, 0.05, 0.12, 0.26, glow(0xff2a1a, 0.7), -L / 2 - 0.01, 0.5, s * W * 0.32);
+    box(g, 0.04, 0.2, W * 0.55, dark, L / 2 - 0.01, 0.55, 0);
+  } else {
+    const lowH = 0.64;
+    rbox(g, L, lowH - 0.22, W, 0.18, body, 0, 0.22 + (lowH - 0.22) / 2, 0);
+    const cabinL = kind === 'hatch' ? L * 0.58 : L * 0.46;
+    const cx = kind === 'hatch' ? -L * 0.1 : -L * 0.07;
+    rbox(g, cabinL * 0.9, 0.5, W * 0.86, 0.14, body, cx, lowH + 0.22, 0);
+    const wf = box(g, 0.05, 0.42, W * 0.78, glass, cx + cabinL * 0.45 + 0.08, lowH + 0.22, 0); wf.rotation.z = 0.62;
+    const wb = box(g, 0.05, 0.4, W * 0.78, glass, cx - cabinL * 0.45 - 0.06, lowH + 0.22, 0); wb.rotation.z = kind === 'hatch' ? -0.9 : -0.6;
+    for (const s2 of [-1, 1]) {
+      rbox(g, cabinL * 0.74, 0.32, 0.05, 0.04, glass, cx, lowH + 0.24, s2 * (W * 0.43 + 0.012));
+      box(g, 0.03, 0.4, 0.03, dark, cx, 0.5, s2 * (W / 2 + 0.012));
+      rbox(g, 0.12, 0.08, 0.1, 0.03, dark, cx + cabinL * 0.38, lowH + 0.08, s2 * (W / 2 + 0.12)); // mirror
+    }
+    box(g, 0.04, 0.14, W * 0.46, dark, L / 2 - 0.01, 0.46, 0); // grille
+    rbox(g, 0.14, 0.2, W * 0.96, 0.05, chrome, L / 2, 0.28, 0);
+    rbox(g, 0.14, 0.2, W * 0.96, 0.05, chrome, -L / 2, 0.28, 0);
+  }
+  box(g, 0.03, 0.12, 0.46, lambert(0xf2c21b), L / 2 + 0.1, 0.3, 0);
+  box(g, 0.03, 0.12, 0.46, lambert(0xf2c21b), -L / 2 - 0.1, 0.3, 0);
+  addWheels(g, parts, [L / 2 - 0.85, -L / 2 + 0.85], wr, W, 0.24);
+  for (const s2 of [-1, 1]) {
+    box(g, 0.05, 0.12, 0.26, glow(0xfff3c0, 0.9), L / 2 + 0.01, 0.5, s2 * W * 0.32);
+    box(g, 0.05, 0.12, 0.26, glow(0xff2a1a, 0.7), -L / 2 - 0.01, 0.5, s2 * W * 0.32);
   }
   return { group: g, parts };
 }
@@ -399,7 +480,7 @@ export function buildWreck(seed: number): THREE.Group {
   const { group } = buildCivilianCar(`vehicle/civilian_${seed % 6}`, seed);
   group.traverse(o => {
     const m = o as THREE.Mesh;
-    if (m.isMesh && m.material instanceof THREE.MeshLambertMaterial && !m.userData.dim) {
+    if (m.isMesh && (m.material instanceof THREE.MeshLambertMaterial || m.material instanceof THREE.MeshStandardMaterial) && (m.material as THREE.MeshStandardMaterial).emissive.getHex() === 0 && !m.userData.dim) {
       const dim = m.material.clone();
       dim.userData = {};
       dim.color.multiplyScalar(0.55);

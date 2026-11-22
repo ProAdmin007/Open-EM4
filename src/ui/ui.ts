@@ -198,7 +198,8 @@ export class UI {
     this.setHtml('tabs', cats.map(c => `<button data-tab="${c}" class="${c === this.tab ? 'on' : ''}">${CAT_LABEL[c]}</button>`).join(''));
     const html = w.vehiclesOf(this.tab).map(v => {
       const out = v.crew.filter(id => !w.responders.get(id)!.inVehicle).length;
-      const status = v.state === 'moving' ? 'Onderweg' : out ? `${out} uitgestapt` : v.patients.length ? 'Patiënt aan boord' : 'Gereed';
+      const base = w.vehicleStatus(v);
+      const status = v.state === 'moving' ? base : out ? `${base} · ${out} uitgestapt` : v.patients.length ? `${base} · patiënt aan boord` : base;
       return `<button class="veh cat-${v.category} ${sel.has(v.id) ? 'sel' : ''}" data-vid="${v.id}"><span class="dot ${v.state === 'moving' ? 'moving' : out ? 'out' : ''}"></span>${esc(v.name)}<small>${status}</small></button>`;
     }).join('');
     const reinf = Object.values(w.content.vehicles).filter(d => d.category === this.tab).map(d => {
@@ -236,7 +237,7 @@ export class UI {
       if (vs.length === 1 && !rs.length) {
         const v = vs[0], def = w.vehicleDef(v);
         const out = v.crew.filter(id => !w.responders.get(id)!.inVehicle).length;
-        html = `<div class="name">${esc(v.name)}</div><div class="row">${v.state === 'moving' ? 'Rijdt (' + Math.round(def.maxSpeed) + ' km/h max)' : 'Staat stil'} · Bemanning: ${v.crew.length - out}/${v.crew.length} aan boord${v.patients.length ? ' · patiënt aan boord' : ''}</div>` +
+        html = `<div class="name">${esc(v.name)}</div><div class="row">${esc(w.vehicleStatus(v))}${v.state === 'moving' ? ' (max ' + Math.round(def.maxSpeed) + ' km/h)' : ''}${v.lights ? ' · 🚨 sirene aan' : ''} · Bemanning: ${v.crew.length - out}/${v.crew.length} aan boord${v.patients.length ? ' · patiënt aan boord' : ''}</div>` +
           `<div class="row">Uitrusting: ${def.equipment.map(e => esc(e.replace(/_/g, ' '))).join(', ') || '—'}</div>` +
           (def.tank ? `<div class="row">💧 Water: ${Math.round(v.water)} / ${def.tank} L${v.hydrant ? ' · aangesloten op brandkraan' : ''}</div><div class="meter"><i class="${v.water / def.tank < 0.25 && !v.hydrant ? 'low' : ''}" style="width:${Math.round((v.water / def.tank) * 100)}%"></i></div>` : '') +
           `<div class="actions"><button data-act="dismount">⬇ Uitstappen (E)</button><button data-act="board">⬆ Instappen (R)</button><button data-act="crew" ${out ? '' : 'disabled'}>👥 Bemanning</button><button data-act="stop">⏹ Stop (X)</button></div>` +

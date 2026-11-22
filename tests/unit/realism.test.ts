@@ -152,3 +152,49 @@ describe('explosion and cordons', () => {
     expect(w.cordon.size).toBe(0);
   });
 });
+
+describe('vehicle status, sirens and crews walking up to the fire', () => {
+  it('shows en-route / on-scene / returning, and returns without sirens', () => {
+    const w = newWorld(8);
+    const inc = w.spawnIncident('house_fire', { severity: 1 })!;
+    const b = w.buildings.get(inc.buildingId!)!;
+    const v = [...w.vehicles.values()].find(x => x.defId === 'fire_engine')!;
+    expect(w.vehicleStatus(v)).toMatch(/Gereed/);
+    w.orderMove([v.id], b.door.x + 0.5, b.door.y + 0.5);
+    run(w, 2);
+    expect(v.lights).toBe(true);
+    expect(w.vehicleStatus(v)).toBe(`Aanrijdend naar ${inc.name}`);
+    run(w, 120, () => !v.path.length);
+    run(w, 1);
+    expect(w.vehicleStatus(v)).toBe(`Ter plaatse bij ${inc.name}`);
+    b.fire = 0; inc.status = 'resolved'; w.incidents.delete(inc.id);
+    w.orderReturn([v.id]);
+    run(w, 3);
+    expect(v.state).toBe('moving');
+    expect(v.lights).toBe(false);
+    expect(w.vehicleStatus(v)).toBe('Onderweg naar de kazerne');
+    run(w, 200, () => v.state === 'idle');
+    expect(w.vehicleStatus(v)).toMatch(/Gereed/);
+    // a fresh order switches the lights back on
+    w.orderMove([v.id], b.door.x + 0.5, b.door.y + 0.5);
+    run(w, 2);
+    expect(v.lights).toBe(true);
+  });
+
+  it('firefighters walk up to the burning building', () => {
+    const w = newWorld(8);
+    const inc = w.spawnIncident('house_fire', { severity: 1 })!;
+    const b = w.buildings.get(inc.buildingId!)!;
+    b.resistance = 80;
+    const v = [...w.vehicles.values()].find(x => x.defId === 'fire_engine')!;
+    w.orderMove([v.id], b.door.x + 0.5, b.door.y + 0.5);
+    run(w, 120, () => !v.path.length);
+    const ids = w.orderDismount([v.id]);
+    w.orderAbility(ids, 'extinguish', { kind: 'building', id: b.id });
+    run(w, 25);
+    const rd = (r: { x: number; y: number }) => Math.hypot(Math.max(b.x - r.x, 0, r.x - (b.x + b.w)), Math.max(b.y - r.y, 0, r.y - (b.y + b.h)));
+    const fighters = ids.map(id => w.responders.get(id)!).filter(r => r.task?.type === 'extinguish');
+    expect(fighters.length).toBeGreaterThan(0);
+    for (const r of fighters) expect(rd(r)).toBeLessThanOrEqual(2.7);
+  });
+});

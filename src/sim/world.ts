@@ -365,7 +365,7 @@ export class World {
 
   createVehicle(def: VehicleDef, stationId: string, x: number, y: number): Vehicle {
     const v: Vehicle = {
-      kind: 'vehicle', ...this.addEntityBase(x, y), defId: def.id, category: def.category, stationId, path: [], dest: null, home: { x: Math.floor(x), y: Math.floor(y) }, returning: false, toHospital: false, contraflow: false, blocked: 0, avoid: [], ghost: 0,
+      kind: 'vehicle', ...this.addEntityBase(x, y), defId: def.id, category: def.category, stationId, path: [], dest: null, home: { x: Math.floor(x), y: Math.floor(y) }, returning: false, silent: false, toHospital: false, contraflow: false, blocked: 0, avoid: [], ghost: 0,
       pathVersion: this.roadVersion, water: def.tank ?? 0, hydrant: false, crew: [], patients: [], lights: false, angle: 0, state: 'idle',
       name: `${def.name} ${[...this.vehicles.values()].filter(o => o.defId === def.id).length + 1}`,
     };
@@ -511,6 +511,7 @@ export class World {
     }
     if (v.returning && !v.path.length && this.groundVehicle(v)) {
       v.returning = false;
+      v.silent = true; // back to the station: no sirens
       if (Math.hypot(v.x - (v.home.x + 0.5), v.y - (v.home.y + 0.5)) > 0.6) {
         v.contraflow = false;
         v.avoid = [];
@@ -519,12 +520,12 @@ export class World {
     }
     if (!v.path.length) {
       if (v.state === 'moving') {
-        v.state = 'idle'; v.lights = false; v.dest = null; v.contraflow = false; v.avoid = []; v.blocked = 0;
+        v.state = 'idle'; v.lights = false; v.silent = false; v.dest = null; v.contraflow = false; v.avoid = []; v.blocked = 0;
         if (Math.hypot(v.x - (v.home.x + 0.5), v.y - (v.home.y + 0.5)) < 0.1 && this.isParking(v.home.x, v.home.y)) v.angle = -Math.PI / 2; // parked nose-out
       }
     } else {
       v.state = 'moving';
-      v.lights = true;
+      v.lights = !v.silent;
       this.driveVehicle(v, dt);
     }
     for (const rid of v.crew) {
@@ -752,10 +753,10 @@ export class World {
       case 'extinguish': {
         const b = this.buildings.get(t.buildingId);
         if (!b || b.fire <= 0 || b.destroyed) return done();
-        const inRange = rectDist(b, r.x, r.y) <= 4 && (!veh || dist(r, veh) <= HOSE_LENGTH);
+        const inRange = rectDist(b, r.x, r.y) <= 2.6 && (!veh || dist(r, veh) <= HOSE_LENGTH);
         if (!inRange) {
           if (!r.path.length) {
-            const ok = this.walkTo(r, (x, y) => this.isWalkable(x, y) && rectDist(b, x + 0.5, y + 0.5) <= 3.2 && (!veh || Math.hypot(x - veh.x, y - veh.y) <= HOSE_LENGTH - 1));
+            const ok = this.walkTo(r, (x, y) => this.isWalkable(x, y) && rectDist(b, x + 0.5, y + 0.5) <= 2.2 && (!veh || Math.hypot(x - veh.x, y - veh.y) <= HOSE_LENGTH - 1));
             if (!ok) { this.emit({ type: 'warn', message: `${r.name}: geen positie binnen slanglengte` }); return done(); }
           }
           this.stepAlong(r, r.path, role.speed, dt);
@@ -948,6 +949,40 @@ export class World {
   }
 
   private tallWarned = new Set<string>();
+
+  /** The incident (if any) whose scene a point is at: within `radius` tiles of the building or the incident spot. */
+  incidentNear(x: number, y: number, radius: number): Incident | null {
+    let best: Incident | null = null, bd = Infinity;
+    for (const inc of this.incidents.values()) {
+      const b = inc.buildingId ? this.buildings.get(inc.buildingId) : null;
+      const d = b ? rectDist(b, x, y) : Math.hypot(inc.x - x, inc.y - y);
+      if (d <= radius && d < bd) { bd = d; best = inc; }
+    }
+    return best;
+  }
+
+  /** What a vehicle is doing, in words: 'Ter plaatse bij ...', 'Aanrijdend naar ...', 'Onderweg naar kazerne', ... */
+  vehicleStatus(v: Vehicle): string {
+    const homeD = (x: number, y: number) => Math.hypot(v.home.x + 0.5 - x, v.home.y + 0.5 - y);
+    if (v.state === 'moving') {
+      const d = v.dest ?? v.path[v.path.length - 1] ?? null;
+      const dx = d ? d.x + 0.5 : v.x, dy = d ? d.y + 0.5 : v.y;
+      if (v.silent || (d && homeD(dx, dy) < 2.2)) return 'Onderweg naar de kazerne';
+      if (v.patients.length || this.nearestHospital(dx, dy) && this.hospitalDistance(dx, dy) < 3.5) return 'Rijdt naar het ziekenhuis';
+      const inc = this.incidentNear(dx, dy, 6);
+      if (inc) return `Aanrijdend naar ${inc.name}`;
+      return 'Onderweg';
+    }
+    const inc = this.incidentNear(v.x, v.y, 6);
+    if (inc) return `Ter plaatse bij ${inc.name}`;
+    if (homeD(v.x, v.y) < 1.5) return 'Gereed in de kazerne';
+    return 'Staat stil';
+  }
+
+  private hospitalDistance(x: number, y: number): number {
+    const h = this.nearestHospital(x, y);
+    return h ? Math.hypot(h.door.x + 0.5 - x, h.door.y + 0.5 - y) : Infinity;
+  }
   /** Road tiles closed to civilian cars around secured incidents (emergency vehicles may still pass). */
   cordon = new Set<number>();
   /** Explosions that happened (for the renderer): id, position, time in game seconds. */
@@ -1290,6 +1325,7 @@ export class World {
       if (v) {
         if (!this.groundVehicle(v)) { this.emit({ type: 'warn', message: `${v.name}: bemanning staat nog buiten het voertuig` }); continue; }
         v.returning = false;
+        v.silent = false;
         v.toHospital = false;
         if (!this.driveNear(v, x, y)) this.emit({ type: 'warn', message: `${v.name}: geen route beschikbaar` });
         continue;
@@ -1632,7 +1668,7 @@ export class World {
     w.time = s.time; w.score = s.score; w.budget = s.budget; w.reputation = s.reputation; w.solved = s.solved; w.failed = s.failed; w.deaths = s.deaths;
     w.over = s.over; w.nextId = s.nextId; w.rng.state = s.rng; w.spawnTimer = s.spawnTimer;
     for (const sb of s.buildings) { const b = w.buildings.get(sb.id); if (b) Object.assign(b, { ...sb, resistance: sb.resistance ?? 1 }); }
-    for (const v of s.vehicles) { v.home ??= { x: Math.floor(v.x), y: Math.floor(v.y) }; v.returning ??= false; v.toHospital ??= false; v.contraflow ??= false; v.blocked ??= 0; v.avoid ??= []; v.ghost ??= 0; v.water ??= content.vehicles[v.defId]?.tank ?? 0; v.hydrant ??= false; w.vehicles.set(v.id, v); }
+    for (const v of s.vehicles) { v.home ??= { x: Math.floor(v.x), y: Math.floor(v.y) }; v.returning ??= false; v.silent ??= false; v.toHospital ??= false; v.contraflow ??= false; v.blocked ??= 0; v.avoid ??= []; v.ghost ??= 0; v.water ??= content.vehicles[v.defId]?.tank ?? 0; v.hydrant ??= false; w.vehicles.set(v.id, v); }
     for (const r of s.responders) w.responders.set(r.id, r);
     for (const v of s.victims) w.victims.set(v.id, v);
     for (const x of s.suspects) w.suspects.set(x.id, x);
