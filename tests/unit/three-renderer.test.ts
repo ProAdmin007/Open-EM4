@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { gableRoofGeometry, pickGroundTile, projectTileToNDC } from '../../src/game/three-renderer';
+import { buildRoof, gableRoofGeometry, pickGroundTile, projectTileToNDC } from '../../src/game/three-renderer';
 import { Commands, pickUnit, pickVehicle, type SelectionHost } from '../../src/game/selection';
 import { TILE_METERS, tileToWorld3D } from '../../src/sim/space';
 import { newWorld, run } from './helpers';
@@ -57,6 +57,33 @@ describe('procedural roof geometry', () => {
     let maxY = 0;
     for (let i = 0; i < pos.count; i++) maxY = Math.max(maxY, pos.getY(i));
     expect(maxY).toBeCloseTo(3);
+  });
+  it('a gable roof footprint matches (w, d) regardless of which side is longer', () => {
+    for (const [w, d] of [[10, 6], [6, 10]]) {
+      const mesh = buildRoof('gable', w, d) as THREE.Mesh;
+      mesh.updateMatrixWorld(true);
+      const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+      geo.computeBoundingBox();
+      const box = geo.boundingBox!;
+      expect(box.max.x - box.min.x).toBeCloseTo(w, 5);
+      expect(box.max.z - box.min.z).toBeCloseTo(d, 5);
+    }
+  });
+  it('the gable ridge always runs along the building\'s longer side', () => {
+    // w is the shorter side here, so the ridge (the edge at the roof's peak height) must run along z, not x.
+    const mesh = buildRoof('gable', 6, 10) as THREE.Mesh;
+    mesh.updateMatrixWorld(true);
+    const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+    const pos = geo.getAttribute('position');
+    let maxY = 0;
+    for (let i = 0; i < pos.count; i++) maxY = Math.max(maxY, pos.getY(i));
+    let minZ = Infinity, maxZ = -Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getY(i) < maxY - 1e-4) continue;
+      minZ = Math.min(minZ, pos.getZ(i));
+      maxZ = Math.max(maxZ, pos.getZ(i));
+    }
+    expect(maxZ - minZ).toBeCloseTo(10, 5); // ridge spans the full 10m long side
   });
 });
 
