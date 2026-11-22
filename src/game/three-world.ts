@@ -218,8 +218,22 @@ export function decorateBuilding(group: THREE.Group, type: string, roofKind: str
   const pitched = roofKind === 'gable' || roofKind === 'hip';
   const flatTop = h + 0.3;
   const door = (x: number, wd: number, ht: number, color: number): void => { b.box(wd, ht, 0.12, x, ht / 2, front * (d / 2 + 0.07), color); };
+  // every building: a darker plinth, and for pitched roofs an eave overhang with a gutter
+  if (type !== 'warehouse') b.box(w + 0.3, 0.5, d + 0.3, 0, 0.25, 0, 0x6f6a64);
+  if (pitched) { b.box(w + 0.7, 0.14, d + 0.7, 0, h + 0.05, 0, 0x4a3a34); b.box(w + 0.8, 0.1, 0.1, 0, h - 0.1, front * (d / 2 + 0.38), 0x8a8f94); b.box(w + 0.8, 0.1, 0.1, 0, h - 0.1, -front * (d / 2 + 0.38), 0x8a8f94); }
+  // entrance steps and a door lamp bracket
+  b.box(2.0, 0.18, 0.7, 0, 0.09, front * (d / 2 + 0.45), 0xaaa8a0);
   switch (type) {
     case 'residential': {
+      // front garden: low fence with a gate, a path to the door, a driveway with a bin, a TV aerial and sometimes a satellite dish
+      const fz = front * (d / 2 + 2.6);
+      b.box(w + 1.6, 0.9, 0.06, 0, 0.45, fz, 0xf2f0ea);
+      for (const s of [-1, 1]) b.box(0.06, 0.9, 2.6, s * (w / 2 + 0.8), 0.45, front * (d / 2 + 1.3), 0xf2f0ea);
+      b.box(1.2, 0.04, 2.6, 0, 0.03, front * (d / 2 + 1.3), 0xa9a69d); // path
+      if (r(7) > 0.45) b.box(2.4, 0.03, 3.0, -w * 0.32, 0.02, front * (d / 2 + 1.5), 0x8d8f94); // driveway
+      b.box(0.5, 0.9, 0.5, w / 2 - 0.2, 0.45, front * (d / 2 + 0.9), r(8) > 0.5 ? 0x2f6b34 : 0x3a5a8a); // wheelie bin
+      b.cyl(0.03, 1.6, w * 0.2, h + (pitched ? roofRise : 0) + 0.8, -front * d * 0.15, 0x555555, 5); b.box(0.9, 0.05, 0.05, w * 0.2, h + (pitched ? roofRise : 0) + 1.5, -front * d * 0.15, 0x555555);
+      if (r(9) > 0.6) b.add(new THREE.SphereGeometry(0.4, 8, 5), -w * 0.25, h + (pitched ? roofRise * 0.5 : 0) + 0.3, front * d * 0.2, { color: 0xd8d8d8, rx: 0.8, sy: 0.4 });
       door(0, 1.2, 2.1, 0x4a3523);
       b.box(2.2, 0.12, 1.4, 0, 2.5, front * (d / 2 + 0.7), 0x6b4a3a); // porch roof
       b.box(0.1, 2.4, 0.1, -1, 1.2, front * (d / 2 + 1.35), 0xf0efe8); b.box(0.1, 2.4, 0.1, 1, 1.2, front * (d / 2 + 1.35), 0xf0efe8);
@@ -231,6 +245,7 @@ export function decorateBuilding(group: THREE.Group, type: string, roofKind: str
       break;
     }
     case 'apartment': {
+      for (let i = 0; i < 3; i++) b.box(1.2, 0.04, 2.4, -w * 0.3 + i * w * 0.3, h + 0.5, -front * d * 0.25, 0x1f3b6b); // solar panels on the flat roof
       const floors = Math.max(2, Math.round(h / 3.2));
       door(0, 1.8, 2.2, 0x2d3640);
       b.box(2.6, 0.12, 1.6, 0, 2.6, front * (d / 2 + 0.8), 0x4a525c);
@@ -243,6 +258,9 @@ export function decorateBuilding(group: THREE.Group, type: string, roofKind: str
       break;
     }
     case 'commercial': case 'shopping': {
+      b.box(w * 0.8, 2.4, 0.1, 0, 1.45, front * (d / 2 + 0.06), 0x16222c); // shop-front glass
+      for (let i = 1; i < 4; i++) b.box(0.06, 2.4, 0.12, -w * 0.4 + i * (w * 0.8 / 4), 1.45, front * (d / 2 + 0.08), 0xd8d8d0);
+      b.box(w * 0.82, 0.08, 0.14, 0, 2.7, front * (d / 2 + 0.08), 0xd8d8d0);
       const sign = [0xd32f2f, 0x1565c0, 0x2e7d32, 0xf9a825, 0x6a1b9a][seed % 5];
       b.box(w * 0.82, 0.14, 1.6, 0, 3.3, front * (d / 2 + 0.8), sign); // awning
       b.box(w * 0.82, 0.6, 0.1, 0, 3.0, front * (d / 2 + 1.6), 0xf5f5f0);

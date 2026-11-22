@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newWorld, run } from './helpers';
+import { newWorld, roadNear, run } from './helpers';
 import type { World } from '../../src/sim/world';
 
 const crewOf = (w: World, defId: string) => {
@@ -75,7 +75,7 @@ describe('incident resolution', () => {
     const { v: amb, crew: medics } = crewOf(w, 'ambulance');
     const { v: car, crew: cops } = crewOf(w, 'patrol_car');
     driveTo(w, amb.id, victim.x, victim.y);
-    driveTo(w, car.id, victim.x, victim.y);
+    car.path = []; { const t = roadNear(w, victim.x, victim.y + 4); car.x = car.px = t.x + 0.5; car.y = car.py = t.y + 0.5; car.angle = w.laneAngle(t.x, t.y); } // beside the scene, not in the junction behind it
     w.orderDismount([amb.id, car.id]);
     w.orderAbility(medics, 'treat', { kind: 'victim', id: victim.id });
     w.orderAbility(cops, 'secure', { kind: 'incident', id: inc.id });

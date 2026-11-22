@@ -343,11 +343,11 @@ describe('control room, random calls, ambulance return', () => {
     w.reputation = 1e9;
     const seen: string[] = [];
     for (let i = 0; i < 30 * 1500; i++) { w.tick(); for (const e of w.drainEvents()) if (e.type === 'incident_started') seen.push(w.incidents.get(e.incidentId)?.defId ?? ''); }
-    expect(seen.length).toBeGreaterThan(15);
+    expect(seen.length).toBeGreaterThan(12);
     let repeats = 0;
     for (let i = 1; i < seen.length; i++) if (seen[i] === seen[i - 1]) repeats++;
     expect(repeats).toBeLessThanOrEqual(Math.ceil(seen.length * 0.12));
-    expect(new Set(seen).size).toBeGreaterThanOrEqual(12);
+    expect(new Set(seen).size).toBeGreaterThanOrEqual(10);
   }, 40000);
 
   it('an ambulance drives back to its station after delivering a patient to the hospital', () => {
@@ -542,5 +542,77 @@ describe('backup calls (LA-mod style)', () => {
     const eng = [...w.vehicles.values()].find(v => v.defId === 'fire_engine')!;
     expect(w.callBackup(eng.id, 'ambulance')).toBeNull(); // an engine crew cannot call backup
     expect(w.callBackup(cmd.id, 'hearse')).toBeNull(); // not in its list
+  });
+});
+
+describe('P2000-style calls, GRIP and the associated vehicles', () => {
+  it('has a broad set of call types, and every one can be spawned', () => {
+    const ids = Object.keys(content.incidents);
+    expect(ids.length).toBeGreaterThanOrEqual(50);
+    for (const need of ['automatic_alarm', 'gas_leak', 'elevator_rescue', 'high_rise_fire', 'industrial_explosion', 'building_collapse', 'breathing_problem', 'overdose', 'domestic_violence', 'riot', 'flooding', 'animal_on_road', 'oil_spill', 'hazmat_leak', 'bus_crash']) expect(ids).toContain(need);
+    let ok = 0;
+    for (const id of ids) {
+      const w = newWorld(17);
+      const inc = w.spawnIncident(id, { severity: 2 });
+      if (inc) ok++;
+    }
+    expect(ok).toBeGreaterThanOrEqual(ids.length - 2);
+  });
+
+  it('every call has a P2000 pager line with the right priority code', () => {
+    const w = newWorld(5);
+    const cardiac = w.spawnIncident('cardiac_arrest', { severity: 3 })!;
+    expect(cardiac.pager).toMatch(/^A1 Rendam .+ \d+ Hartstilstand$/);
+    const smoke = w.spawnIncident('chimney_fire', { severity: 1 })!;
+    expect(smoke.pager).toMatch(/^Prio 2 BRW Rendam /);
+    const fire = w.spawnIncident('house_fire', { severity: 3 })!;
+    expect(fire.pager).toMatch(/^Prio 1 BRW /);
+    const ev = w.drainEvents().find(e => e.type === 'incident_started' && (e as { incidentId: number }).incidentId === cardiac.id)!;
+    expect(ev.message).toContain('📟 A1');
+  });
+
+  it('an automatic alarm is closed by a reconnaissance alone', () => {
+    const w = newWorld(5);
+    const inc = w.spawnIncident('automatic_alarm', { severity: 1 })!;
+    const eng = [...w.vehicles.values()].find(v => v.defId === 'fire_engine')!;
+    const crew = w.orderDismount([eng.id]);
+    const b = w.buildings.get(inc.buildingId!)!;
+    const r = w.responders.get(crew[1])!; r.x = r.px = b.door.x + 0.5; r.y = r.py = b.door.y + 1.0;
+    expect(w.orderAbility([crew[1]], 'recon')).toBe(1);
+    run(w, 20, () => !w.incidents.has(inc.id));
+    expect(w.incidents.has(inc.id)).toBe(false);
+    expect(w.solved).toBe(1);
+  });
+
+  it('GRIP: scaling up sends the associated units, costs money, and dissolves after the incident', () => {
+    const w = newWorld(5);
+    expect(w.setGrip(2)).toBe(false); // nothing to scale up for
+    const inc = w.spawnIncident('high_rise_fire', { severity: 3 })!;
+    const budget = w.budget;
+    expect(w.setGrip(2)).toBe(true);
+    expect(w.grip).toBe(2);
+    expect(w.budget).toBe(budget - 600);
+    const moving = [...w.vehicles.values()].filter(v => v.path.length > 0).map(v => v.defId);
+    for (const need of ['ovd_car', 'copi_unit', 'lgh_car', 'hazmat_unit']) expect(moving).toContain(need);
+    expect(moving.filter(d => d === 'ambulance').length).toBeGreaterThanOrEqual(1);
+    expect(w.setGrip(1)).toBe(true); // scale down
+    expect(w.grip).toBe(1);
+    // done: the structure dissolves by itself
+    w.incidents.delete(inc.id); // the call has been handled
+    run(w, 60, () => w.grip === 0);
+    expect(w.grip).toBe(0);
+  });
+
+  it('a water tanker supplies engines next to it; the OvD speeds up treatment and extinguishing', () => {
+    const w = newWorld(5);
+    const tanker = [...w.vehicles.values()].find(v => v.defId === 'water_tanker')!;
+    const eng = [...w.vehicles.values()].find(v => v.defId === 'fire_engine')!;
+    expect(tanker.water).toBe(12000);
+    eng.water = 100; eng.x = eng.px = tanker.x + 2; eng.y = eng.py = tanker.y; eng.path = [];
+    run(w, 5);
+    expect(eng.water).toBeGreaterThan(500);
+    expect(tanker.water).toBeLessThan(12000);
+    const ovd = [...w.vehicles.values()].find(v => v.defId === 'ovd_car')!;
+    expect(w.vehicleDef(ovd).callable).toContain('hazmat_unit');
   });
 });

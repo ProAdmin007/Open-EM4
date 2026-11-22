@@ -39,6 +39,11 @@ export class AudioEngine {
   private fire!: Layer;
   private spray!: Layer;
   private traffic!: Layer;
+  private roar!: Layer;
+  private hiss!: Layer;
+  private sizzle!: Layer;
+  private lastT = 0;
+  private popAcc = 0;
   private noise!: AudioBuffer;
   private lastLevels = { fire: 0, spray: 0, sirens: {} as Record<string, number> };
 
@@ -111,6 +116,9 @@ export class AudioEngine {
     this.fire = loop('highpass', 1400);
     this.spray = loop('bandpass', 3500, 0.5);
     this.traffic = loop('lowpass', 260, 0.7, this.g.ambient);
+    this.roar = loop('lowpass', 170, 0.9, this.g.fire); // the deep roar of a big fire
+    this.hiss = loop('bandpass', 6200, 0.6, this.g.fire); // the airy hiss of flames
+    this.sizzle = loop('highpass', 7800, 0.5, this.g.fire); // water hitting hot surfaces
   }
 
   /** Per-channel volumes (0..1) from the settings. */
@@ -208,8 +216,27 @@ export class AudioEngine {
       s.pan.pan.setTargetAtTime(sirenPan[c] ?? 0, now, 0.1);
       this.lastLevels.sirens[c] = lvl;
     }
-    const crackle = Math.min(1, fireLevel) * 0.32 * (0.65 + 0.35 * Math.random());
+    const lvl = Math.min(1.6, fireLevel);
+    const crackle = Math.min(1, fireLevel) * 0.2 * (0.65 + 0.35 * Math.random());
     this.fire.gain.gain.setTargetAtTime(crackle, now, 0.05);
+    // a fire is a roar that swells and fades, a hiss, and a constant stream of pops and cracks (random, louder with the fire)
+    const swell = 0.75 + 0.25 * Math.sin(now * 1.7) * Math.sin(now * 0.63 + 1.3);
+    this.roar.gain.gain.setTargetAtTime(Math.min(1, lvl) * 0.3 * swell, now, 0.15);
+    this.hiss.gain.gain.setTargetAtTime(Math.min(1, lvl) * 0.05 * (0.7 + 0.3 * Math.random()), now, 0.08);
+    this.sizzle.gain.gain.setTargetAtTime(Math.min(sprayLevel, Math.min(1, lvl)) * 0.07, now, 0.1);
+    const dtA = Math.min(0.1, Math.max(0, now - this.lastT));
+    this.lastT = now;
+    if (lvl > 0.02) {
+      this.popAcc += dtA * (5 + 38 * Math.min(1, lvl));
+      while (this.popAcc >= 1) {
+        this.popAcc -= 1;
+        const big = Math.random() < 0.12; // an occasional loud crack or a collapsing beam
+        this.burst(big ? 0.09 : 0.025 + Math.random() * 0.03, (big ? 0.34 : 0.05 + Math.random() * 0.14) * Math.min(1, lvl + 0.2), big ? 380 + Math.random() * 400 : 900 + Math.random() * 3200, big ? 'lowpass' : 'bandpass', Math.random() * 0.05, this.g.fire);
+      }
+      if (lvl > 0.5 && Math.random() < dtA * 0.35) { // a whoosh when the flames flare up
+        this.burst(0.7, 0.2 * Math.min(1, lvl), 520 + Math.random() * 300, 'bandpass', 0, this.g.fire);
+      }
+    }
     this.spray.gain.gain.setTargetAtTime(sprayLevel * 0.12, now, 0.1);
     this.traffic.gain.gain.setTargetAtTime(world && !paused ? 0.045 : 0.0, now, 0.4);
     this.heartbeat(hb, hbHealth);
@@ -238,7 +265,7 @@ export class AudioEngine {
     o.start(t0);
     o.stop(t0 + dur + 0.05);
   }
-  private burst(dur: number, vol: number, freq: number, type: BiquadFilterType = 'lowpass', delay = 0): void {
+  private burst(dur: number, vol: number, freq: number, type: BiquadFilterType = 'lowpass', delay = 0, dest?: GainNode): void {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
     const t0 = ctx.currentTime + delay;
@@ -250,7 +277,7 @@ export class AudioEngine {
     const g = ctx.createGain();
     g.gain.setValueAtTime(vol, t0);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    s.connect(f).connect(g).connect(this.g.effects);
+    s.connect(f).connect(g).connect(dest ?? this.g.effects);
     s.start(t0, Math.random());
     s.stop(t0 + dur + 0.05);
   }

@@ -1,6 +1,6 @@
 import type { GameScene } from '../game/scene';
 import { T } from '../game/scene';
-import { DIFFICULTY, type WorldOptions } from '../sim/world';
+import { DIFFICULTY, World, type WorldOptions } from '../sim/world';
 import type { Ability, Category, Difficulty, GameEvent, Task } from '../sim/types';
 import { hashSeed } from '../sim/rng';
 import { addScore, loadMods, loadSave, loadScores, loadSettings, saveMods, saveSettings, writeSave, type Settings } from '../storage';
@@ -89,7 +89,7 @@ export class UI {
   private bind(): void {
     // pointerdown is used instead of click so periodic re-rendering cannot swallow a click
     document.addEventListener('pointerdown', ev => {
-      const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-act],[data-vid],[data-iid],[data-tab],[data-ability],[data-reinf],[data-backup]');
+      const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-act],[data-vid],[data-iid],[data-tab],[data-ability],[data-reinf],[data-backup],[data-grip]');
       if (!target || ev.button !== 0) return;
       this.scene.audio?.play('click');
       const s = this.scene, w = s.world;
@@ -110,6 +110,7 @@ export class UI {
       } else if (d.tab) this.tab = d.tab as Category;
       else if (d.ability) s.cmdAbility(d.ability as Ability);
       else if (d.backup) s.cmdBackup(d.backup);
+      else if (d.grip) { w.setGrip(Number(d.grip)); s.audio?.play('order'); }
       else if (d.act) this.act(d.act);
       this.refresh();
     });
@@ -226,7 +227,9 @@ export class UI {
       const cost = w.reinforcementCost(d.id);
       return `<button class="veh reinf" data-reinf="${esc(d.id)}" ${w.budget >= cost ? '' : 'disabled'} title="Versterking bestellen">➕ ${esc(d.name)}<small>€${cost.toLocaleString('nl-NL')}</small></button>`;
     }).join('');
-    this.setHtml('vehicle-list', html + (reinf ? `<div class="reinf-title">Versterking bestellen (middelen: €${Math.round(w.budget).toLocaleString('nl-NL')})</div>` + reinf : ''));
+    const gripBtns = [0, 1, 2, 3, 4].map(n => `<button data-grip="${n}" class="${w.grip === n ? 'primary' : ''}" title="${esc(World.GRIP_INFO[n])}">${n === 0 ? 'Geen' : 'GRIP ' + n}</button>`).join('');
+    const gripBox = `<div class="grip" style="grid-column:1/-1"><div class="reinf-title">🏛 Opschalen (GRIP)</div><div class="actions">${gripBtns}</div><div class="help">${esc(World.GRIP_INFO[w.grip])}${w.grip ? '' : ' – opschalen stuurt automatisch bijbehorende voertuigen (OvD, CoPI, LGH, extra eenheden) naar het hoofdincident.'}</div></div>`;
+    this.setHtml('vehicle-list', gripBox + html + (reinf ? `<div class="reinf-title">Versterking bestellen (middelen: €${Math.round(w.budget).toLocaleString('nl-NL')})</div>` + reinf : ''));
   }
 
   private renderUnitPanel(): void {

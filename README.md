@@ -9,7 +9,7 @@ Command fire engines, ambulances, police cars and tow trucks in a living city �
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-131%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-136%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 **English** · [Nederlands](README.nl.md)
@@ -48,12 +48,14 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 - 🧭 **Smart orders** – pressing *treat* or *arrest* spreads your crew over the casualties and suspects instead of sending everybody to the same person; vehicles overtake slow or stopped traffic through the opposite lane; commanders and officers can call **backup** (LA-mod style).
 - 🎧 **Sound options** – separate volumes for sirens, fire and water, traffic, alerts and effects, the control-room voice (with voice choice and speed) and the patient monitor: a heartbeat while a paramedic stabilises somebody, a flat tone when they die.
 - 🎥 **Camera** – hold **Ctrl** and drag (or Ctrl + arrow keys) to turn and tilt the view.
+- 📟 **P2000 calls** – 50+ call types written after the Dutch P2000 pager messages (*A1/A2* for ambulance, *Prio 1/2* for fire and police): automatic fire alarms, gas leaks, lift rescues, chimney and container fires, breathing problems, seizures, overdoses, domestic violence, knife threats, floods, animals on the road, oil spills… and big ones: high-rise fires, explosions, collapses, chemical leaks, bus crashes and riots.
+- 🏛 **GRIP escalation** – scale up to GRIP 1–4 (CoPI, ROT, municipal and regional policy teams): each level sends the associated units — Officer of the Day, CoPI command post, LGH, hazmat unit, water tanker, riot van, extra engines and ambulances — and extends the command range; the structure dissolves when the incidents are handled. Five new scenario missions: high-rise fire, storm night, chemical incident, city riot, collapse.
 - ⏱️ **Severity matters** – treatment, arrest, securing, clearing and fire-fighting times grow with the severity, differ per incident type, and unattended incidents escalate and eventually fail.
 - 🚦 **Believable traffic** – right-hand lanes, U-turns, emergency vehicles that never overlap other vehicles or people, parking bays at every station, and crews that step out *beside* the vehicle.
 - 🔊 **Fully procedural audio** – Dutch-style two-tone sirens, crackling fire, water spray, traffic hum and UI effects, all synthesised with the Web Audio API (no sound files).
 - 🎯 **Game modes** – six missions, endless Freeplay (Easy / Normal / Hard, seeded for reproducible scenarios), save & load, local highscores.
 - 🧩 **Moddable** – vehicles, roles, incidents, missions and maps are validated JSON; an example content pack is included.
-- 🧪 **Well tested** – deterministic simulation with 131 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
+- 🧪 **Well tested** – deterministic simulation with 136 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
 - 🧊 **The 3D game** – the game is played in 3D by default (the 2D view is still there as a lightweight alternative): a procedural three.js city (buildings, vehicles, people, fire/smoke, traffic lights) with an RTS camera, next to the original 2D view; switch in Settings or the main menu. Lazily loaded, so it costs nothing if you never turn it on ([docs/3d.md](docs/3d.md)).
 
 The experimental 3D view (procedural three.js, no external assets):

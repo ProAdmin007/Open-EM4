@@ -347,5 +347,162 @@
     ],
     "patientCapacity": 2,
     "cost": 600
+  },
+  {
+    "id": "ovd_car",
+    "name": "Officier van Dienst",
+    "category": "fire",
+    "maxSpeed": 75,
+    "capacity": 2,
+    "color": "#ffd54f",
+    "length": 1.3,
+    "equipment": [
+      "radio"
+    ],
+    "crew": [
+      {
+        "role": "ovd",
+        "count": 1
+      }
+    ],
+    "patientCapacity": 0,
+    "cost": 500,
+    "callable": [
+      "fire_engine",
+      "aerial_ladder",
+      "hazmat_unit",
+      "water_tanker",
+      "rescue_vehicle",
+      "ambulance",
+      "patrol_car",
+      "tow_truck"
+    ]
+  },
+  {
+    "id": "copi_unit",
+    "name": "Commandoplaats Incident (CoPI)",
+    "category": "fire",
+    "maxSpeed": 60,
+    "capacity": 3,
+    "color": "#fff176",
+    "length": 1.9,
+    "equipment": [
+      "radio",
+      "fire_hose"
+    ],
+    "crew": [
+      {
+        "role": "ovd",
+        "count": 2
+      }
+    ],
+    "patientCapacity": 0,
+    "cost": 1500,
+    "callable": [
+      "fire_engine",
+      "aerial_ladder",
+      "hazmat_unit",
+      "water_tanker",
+      "ambulance",
+      "lgh_car",
+      "patrol_car",
+      "riot_van",
+      "tow_truck",
+      "hearse"
+    ]
+  },
+  {
+    "id": "hazmat_unit",
+    "name": "Ongevallenbestrijding gevaarlijke stoffen",
+    "category": "fire",
+    "maxSpeed": 60,
+    "capacity": 4,
+    "color": "#ff7043",
+    "length": 2.0,
+    "equipment": [
+      "fire_hose",
+      "breathing_apparatus",
+      "rescue_tools"
+    ],
+    "tank": 2000,
+    "crew": [
+      {
+        "role": "hazmat_ff",
+        "count": 4
+      }
+    ],
+    "patientCapacity": 0,
+    "firePowerBonus": 1.15,
+    "cost": 1700
+  },
+  {
+    "id": "water_tanker",
+    "name": "Watertankwagen",
+    "category": "fire",
+    "maxSpeed": 55,
+    "capacity": 2,
+    "color": "#ef6c00",
+    "length": 2.3,
+    "equipment": [
+      "fire_hose"
+    ],
+    "tank": 12000,
+    "crew": [
+      {
+        "role": "tanker_driver",
+        "count": 2
+      }
+    ],
+    "patientCapacity": 0,
+    "cost": 1200
+  },
+  {
+    "id": "lgh_car",
+    "name": "Leider Geneeskundige Hulpverlening",
+    "category": "ambulance",
+    "maxSpeed": 75,
+    "capacity": 2,
+    "color": "#4dd0e1",
+    "length": 1.3,
+    "equipment": [
+      "medical_kit",
+      "radio"
+    ],
+    "crew": [
+      {
+        "role": "lgh",
+        "count": 1
+      }
+    ],
+    "patientCapacity": 0,
+    "cost": 700,
+    "callable": [
+      "ambulance",
+      "rapid_responder",
+      "mmt_car",
+      "hearse"
+    ]
+  },
+  {
+    "id": "riot_van",
+    "name": "ME-bus",
+    "category": "police",
+    "maxSpeed": 60,
+    "capacity": 6,
+    "color": "#283593",
+    "length": 2.0,
+    "equipment": [
+      "handcuffs",
+      "barrier_tape",
+      "riot_shields"
+    ],
+    "crew": [
+      {
+        "role": "me_officer",
+        "count": 6
+      }
+    ],
+    "patientCapacity": 0,
+    "cost": 1100
   }
 ]

@@ -120,5 +120,72 @@
     "speed": 2.4,
     "color": "#37474f",
     "power": 1
+  },
+  {
+    "id": "ovd",
+    "name": "Officier van Dienst",
+    "category": "fire",
+    "abilities": [
+      "coordinate",
+      "recon",
+      "assist"
+    ],
+    "speed": 2.7,
+    "color": "#ffd54f",
+    "power": 3
+  },
+  {
+    "id": "lgh",
+    "name": "Leider Geneeskundige Hulpverlening",
+    "category": "ambulance",
+    "abilities": [
+      "coordinate",
+      "treat",
+      "assist"
+    ],
+    "speed": 2.8,
+    "color": "#4dd0e1",
+    "power": 2
+  },
+  {
+    "id": "hazmat_ff",
+    "name": "Brandweerman gevaarlijke stoffen",
+    "category": "fire",
+    "abilities": [
+      "extinguish",
+      "cool",
+      "rescue",
+      "recon",
+      "assist"
+    ],
+    "speed": 2.4,
+    "color": "#ff7043",
+    "power": 7
+  },
+  {
+    "id": "me_officer",
+    "name": "ME-agent",
+    "category": "police",
+    "abilities": [
+      "arrest",
+      "secure",
+      "disperse",
+      "assist"
+    ],
+    "speed": 2.9,
+    "color": "#283593",
+    "power": 2
+  },
+  {
+    "id": "tanker_driver",
+    "name": "Chauffeur tankwagen",
+    "category": "fire",
+    "abilities": [
+      "extinguish",
+      "assist"
+    ],
+    "speed": 2.4,
+    "color": "#ef6c00",
+    "power": 3
   }
 ]

@@ -162,5 +162,185 @@
         "severity": 2
       }
     ]
+  },
+  {
+    "id": "high_rise",
+    "name": "Hoogbouwbrand",
+    "level": 3,
+    "allowedFailures": 1,
+    "description": "Uitslaande brand in een flat met bewoners in het trappenhuis. Zet de hoogwerker in, verken, red en overweeg GRIP-opschaling.",
+    "script": [
+      {
+        "at": 3,
+        "def": "high_rise_fire",
+        "severity": 3
+      },
+      {
+        "at": 70,
+        "def": "elevator_rescue",
+        "severity": 2
+      },
+      {
+        "at": 110,
+        "def": "breathing_problem",
+        "severity": 3
+      },
+      {
+        "at": 150,
+        "def": "gas_leak",
+        "severity": 2
+      },
+      {
+        "at": 200,
+        "def": "burn_injury",
+        "severity": 2
+      }
+    ]
+  },
+  {
+    "id": "storm_night",
+    "name": "Stormnacht",
+    "level": 2,
+    "allowedFailures": 2,
+    "description": "Een zware storm trekt over de stad: bomen op de weg, wateroverlast, schade en meer. Houd het overzicht.",
+    "script": [
+      {
+        "at": 3,
+        "def": "fallen_tree",
+        "severity": 2
+      },
+      {
+        "at": 25,
+        "def": "flooding",
+        "severity": 2
+      },
+      {
+        "at": 50,
+        "def": "chimney_fire",
+        "severity": 1
+      },
+      {
+        "at": 80,
+        "def": "oil_spill",
+        "severity": 1
+      },
+      {
+        "at": 110,
+        "def": "fallen_tree",
+        "severity": 2
+      },
+      {
+        "at": 140,
+        "def": "car_accident",
+        "severity": 2
+      },
+      {
+        "at": 180,
+        "def": "flooding",
+        "severity": 2
+      },
+      {
+        "at": 220,
+        "def": "automatic_alarm",
+        "severity": 1
+      }
+    ]
+  },
+  {
+    "id": "chemical_incident",
+    "name": "Chemisch incident",
+    "level": 3,
+    "allowedFailures": 1,
+    "description": "Een lekkage van gevaarlijke stoffen bij een bedrijf. Verken, zet af, red slachtoffers en schaal op naar GRIP 2.",
+    "script": [
+      {
+        "at": 3,
+        "def": "hazmat_leak",
+        "severity": 3
+      },
+      {
+        "at": 60,
+        "def": "industrial_explosion",
+        "severity": 3
+      },
+      {
+        "at": 130,
+        "def": "breathing_problem",
+        "severity": 3
+      },
+      {
+        "at": 180,
+        "def": "container_fire",
+        "severity": 2
+      }
+    ]
+  },
+  {
+    "id": "city_riot",
+    "name": "Rellen in de binnenstad",
+    "level": 3,
+    "allowedFailures": 1,
+    "description": "Ordeverstoring na een voetbalwedstrijd: rellen, gewonden en brandstichting. Gebruik de ME-bus en schaal op.",
+    "script": [
+      {
+        "at": 3,
+        "def": "riot",
+        "severity": 3
+      },
+      {
+        "at": 50,
+        "def": "shoplifting",
+        "severity": 1
+      },
+      {
+        "at": 80,
+        "def": "container_fire",
+        "severity": 2
+      },
+      {
+        "at": 120,
+        "def": "knife_threat",
+        "severity": 3
+      },
+      {
+        "at": 170,
+        "def": "car_break_in",
+        "severity": 1
+      },
+      {
+        "at": 210,
+        "def": "burn_injury",
+        "severity": 2
+      }
+    ]
+  },
+  {
+    "id": "collapse",
+    "name": "Instorting",
+    "level": 3,
+    "allowedFailures": 0,
+    "description": "Een flatgebouw is ingestort. Er zijn veel bedolven slachtoffers. Verken, red, behandel en schaal op naar GRIP 3.",
+    "script": [
+      {
+        "at": 3,
+        "def": "building_collapse",
+        "severity": 3
+      },
+      {
+        "at": 90,
+        "def": "gas_leak",
+        "severity": 3
+      },
+      {
+        "at": 150,
+        "def": "seizure",
+        "severity": 2
+      },
+      {
+        "at": 200,
+        "def": "bus_crash",
+        "severity": 3
+      }
+    ]
   }
 ]

@@ -156,6 +156,8 @@ export class Three3DRenderer implements GameRenderer {
   private winDark: THREE.InstancedMesh | null = null;
   private fireWin: THREE.InstancedMesh | null = null;
   private sootWin: THREE.InstancedMesh | null = null;
+  private frames: THREE.InstancedMesh | null = null;
+  private frameCount: [number, number] = [0, 0];
   shadows = false;
   private treesGroup = new THREE.Group();
   private lightsGroup = new THREE.Group();
@@ -437,7 +439,9 @@ export class Three3DRenderer implements GameRenderer {
     for (const b of world.buildings.values()) {
       const w = b.w * TILE_METERS, d = b.h * TILE_METERS;
       const heightMeters = (b.floors ?? Math.max(1, Math.round(b.height / 10))) * 3.2;
-      const colors = BUILDING_COLORS[b.type] ?? { wall: 0x888888, roof: 0xaaaaaa };
+      const base = BUILDING_COLORS[b.type] ?? { wall: 0x888888, roof: 0xaaaaaa };
+      const jit = new THREE.Color(base.wall).offsetHSL((((hash(b.x, b.y) >> 3) % 100) / 100 - 0.5) * 0.05, (((hash(b.y, b.x) >> 2) % 100) / 100 - 0.5) * 0.12, (((hash(b.x, b.y + 7) >> 4) % 100) / 100 - 0.5) * 0.1);
+      const colors = { wall: jit.getHex(), roof: new THREE.Color(base.roof).offsetHSL((((hash(b.x + 3, b.y) >> 3) % 100) / 100 - 0.5) * 0.03, 0, (((hash(b.x, b.y + 3) >> 5) % 100) / 100 - 0.5) * 0.08).getHex() };
       const group = new THREE.Group();
       const bodyMat = new THREE.MeshLambertMaterial({ color: colors.wall, map: wallTexture(b.type) });
       const pitchedRoof = (b.roof ?? 'flat') !== 'flat';
@@ -512,6 +516,18 @@ export class Three3DRenderer implements GameRenderer {
     }
     this.winLit = mk(litAll, this.env.windowLit);
     this.winDark = mk(darkAll, this.env.windowDark);
+    // white window frames and sills behind the glass (one instanced mesh for the whole city)
+    if (this.frames) { this.scene.remove(this.frames); this.frames.dispose(); this.frames = null; }
+    const all = [...litAll, ...darkAll];
+    if (all.length) {
+      const fm = new THREE.InstancedMesh(wg, lambert(0xe8e5da), all.length);
+      const grow = new THREE.Matrix4().compose(new THREE.Vector3(0, -0.03, -0.03), new THREE.Quaternion(), new THREE.Vector3(1.3, 1.25, 1.2)), tmp = new THREE.Matrix4();
+      all.forEach((m, i) => fm.setMatrixAt(i, tmp.copy(m).multiply(grow)));
+      fm.frustumCulled = false; fm.castShadow = false;
+      this.scene.add(fm);
+      this.frames = fm;
+      this.frameCount = [litAll.length, darkAll.length];
+    }
   }
 
   /** Remove a collapsed building's windows and decorations. */
@@ -522,6 +538,10 @@ export class Three3DRenderer implements GameRenderer {
       if (!im) continue;
       for (let i = 0; i < win.count; i++) im.setMatrixAt(win.start + i, zero);
       im.instanceMatrix.needsUpdate = true;
+    }
+    if (this.frames) {
+      for (const win of bo.win) for (let i = 0; i < win.count; i++) this.frames.setMatrixAt((win.dark ? this.frameCount[0] : 0) + win.start + i, zero);
+      this.frames.instanceMatrix.needsUpdate = true;
     }
     for (const m of bo.decor) m.visible = false;
   }

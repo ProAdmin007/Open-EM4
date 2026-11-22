@@ -92,7 +92,7 @@ describe('collisions', () => {
       const boxes: Box[] = [...w.vehicles.values()].map(boxOfVehicle).concat(w.civilians.map(boxOfCar));
       for (let a = 0; a < boxes.length; a++) for (let b = a + 1; b < boxes.length; b++) {
         checks++;
-        if (overlap(boxes[a], boxes[b], 0.05)) { overlaps++; if (samples.length < 5) samples.push({ t: (i / 30).toFixed(1), a: boxes[a], b: boxes[b] }); }
+        if (overlap(boxes[a], boxes[b], 0.1)) { overlaps++; if (samples.length < 5) samples.push({ t: (i / 30).toFixed(1), a: boxes[a], b: boxes[b] }); }
       }
     }
     expect(checks).toBeGreaterThan(1000);

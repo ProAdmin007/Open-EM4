@@ -111,6 +111,12 @@ const SPECS: Record<string, Spec> = {
   'vehicle/police_van': { shape: 'van', body: 0x233f7a, stripe: 0xf3f4f6, stripe2: 0xff8c1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
   'vehicle/police_motorcycle': { shape: 'bike', body: 0xf3f4f6, stripe: 0x1f4fb3, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
   'vehicle/bomb_squad': { shape: 'truck', body: 0x37474f, cab: 0x37474f, stripe: 0xff7a1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 3, extras: bombSquadExtras },
+  'vehicle/ovd_car': { shape: 'car', body: 0xf6f4ea, stripe: 0xffd21a, stripe2: 0xd32f2f, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2 },
+  'vehicle/lgh_car': { shape: 'car', body: 0xf6f4ea, stripe: 0x26c6da, stripe2: 0xffd21a, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: crossExtras },
+  'vehicle/copi_unit': { shape: 'van', body: 0xf3f1e6, stripe: 0xffd21a, stripe2: 0xd32f2f, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: copiExtras },
+  'vehicle/hazmat_unit': { shape: 'truck', body: 0xe8591c, cab: 0xe8591c, stripe: 0xffd21a, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 3, extras: hazmatExtras },
+  'vehicle/water_tanker': { shape: 'truck', body: 0xc95a0c, cab: 0xc95a0c, stripe: 0xf2f2f2, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 3, extras: tankerExtras },
+  'vehicle/riot_van': { shape: 'van', body: 0x1f2a5a, stripe: 0xf3f4f6, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2, extras: riotExtras },
   'vehicle/hearse': { shape: 'van', body: 0x20262b, stripe: 0xb8bcc4, accent: 0x20262b, accent2: 0x20262b, wheels: 2, extras: hearseExtras },
   'vehicle/tow_truck': { shape: 'truck', body: 0xf0b41a, cab: 0xf0b41a, stripe: 0x222222, accent: 0xffa000, accent2: 0xffa000, wheels: 3, extras: towExtras },
   'vehicle/service_van': { shape: 'van', body: 0x4d7a2a, stripe: 0xf0d02a, accent: 0xffa000, accent2: 0xffa000, wheels: 2, extras: rackExtras },
@@ -275,6 +281,29 @@ function ambulanceExtras(g: THREE.Group, L: number, W: number, H: number): void 
     g.add(pivot);
   }
   box(g, 0.1, 0.5, W * 0.6, lambert(0x2c3138), -L / 2 - 0.02, 0.5, 0); // rear step
+}
+function copiExtras(g: THREE.Group, L: number, W: number, H: number): void {
+  antennaExtras(g, L, W, H);
+  box(g, 1.4, 0.2, 0.6, lambert(0xdadada), L * 0.1, H + 0.12, 0.5); // roof mast base
+  box(g, 0.05, 1.8, 0.05, lambert(0x222222), L * 0.1, H + 1.0, 0.5);
+  box(g, 0.9, 0.5, 0.05, lambert(0x0f6fb3), -L * 0.15, H * 0.6, W / 2 + 0.03); // "CoPI" board
+  box(g, 0.9, 0.5, 0.05, lambert(0x0f6fb3), -L * 0.15, H * 0.6, -(W / 2 + 0.03));
+}
+function hazmatExtras(g: THREE.Group, L: number, W: number, H: number): void {
+  const grey = lambert(0xb9bec4), dark = lambert(0x2a2c30);
+  for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 1.5, 12), grey); c.rotation.x = Math.PI / 2; c.position.set(-L * 0.38 + i * 1.1, H + 0.3, 0); g.add(c); }
+  box(g, L * 0.5, 0.1, W * 0.9, dark, -L * 0.12, H + 0.04, 0);
+  for (const s of [-1, 1]) box(g, L * 0.4, H * 0.3, 0.05, lambert(0xffd21a), -L * 0.2, H * 0.55, s * (W / 2 + 0.03)); // hazard panels
+}
+function tankerExtras(g: THREE.Group, L: number, W: number, H: number): void {
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(W * 0.46, W * 0.46, L * 0.58, 20), lambert(0xd8dde2));
+  tank.rotation.z = Math.PI / 2; tank.position.set(-L * 0.17, H + W * 0.3, 0); g.add(tank);
+  for (const s of [-1, 1]) box(g, L * 0.5, 0.08, 0.06, lambert(0xc95a0c), -L * 0.17, H + W * 0.3, s * W * 0.46);
+  box(g, 0.5, 0.3, 0.5, lambert(0x555a60), -L * 0.17, H + W * 0.8, 0); // manhole
+}
+function riotExtras(g: THREE.Group, L: number, W: number, H: number): void {
+  for (const s of [-1, 1]) for (let i = 0; i < 3; i++) box(g, 0.7, 0.04, 0.03, lambert(0x0c0f1c), -L * 0.15 - i * 0.3, H * 0.62, s * (W / 2 + 0.02)); // grilles over the windows
+  box(g, W * 0.7, 0.3, 0.2, lambert(0x14182c), L / 2 - 0.05, 0.8, 0); // push bar
 }
 function hearseExtras(g: THREE.Group, L: number, W: number, H: number): void {
   const chrome = lambert(0xcfd3d8);

@@ -113,12 +113,12 @@ const take = (prefer) => { // farthest-point choice among the free station sites
   return best;
 };
 const stationDefs = [
-  ['Brandweerkazerne', 'fire_station', 'fire', 6, 4, ['fire_engine', 'aerial_ladder', 'rescue_vehicle', 'command_vehicle'], { x: center.x - 14, y: center.y }],
+  ['Brandweerkazerne', 'fire_station', 'fire', 6, 4, ['fire_engine', 'aerial_ladder', 'rescue_vehicle', 'command_vehicle', 'copi_unit'], { x: center.x - 14, y: center.y }],
   ['Politiebureau', 'police_station', 'police', 5, 4, ['patrol_car', 'patrol_car', 'police_van', 'police_motorcycle', 'bomb_squad'], { x: center.x + 6, y: center.y + 12 }],
   ['Ambulancepost', 'ambulance_post', 'ambulance', 5, 3, ['ambulance', 'ambulance', 'rapid_responder', 'mmt_car'], { x: center.x + 8, y: center.y - 14 }],
-  ['Brandweerpost Oost', 'fire_station_2', 'fire', 5, 3, ['fire_engine', 'rescue_vehicle'], null],
-  ['Ambulancepost Zuid', 'ambulance_post_2', 'ambulance', 5, 3, ['ambulance', 'rapid_responder'], null],
-  ['Politiepost Noord', 'police_station_2', 'police', 5, 3, ['patrol_car', 'police_motorcycle'], null],
+  ['Brandweerpost Oost', 'fire_station_2', 'fire', 5, 3, ['fire_engine', 'rescue_vehicle', 'ovd_car', 'hazmat_unit', 'water_tanker'], null],
+  ['Ambulancepost Zuid', 'ambulance_post_2', 'ambulance', 5, 3, ['ambulance', 'rapid_responder', 'lgh_car'], null],
+  ['Politiepost Noord', 'police_station_2', 'police', 5, 3, ['patrol_car', 'police_motorcycle', 'riot_van'], null],
   ['Technische dienst', 'tech_depot', 'tech', 5, 4, ['tow_truck', 'service_van', 'crane_truck'], null],
   ['Uitvaartcentrum', 'funeral_home', 'tech', 5, 3, ['hearse'], null],
 ];

@@ -354,19 +354,19 @@ export class World {
     return spots.find(s => !taken.some(p => Math.hypot(p.x - s.r.x, p.y - s.r.y) < 2.3))?.r ?? null;
   }
 
-  static readonly MAX_VEHICLES_PER_CATEGORY = 14;
+  static readonly MAX_VEHICLES_PER_CATEGORY = 20;
 
   reinforcementCost(defId: string): number {
     return this.content.vehicles[defId]?.cost ?? 500;
   }
 
   /** Buy an extra vehicle for the matching station with budget. Returns the new vehicle or null (a warning is emitted). */
-  callReinforcement(defId: string): Vehicle | null {
+  callReinforcement(defId: string, free = false): Vehicle | null {
     const def = this.content.vehicles[defId];
     if (!def || this.over) return null;
     const stations = this.map.stations.filter(s => s.category === def.category);
     if (!stations.length) { this.emit({ type: 'warn', message: `Geen post beschikbaar voor ${def.name}` }); return null; }
-    const cost = this.reinforcementCost(defId);
+    const cost = free ? 0 : this.reinforcementCost(defId);
     if (this.budget < cost) { this.emit({ type: 'warn', message: `Onvoldoende middelen voor ${def.name} (€${cost})` }); return null; }
     if (this.vehiclesOf(def.category).length >= World.MAX_VEHICLES_PER_CATEGORY) { this.emit({ type: 'warn', message: 'Maximaal aantal voertuigen bereikt voor deze dienst' }); return null; }
     // the first station of that service with a free parking bay
@@ -382,7 +382,7 @@ export class World {
     this.budget -= cost;
     const v = this.createVehicle(def, st.id, pos.x + 0.5, pos.y + 0.5);
     if (bay) v.angle = -Math.PI / 2;
-    this.emit({ type: 'info', message: `Versterking: ${v.name} staat klaar bij de post (€${cost})` });
+    this.emit({ type: 'info', message: free ? `Opschaling: ${v.name} staat klaar bij de post` : `Versterking: ${v.name} staat klaar bij de post (€${cost})` });
     return v;
   }
 
@@ -428,6 +428,7 @@ export class World {
     for (const v of this.vehicles.values()) this.updateVehicle(v, dt);
     for (const r of this.responders.values()) this.updateResponder(r, dt);
     this.updateWater(dt);
+    this.updateGrip(dt);
     this.updateHearses(dt);
     this.updateHospital();
     this.updateFire(dt);
@@ -533,11 +534,18 @@ export class World {
     const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
     const d1 = wrap(axis - v.angle), d2 = wrap(axis + Math.PI - v.angle);
     const diff = Math.abs(d1) <= Math.abs(d2) ? d1 : d2;
-    if (Math.abs(diff) > 1e-3) v.angle += Math.max(-4 * dt, Math.min(4 * dt, diff));
+    if (Math.abs(diff) > 1e-3) {
+      const len0 = this.vehicleDef(v).length;
+      // turning in place swings the whole length through the neighbouring space: only when nobody is there
+      const goal = v.angle + diff; // the orientation it is turning to must be free (and the swing not wider than a little more than that)
+      if (!this.findBlocker(v, v.x, v.y, Math.cos(goal), Math.sin(goal), 0.01, len0, len0 * 0.5, PRIO_EMERGENCY)) v.angle += Math.max(-4 * dt, Math.min(4 * dt, diff));
+    }
     // glide to the middle of the lane
     const cx = tx + 0.5, cy = ty + 0.5, dx = cx - v.x, dy = cy - v.y, dd = Math.hypot(dx, dy);
     if (dd > 1e-3 && Math.abs(diff) < 0.6) {
       const st = Math.min(dd, 1.6 * dt);
+      const len = this.vehicleDef(v).length;
+      if (this.findBlocker(v, v.x, v.y, dx / dd, dy / dd, st + 0.05, len, halfWidth(len), PRIO_EMERGENCY)) return; // never glide into somebody
       v.x += (dx / dd) * st; v.y += (dy / dd) * st;
     }
   }
@@ -636,7 +644,7 @@ export class World {
       // a U-turn swings the whole length of the vehicle through the neighbouring lane: reserve that space
       const la0 = this.laneAt(Math.floor(v.x), Math.floor(v.y)), lb0 = this.laneAt(v.path[0].x, v.path[0].y);
       const uturn = !!(la0 && lb0 && la0.x === -lb0.x && la0.y === -lb0.y && Math.abs(ux * la0.x + uy * la0.y) < 1e-6);
-      const blocker = v.ghost > 0 ? null : this.gate(v, def.length) ?? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, uturn ? def.length * 0.52 : halfWidth(def.length), PRIO_EMERGENCY);
+      const blocker = v.ghost > 0 ? null : this.gate(v, def.length) ?? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, uturn ? def.length * 0.64 : halfWidth(def.length), PRIO_EMERGENCY);
       if (blocker) { this.onBlocked(v, blocker, dt); return; }
       v.blocked = 0;
       // U-turn: sliding into the opposite lane while rotating through 180 degrees
@@ -895,11 +903,23 @@ export class World {
   }
 
   /** Walk until within `range` of a target point. Returns true once in range. */
+  /** Walk up close to a casualty: everybody takes their own side (spread by golden-angle slots) at about half a metre. */
+  private approachSlot(r: Responder, vx: number, vy: number, cancel: () => void): boolean {
+    const a = (r.id * 2.399963) % (Math.PI * 2);
+    const tx = vx + Math.cos(a) * 0.55, ty = vy + Math.sin(a) * 0.55;
+    let failed = false;
+    const ok = this.approach(r, tx, ty, 1.0, () => { failed = true; });
+    if (failed) return this.approach(r, vx, vy, 1.4, cancel); // no tile on that side (wreck, kerb): stand wherever there is room
+    if (ok) r.angle = Math.atan2(vy - r.y, vx - r.x); // look at the casualty
+    return ok;
+  }
+
   private approach(r: Responder, tx: number, ty: number, range: number, cancel: () => void): boolean {
     if (Math.hypot(r.x - tx, r.y - ty) <= range) { r.path = []; return true; }
     if (!r.path.length) {
       const ok = this.walkTo(r, (x, y) => this.isWalkable(x, y) && Math.hypot(x + 0.5 - tx, y + 0.5 - ty) <= Math.max(range - 0.25, 0.4));
       if (!ok) { this.emit({ type: 'warn', message: `${r.name}: geen looproute naar doel` }); cancel(); return false; }
+      if (!r.path.length) r.path = [{ x: Math.floor(r.x), y: Math.floor(r.y) }]; // already on the right tile: walk to its middle
     }
     this.stepAlong(r, r.path, this.roleDef(r).speed, SIM_DT);
     return false;
@@ -985,8 +1005,8 @@ export class World {
       case 'treat': {
         const v = this.victims.get(t.victimId);
         if (!v || v.transport !== 'scene') return done();
-        if (this.approach(r, v.x, v.y, 1.3, done)) {
-          t.progress += dt * (role.power >= 2 ? 2 : 1) * (1 + 0.6 * this.helpers(v));
+        if (this.approachSlot(r, v.x, v.y, done)) {
+          t.progress += dt * (role.power >= 2 ? 2 : 1) * (1 + 0.6 * this.helpers(v)) * (this.commanderNear(r) ? 1.2 : 1);
           if (t.progress >= v.treatTime) {
             v.treated = true; v.conscious = true; v.health = Math.min(100, v.health + 10);
             this.emit({ type: 'info', message: `${r.name} heeft een slachtoffer gestabiliseerd` });
@@ -1000,9 +1020,11 @@ export class World {
         if (!v || (v.transport !== 'scene' && v.transport !== 'carried')) return done();
         // stay with the casualty: next to the one who is treating, or alongside the trolley while it is carried
         const carrier = v.transport === 'carried' && v.carriedBy !== null ? this.responders.get(v.carriedBy) : null;
-        const tx = carrier ? carrier.x : v.x, ty = carrier ? carrier.y : v.y;
-        if (Math.hypot(r.x - tx, r.y - ty) > 1.5) { if (!r.path.length) this.walkTo(r, (x, y) => this.isWalkable(x, y) && Math.hypot(x + 0.5 - tx, y + 0.5 - ty) <= 1.5); this.stepAlong(r, r.path, role.speed * 1.1, dt); }
-        else { r.path = []; r.angle = Math.atan2(ty - r.y, tx - r.x); }
+        // alongside the trolley (foot end) while carried; otherwise right next to the casualty on a slot of their own
+        const sa = (r.id * 2.399963) % (Math.PI * 2);
+        const tx = carrier ? carrier.x + Math.cos(carrier.angle) * 2.3 : v.x + Math.cos(sa) * 0.6, ty = carrier ? carrier.y + Math.sin(carrier.angle) * 2.3 : v.y + Math.sin(sa) * 0.6;
+        if (Math.hypot(r.x - tx, r.y - ty) > 0.9) { if (!r.path.length || carrier) this.walkTo(r, (x, y) => this.isWalkable(x, y) && Math.hypot(x + 0.5 - tx, y + 0.5 - ty) <= 0.9); this.stepAlong(r, r.path, role.speed * 1.15, dt); }
+        else { r.path = []; r.angle = Math.atan2(v.y - r.y, v.x - r.x); }
         const busy = [...this.responders.values()].some(o => o !== r && (o.task?.type === 'treat' || o.task?.type === 'load') && (o.task as { victimId: number }).victimId === v.id);
         t.idle = busy ? 0 : t.idle + dt;
         if (t.idle > 10) { this.emit({ type: 'info', message: `${r.name} heeft niemand meer om te helpen` }); done(); }
@@ -1010,12 +1032,16 @@ export class World {
       }
       case 'load': {
         const v = this.victims.get(t.victimId);
+        if (v && v.transport === 'carried' && v.carriedBy !== r.id && v.carriedBy !== null && r.carrying === null) { // two paramedics: the second carries the foot end
+          r.task = { type: 'assist', victimId: v.id, idle: 0 };
+          break;
+        }
         if (!v || (v.transport !== 'scene' && v.transport !== 'carried') || (v.transport === 'carried' && v.carriedBy !== r.id)) {
           if (r.carrying === t.victimId) r.carrying = null;
           return done();
         }
         if (r.carrying === null) {
-          if (this.approach(r, v.x, v.y, 1.3, done)) { v.transport = 'carried'; v.carriedBy = r.id; r.carrying = v.id; r.path = []; }
+          if (this.approachSlot(r, v.x, v.y, done)) { v.transport = 'carried'; v.carriedBy = r.id; r.carrying = v.id; r.path = []; }
         } else if (veh) {
           v.x = r.x; v.y = r.y;
           if (this.approach(r, veh.x, veh.y, 2.6, () => { v.transport = 'scene'; v.carriedBy = null; r.carrying = null; v.loadT = 0; done(); })) {
@@ -1083,7 +1109,8 @@ export class World {
           if (t.progress >= 6 * sevFactor(inc.severity, 0.2)) {
             inc.scouted = true;
             const inside = inc.victims.filter(id => this.victims.get(id)?.transport === 'trapped').length;
-            this.emit({ type: 'info', message: inside ? `Verkenning ${b.name ?? 'pand'}: nog ${inside} ${inside === 1 ? 'persoon' : 'personen'} binnen!` : `Verkenning ${b.name ?? 'pand'}: niemand meer binnen`, speech: inside ? `Verkenning afgerond. Er zijn nog ${inside} ${inside === 1 ? 'persoon' : 'personen'} in het pand.` : 'Verkenning afgerond. Er is niemand meer in het pand.' } as GameEvent);
+            const nothing = this.content.incidents[inc.defId].objectives.includes('scouted') && !this.content.incidents[inc.defId].victims && !this.content.incidents[inc.defId].fire;
+            this.emit({ type: 'info', message: inside ? `Verkenning ${b.name ?? 'pand'}: nog ${inside} ${inside === 1 ? 'persoon' : 'personen'} binnen!` : nothing ? `Verkenning ${b.name ?? 'pand'}: situatie in kaart gebracht` : `Verkenning ${b.name ?? 'pand'}: niemand meer binnen`, speech: inside ? `Verkenning afgerond. Er zijn nog ${inside} ${inside === 1 ? 'persoon' : 'personen'} in het pand.` : nothing ? 'Verkenning afgerond. De situatie is in kaart gebracht.' : 'Verkenning afgerond. Er is niemand meer in het pand.' });
             done();
           }
         }
@@ -1122,7 +1149,7 @@ export class World {
 
   commanderNear(r: Responder): boolean {
     for (const o of this.responders.values()) {
-      if (o !== r && !o.inVehicle && this.roleDef(o).abilities.includes('coordinate') && dist(o, r) <= COMMANDER_RANGE) return true;
+      if (o !== r && !o.inVehicle && this.roleDef(o).abilities.includes('coordinate') && dist(o, r) <= COMMANDER_RANGE + (this.grip > 0 ? 6 : 0)) return true; // a CoPI (GRIP) extends the command range
     }
     return false;
   }
@@ -1149,6 +1176,14 @@ export class World {
   }
 
   /** The undertaker: a hearse is sent for every body, the crew collects it and takes it to the funeral home. */
+  /** The GRIP structure is dissolved again a little while after the last incident has been handled. */
+  private updateGrip(dt: number): void {
+    if (this.grip === 0) return;
+    if (this.mainIncident()) { this.gripIdle = 0; return; }
+    this.gripIdle += dt;
+    if (this.gripIdle > 25) { this.grip = 0; this.gripIdle = 0; this.emit({ type: 'info', message: 'Alle incidenten afgehandeld: GRIP-structuur opgeheven' }); }
+  }
+
   private updateHearses(dt: number): void {
     void dt;
     for (const body of this.victims.values()) {
@@ -1216,6 +1251,64 @@ export class World {
   }
 
   private tallWarned = new Set<string>();
+
+  /** GRIP (Gecoördineerde Regionale Incidentbestrijdings Procedure) level, 0 = none: 1 = CoPI, 2 = CoPI + ROT, 3 = + gemeentelijk beleidsteam, 4 = + regionaal beleidsteam. */
+  grip = 0;
+  private gripIdle = 0;
+  static readonly GRIP_INFO = [
+    'Geen opschaling',
+    'GRIP 1: Commandoplaats Incident (CoPI) in het brongebied',
+    'GRIP 2: CoPI en Regionaal Operationeel Team (bron- en effectgebied)',
+    'GRIP 3: bestuurlijke betrokkenheid, gemeentelijk beleidsteam erbij',
+    'GRIP 4: gemeentegrensoverschrijdend, regionaal beleidsteam erbij',
+  ];
+  private static readonly GRIP_UNITS: string[][] = [
+    [],
+    ['ovd_car', 'copi_unit', 'fire_engine', 'ambulance', 'patrol_car'],
+    ['lgh_car', 'hazmat_unit', 'aerial_ladder', 'water_tanker', 'ambulance', 'fire_engine', 'riot_van', 'tow_truck'],
+    ['mmt_car', 'rescue_vehicle', 'ambulance', 'patrol_car', 'patrol_car', 'hearse', 'police_van'],
+    ['fire_engine', 'fire_engine', 'ambulance', 'ambulance', 'water_tanker', 'crane_truck', 'riot_van'],
+  ];
+
+  /** The incident the response is centred on: the most severe one (oldest first). */
+  mainIncident(): Incident | null {
+    let best: Incident | null = null;
+    for (const i of this.incidents.values()) if (i.status === 'active' && (!best || i.severity > best.severity || (i.severity === best.severity && i.elapsed > best.elapsed))) best = i;
+    return best;
+  }
+
+  /** Scale up (or down) to a GRIP level: each new level sends its associated units (command post, officers, specialists, extra engines and ambulances) to the main scene. */
+  setGrip(level: number): boolean {
+    level = Math.max(0, Math.min(4, Math.round(level)));
+    if (level === this.grip) return false;
+    const old = this.grip;
+    if (level < old) { this.grip = level; this.emit({ type: 'info', message: level ? `Afgeschaald naar ${World.GRIP_INFO[level]}` : 'Afgeschaald: GRIP-structuur opgeheven' }); return true; }
+    const main = this.mainIncident();
+    if (!main) { this.emit({ type: 'warn', message: 'Opschalen kan alleen bij een lopend incident' }); return false; }
+    const cost = 300 * (level - old);
+    if (this.budget < cost) { this.emit({ type: 'warn', message: `Onvoldoende middelen om op te schalen (€${cost})` }); return false; }
+    this.budget -= cost;
+    this.grip = level;
+    this.gripIdle = 0;
+    const b = main.buildingId ? this.buildings.get(main.buildingId) : null;
+    const tx = b ? b.door.x + 0.5 : main.x, ty = b ? b.door.y + 0.5 : main.y;
+    let sent = 0;
+    for (let l = old + 1; l <= level; l++) for (const defId of World.GRIP_UNITS[l]) if (this.sendToScene(defId, tx, ty)) sent++;
+    this.emit({ type: 'info', message: `Opgeschaald naar ${World.GRIP_INFO[level]} – ${sent} eenheden onderweg`, speech: `Opschaling. ${World.GRIP_INFO[level]}. ${sent} extra eenheden zijn onderweg naar ${main.address || 'de plaats van het incident'}.` });
+    return true;
+  }
+
+  /** The nearest free vehicle of a type drives to a point (or one is called up at no charge). */
+  private sendToScene(defId: string, tx: number, ty: number): boolean {
+    const busy = new Set<number>();
+    for (const v of this.vehicles.values()) if (v.path.length && !v.patrol) busy.add(v.id);
+    const free = [...this.vehicles.values()].filter(v => v.defId === defId && !busy.has(v.id) && this.groundVehicle(v) && v.crew.every(id => !this.responders.get(id)!.task) && !this.incidentNear(v.x, v.y, 5))
+      .sort((a, c) => Math.hypot(a.x - tx, a.y - ty) - Math.hypot(c.x - tx, c.y - ty))[0];
+    const v = free ?? this.callReinforcement(defId, true);
+    if (!v) return false;
+    v.patrol = false; v.returning = false; v.silent = false;
+    return this.driveNear(v, tx, ty);
+  }
   private junctionTimer = new Map<number, number>();
 
   /** How many responders (chosen by the player) are assisting next to this casualty: they speed up treatment (max 2). */
@@ -1444,6 +1537,10 @@ export class World {
         if (near && v.water < def.tank) this.emit({ type: 'info', message: `${v.name} is aangesloten op een brandkraan` });
       }
       if (near && v.water < def.tank) v.water = Math.min(def.tank, v.water + HYDRANT_REFILL * dt);
+      if (!near && v.water < def.tank && def.id !== 'water_tanker' && !v.path.length) { // a water tanker nearby supplies the tank
+        const src = [...this.vehicles.values()].find(o => o !== v && this.vehicleDef(o).id === 'water_tanker' && !o.path.length && o.water > 0 && Math.hypot(o.x - v.x, o.y - v.y) < 5);
+        if (src) { const take = Math.min(src.water, 160 * dt, def.tank - v.water); src.water -= take; v.water += take; v.hydrant = false; }
+      }
     }
   }
 
@@ -1549,7 +1646,7 @@ export class World {
     const scale = DIFFICULTY[this.opts.difficulty].timeScale;
     const inc: Incident = {
       id: this.newId(), defId, name: def.name, severity: sev, description: def.descriptions?.length ? this.rng.pick(def.descriptions) : '', x: 0, y: 0, buildingId: null, elapsed: 0,
-      nextEscalation: def.escalation.everySec * scale, status: 'active', secured: false, obstacle: [], victims: [], suspects: [], bystanders: [], deaths: 0, cleared: false, defused: false, address: '', scouted: false,
+      nextEscalation: def.escalation.everySec * scale, status: 'active', secured: false, obstacle: [], victims: [], suspects: [], bystanders: [], deaths: 0, cleared: false, defused: false, address: '', scouted: false, pager: '',
     };
     let anchor: Vec;
     let b: Building | null = null;
@@ -1614,7 +1711,13 @@ export class World {
     this.dispatchPatrols(inc, def, b);
     inc.address = this.addressOf(b ? b.door.x + 0.5 : inc.x, b ? b.door.y + 0.5 : inc.y, !b);
     const prio = inc.severity >= 3 ? 'Prioriteit 1, spoed' : inc.severity === 2 ? 'Prioriteit 2' : 'Prioriteit 3';
-    this.emit({ type: 'incident_started', incidentId: inc.id, message: `Nieuwe melding: ${inc.name} – ${inc.address}`, speech: `Meldkamer. ${inc.name}. ${inc.description ? inc.description + '. ' : ''}Adres: ${inc.address}. ${prio}.` });
+    // P2000 pager line: ambulance A1 (urgent) / A2, fire and police with a priority (1 = lights and sirens)
+    const urgent = inc.severity >= 2;
+    inc.pager = def.category === 'ambulance' ? `${urgent ? 'A1' : 'A2'} Rendam ${inc.address} ${inc.name}`
+      : def.category === 'fire' ? `Prio ${urgent ? 1 : 2} BRW Rendam ${inc.address} ${inc.name}`
+      : def.category === 'police' ? `Prio ${urgent ? 1 : 2} POL Rendam ${inc.address} ${inc.name}`
+      : `Prio ${urgent ? 1 : 2} TECH Rendam ${inc.address} ${inc.name}`;
+    this.emit({ type: 'incident_started', incidentId: inc.id, message: `📟 ${inc.pager}`, speech: `Meldkamer. ${inc.name}. ${inc.description ? inc.description + '. ' : ''}Adres: ${inc.address}. ${prio}.` });
     return inc;
   }
 
@@ -1653,6 +1756,7 @@ export class World {
         case 'obstacle_cleared': return inc.cleared;
         case 'bystanders_dispersed': return inc.bystanders.every(id => this.bystanders.get(id)?.leaving !== false);
         case 'device_defused': return inc.defused;
+        case 'scouted': return inc.scouted;
       }
     });
   }
@@ -1690,7 +1794,7 @@ export class World {
     inc.status = status;
     if (status === 'resolved') {
       const t = Math.max(0, 1 - inc.elapsed / (def.failAfterSec * DIFFICULTY[this.opts.difficulty].timeScale));
-      const pts = Math.round(def.reward.score * (0.6 + 0.4 * t) * (1 + (inc.severity - 1) * 0.25));
+      const pts = Math.round(def.reward.score * (0.6 + 0.4 * t) * (1 + (inc.severity - 1) * 0.25) * (1 + 0.08 * this.grip));
       this.score += pts;
       this.budget += def.reward.budget;
       this.solved++;
@@ -1889,7 +1993,7 @@ export class World {
       case 'extinguish': for (const b of this.buildings.values()) if (b.fire > 0 && !b.destroyed) consider({ kind: 'building', id: b.id }, rectDist(b, r.x, r.y)); break;
       case 'cool': for (const b of this.buildings.values()) if (b.fire <= 0 && !b.destroyed && b.wet < 60 && this.threatened(b)) consider({ kind: 'building', id: b.id }, rectDist(b, r.x, r.y)); break;
       case 'rescue': for (const v of this.victims.values()) if (v.transport === 'trapped' && this.incidents.get(v.incidentId)?.scouted) consider({ kind: 'victim', id: v.id }, dist(r, v)); break;
-      case 'recon': for (const i of this.incidents.values()) if (i.buildingId && !i.scouted && this.content.incidents[i.defId].victims?.location === 'trapped') consider({ kind: 'incident', id: i.id }, dist(r, i)); break;
+      case 'recon': for (const i of this.incidents.values()) { const d0 = this.content.incidents[i.defId]; if (i.buildingId && !i.scouted && (d0.victims?.location === 'trapped' || d0.objectives.includes('scouted'))) consider({ kind: 'incident', id: i.id }, dist(r, i)); } break;
       case 'collect': for (const v of this.victims.values()) if (v.transport === 'dead') consider({ kind: 'victim', id: v.id }, dist(r, v)); break;
       case 'treat': for (const v of this.victims.values()) if (v.transport === 'scene' && !v.treated) consider({ kind: 'victim', id: v.id }, dist(r, v)); break;
       case 'assist': for (const v of this.victims.values()) if (v.transport === 'scene' || v.transport === 'carried') consider({ kind: 'victim', id: v.id }, dist(r, v) - (v.treated ? 0 : 3)); break;
@@ -2036,7 +2140,7 @@ export class World {
       for (let k = 0; k < 20 && this.civilians.some(o => Math.hypot(o.x - r.x - 0.5, o.y - r.y - 0.5) < 2.5); k++) r = this.rng.pick(roads);
       const roll = this.rng.next(), type: Civilian['type'] = roll < 0.16 ? 'bike' : roll < 0.26 ? 'van' : 'car';
       this.civilians.push({
-        kind: 'civilian', ...this.addEntityBase(r.x + 0.5, r.y + 0.5), path: [], angle: 0, color: this.rng.int(0, 5), wait: this.rng.range(0, 3), stuck: 0,
+        kind: 'civilian', ...this.addEntityBase(r.x + 0.5, r.y + 0.5), path: [], angle: this.laneAngle(r.x, r.y), color: this.rng.int(0, 5), wait: this.rng.range(0, 3), stuck: 0,
         speed: type === 'bike' ? this.rng.range(1.5, 2.1) : type === 'van' ? this.rng.range(2.9, 3.7) : this.rng.range(3.2, 4.2),
         v: 0, type, len: type === 'bike' ? 0.55 : type === 'van' ? 1.7 : CAR_LEN, hw: type === 'bike' ? 0.17 : CAR_HW, braking: false, signal: 0, avoidTile: -1, avoidUntil: 0, passUntil: 0,
       });
@@ -2050,19 +2154,37 @@ export class World {
   }
 
   /** Cars that got in the way of an emergency vehicle pull away: put them on a quiet road tile far from the action. */
+  /** The direction of travel of a lane tile (0 for a junction). */
+  laneAngle(x: number, y: number): number {
+    const l = this.laneAt(x, y);
+    return l ? Math.atan2(l.y, l.x) : 0;
+  }
+
+  /** A stationary car straightens up along its lane (nobody stands across the road). */
+  private alignCivilian(c: Civilian, dt: number): void {
+    const tx = Math.floor(c.x), ty = Math.floor(c.y);
+    const l = this.laneAt(tx, ty);
+    if (!l) return;
+    const axis = Math.atan2(l.y, l.x), wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+    const d1 = wrap(axis - c.angle), d2 = wrap(axis + Math.PI - c.angle);
+    const diff = Math.abs(d1) <= Math.abs(d2) ? d1 : d2;
+    if (Math.abs(diff) > 1e-3) c.angle += Math.max(-3 * dt, Math.min(3 * dt, diff));
+  }
+
   respawnCivilian(c: Civilian): void {
     for (let k = 0; k < 40; k++) {
       const r = this.rng.pick(this.roadList);
       if (this.isIntersection(r.x, r.y)) continue;
       const cx = r.x + 0.5, cy = r.y + 0.5;
       if ([...this.vehicles.values()].some(v => Math.hypot(v.x - cx, v.y - cy) < 6) || this.civilians.some(o => o !== c && Math.hypot(o.x - cx, o.y - cy) < 3)) continue;
-      c.x = c.px = cx; c.y = c.py = cy; c.path = []; c.wait = 1; c.stuck = 0;
+      c.x = c.px = cx; c.y = c.py = cy; c.path = []; c.wait = 1; c.stuck = 0; c.v = 0; c.angle = this.laneAngle(r.x, r.y);
       return;
     }
   }
 
   private updateCivilian(c: Civilian, dt: number): void {
-    if (c.wait > 0) { c.wait -= dt; return; }
+    if (c.wait > 0) { c.wait -= dt; this.alignCivilian(c, dt); return; }
+    if (c.v < 0.05 && !c.path.length) this.alignCivilian(c, dt);
     if (!c.path.length) {
       const dest = this.rng.pick(this.roadList);
       const idle = new Set<number>();
@@ -2108,7 +2230,7 @@ export class World {
     const step = Math.min(c.v * dt, d);
     const la1 = this.laneAt(Math.floor(c.x), Math.floor(c.y)), lb1 = this.laneAt(next.x, next.y);
     const cUturn = !!(la1 && lb1 && la1.x === -lb1.x && la1.y === -lb1.y && Math.abs(ux * la1.x + uy * la1.y) < 1e-6);
-    const blocker = this.findBlocker(c, c.x, c.y, ux, uy, Math.max(step, 0.02), c.len, cUturn ? c.len * 0.52 : c.hw, PRIO_CIVILIAN);
+    const blocker = this.findBlocker(c, c.x, c.y, ux, uy, Math.max(step, 0.02), c.len, cUturn ? c.len * 0.64 : c.hw, PRIO_CIVILIAN);
     if (blocker) {
       c.v = Math.max(0, c.v - 10 * dt); c.braking = true;
       c.stuck += dt;
@@ -2170,7 +2292,7 @@ export class World {
     for (const v of s.victims) w.victims.set(v.id, v);
     for (const x of s.suspects) w.suspects.set(x.id, x);
     for (const b of s.bystanders ?? []) w.bystanders.set(b.id, b);
-    for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; i.address ??= ''; i.scouted ??= false; w.incidents.set(i.id, i); }
+    for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; i.address ??= ''; i.scouted ??= false; i.pager ??= ''; w.incidents.set(i.id, i); }
     w.obstacles = new Set(s.obstacles);
     w.rebuildCordon();
     w.script = s.script ?? [];

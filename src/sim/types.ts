@@ -2,7 +2,7 @@ import type { Vec } from './pathfinding';
 
 export type Category = 'fire' | 'ambulance' | 'police' | 'tech';
 export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate' | 'disperse' | 'defuse' | 'cool' | 'assist' | 'recon' | 'collect';
-export type Objective = 'fire_out' | 'victims_safe' | 'suspects_arrested' | 'area_secured' | 'obstacle_cleared' | 'bystanders_dispersed' | 'device_defused';
+export type Objective = 'fire_out' | 'victims_safe' | 'suspects_arrested' | 'area_secured' | 'obstacle_cleared' | 'bystanders_dispersed' | 'device_defused' | 'scouted';
 export type BuildingType = 'residential' | 'apartment' | 'commercial' | 'industrial' | 'office' | 'warehouse' | 'school' | 'shopping' | 'church' | 'station' | 'hospital';
 
 export interface RoleDef {
@@ -263,6 +263,8 @@ export interface Incident {
   address: string;
   /** The scene has been checked by a reconnaissance: only then it is known whether people are still inside. */
   scouted: boolean;
+  /** P2000-style pager line, e.g. 'A1 Rendam Eikenlaan 56 Hartstilstand' */
+  pager: string;
 }
 export interface Civilian extends Entity {
   kind: 'civilian';
