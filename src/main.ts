@@ -29,6 +29,22 @@ async function main(): Promise<void> {
     banner: false,
     scene: [GameScene],
   });
+  // Safety net: if the WebGL context is lost during start-up (seen with some GPU drivers and software renderers) the game loop can
+  // stall for good. When no frame has been produced for a few seconds, reload the page once.
+  let lastFrame = -1, stalled = 0;
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    const frame = game.loop.frame;
+    stalled = frame === lastFrame ? stalled + 1 : 0;
+    lastFrame = frame;
+    if (stalled >= 3) {
+      try {
+        if (sessionStorage.getItem('openrescue.reloaded')) return;
+        sessionStorage.setItem('openrescue.reloaded', '1');
+      } catch { /* storage unavailable: still reload once per page load below */ }
+      location.reload();
+    }
+  }, 2000);
   game.events.once('ready', () => {
     const scene = game.scene.getScene('game') as unknown as GameScene;
     const start = () => {

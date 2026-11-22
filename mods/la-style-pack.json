@@ -1,0 +1,84 @@
+{
+  "roles": [
+    {
+      "id": "firefighter_paramedic",
+      "name": "Brandweerman-paramedic",
+      "category": "fire",
+      "abilities": ["extinguish", "rescue", "treat"],
+      "speed": 2.6,
+      "color": "#ff7043",
+      "power": 7
+    }
+  ],
+  "vehicles": [
+    {
+      "id": "squad",
+      "name": "Squad (brandweer + paramedics)",
+      "category": "fire",
+      "maxSpeed": 75,
+      "capacity": 4,
+      "length": 1.9,
+      "color": "#b71c1c",
+      "cost": 1000,
+      "equipment": ["fire_hose", "breathing_apparatus", "medical_kit"],
+      "crew": [{ "role": "firefighter_paramedic", "count": 4 }],
+      "patientCapacity": 0
+    },
+    {
+      "id": "heavy_rescue",
+      "name": "Heavy rescue",
+      "category": "fire",
+      "maxSpeed": 65,
+      "capacity": 5,
+      "length": 2.0,
+      "color": "#8e0000",
+      "cost": 1600,
+      "equipment": ["rescue_tools", "medical_kit", "tow_gear", "fire_hose"],
+      "crew": [{ "role": "rescue_specialist", "count": 3 }, { "role": "firefighter_paramedic", "count": 2 }],
+      "patientCapacity": 0,
+      "clearPowerBonus": 1.5
+    },
+    {
+      "id": "patrol_suv",
+      "name": "Patrol-SUV",
+      "category": "police",
+      "maxSpeed": 105,
+      "capacity": 2,
+      "length": 1.5,
+      "color": "#263238",
+      "cost": 600,
+      "equipment": ["handcuffs", "barrier_tape"],
+      "crew": [{ "role": "officer", "count": 2 }],
+      "patientCapacity": 0
+    }
+  ],
+  "incidents": [
+    {
+      "id": "freeway_pileup",
+      "name": "Kettingbotsing",
+      "category": "ambulance",
+      "weight": 1,
+      "icon": "🚗",
+      "spawn": { "on": "road" },
+      "severity": { "min": 2, "max": 3 },
+      "requires": ["ambulance", "police", "tech"],
+      "victims": { "min": 3, "max": 5, "location": "scene", "health": [25, 70], "decay": 0.33 },
+      "obstacle": { "tiles": 2 },
+      "bystanders": { "min": 3, "max": 6 },
+      "objectives": ["victims_safe", "area_secured", "bystanders_dispersed", "obstacle_cleared"],
+      "escalation": { "everySec": 60 },
+      "failAfterSec": 420,
+      "reward": { "score": 800, "budget": 1800 }
+    }
+  ],
+  "missions": [
+    {
+      "id": "la_pileup",
+      "name": "Kettingbotsing (LA-pack)",
+      "description": "Een zware kettingbotsing met meerdere gewonden en veel omstanders. Bestel versterking!",
+      "level": 3,
+      "allowedFailures": 0,
+      "script": [{ "at": 3, "def": "freeway_pileup", "severity": 2 }]
+    }
+  ]
+}

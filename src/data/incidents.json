@@ -1,252 +1,267 @@
 [
   {
-    "id": "house_fire",
-    "name": "Woningbrand",
-    "category": "fire",
-    "weight": 4,
-    "spawn": {
-      "on": "building",
-      "buildingTypes": [
-        "residential",
-        "apartment"
-      ]
-    },
-    "severity": {
-      "min": 1,
-      "max": 3
-    },
-    "requires": [
-      "fire",
-      "ambulance"
-    ],
-    "fire": {
-      "start": 22,
-      "growth": 0.7,
-      "spread": 1.0
-    },
-    "victims": {
-      "min": 0,
-      "max": 1,
-      "location": "trapped",
-      "health": [
-        45,
-        85
-      ],
-      "decay": 0.25
-    },
-    "objectives": [
-      "fire_out",
-      "victims_safe"
-    ],
-    "escalation": {
-      "everySec": 70
-    },
-    "failAfterSec": 300,
-    "reward": {
-      "score": 250,
-      "budget": 600
-    },
-    "icon": "🔥"
+    "id": "house_fire", "name": "Woningbrand", "category": "fire", "weight": 4, "icon": "🔥",
+    "descriptions": ["Vlammen slaan uit het dak van een woning.", "Buren melden veel rook uit een huis.", "Brand op de eerste verdieping, bewoners mogelijk binnen."],
+    "spawn": { "on": "building", "buildingTypes": ["residential", "apartment"] },
+    "severity": { "min": 1, "max": 3 }, "requires": ["fire", "ambulance"],
+    "fire": { "start": 22, "growth": 0.7, "spread": 1.0 },
+    "victims": { "min": 0, "max": 1, "location": "trapped", "health": [45, 85], "decay": 0.25, "treatTime": 6, "condition": "Rookvergiftiging" },
+    "objectives": ["fire_out", "victims_safe"],
+    "escalation": { "everySec": 70 }, "failAfterSec": 300,
+    "reward": { "score": 250, "budget": 600 }
   },
   {
-    "id": "industrial_fire",
-    "name": "Industriebrand",
-    "category": "fire",
-    "weight": 1.5,
-    "spawn": {
-      "on": "building",
-      "buildingTypes": [
-        "industrial",
-        "commercial"
-      ]
-    },
-    "severity": {
-      "min": 2,
-      "max": 3
-    },
-    "requires": [
-      "fire"
-    ],
-    "fire": {
-      "start": 30,
-      "growth": 1.1,
-      "spread": 1.6
-    },
-    "victims": {
-      "min": 0,
-      "max": 0,
-      "location": "trapped",
-      "health": [
-        50,
-        90
-      ],
-      "decay": 0.3
-    },
-    "objectives": [
-      "fire_out"
-    ],
-    "escalation": {
-      "everySec": 55
-    },
-    "failAfterSec": 330,
-    "reward": {
-      "score": 400,
-      "budget": 900
-    },
-    "icon": "🏭"
+    "id": "kitchen_fire", "name": "Keukenbrand", "category": "fire", "weight": 3, "icon": "🍳",
+    "descriptions": ["Pan in brand, vlammen slaan tegen de afzuigkap.", "Frituurpan vat vlam in een keuken."],
+    "spawn": { "on": "building", "buildingTypes": ["residential", "apartment", "commercial", "shopping"] },
+    "severity": { "min": 1, "max": 2 }, "requires": ["fire"],
+    "fire": { "start": 12, "growth": 0.35, "spread": 0.3 },
+    "victims": { "min": 0, "max": 1, "location": "trapped", "health": [60, 90], "decay": 0.15, "treatTime": 5, "condition": "Lichte brandwonden" },
+    "objectives": ["fire_out", "victims_safe"],
+    "escalation": { "everySec": 90 }, "failAfterSec": 240,
+    "reward": { "score": 120, "budget": 300 }
   },
   {
-    "id": "car_accident",
-    "name": "Auto-ongeluk met slachtoffer",
-    "category": "ambulance",
-    "weight": 3,
-    "spawn": {
-      "on": "road"
-    },
-    "severity": {
-      "min": 1,
-      "max": 3
-    },
-    "requires": [
-      "ambulance",
-      "police"
-    ],
-    "victims": {
-      "min": 1,
-      "max": 2,
-      "location": "scene",
-      "health": [
-        35,
-        75
-      ],
-      "decay": 0.3
-    },
-    "obstacle": {
-      "tiles": 1
-    },
-    "objectives": [
-      "victims_safe",
-      "area_secured"
-    ],
-    "escalation": {
-      "everySec": 80
-    },
-    "failAfterSec": 280,
-    "reward": {
-      "score": 220,
-      "budget": 500
-    },
-    "icon": "💥"
+    "id": "apartment_fire", "name": "Appartementsbrand", "category": "fire", "weight": 1.5, "icon": "🏢",
+    "descriptions": ["Brand in een flatgebouw, meerdere bewoners vermist.", "Rookontwikkeling in het trappenhuis van een appartementencomplex."],
+    "spawn": { "on": "building", "buildingTypes": ["apartment", "office"] },
+    "severity": { "min": 2, "max": 3 }, "requires": ["fire", "ambulance"],
+    "fire": { "start": 28, "growth": 0.9, "spread": 1.2, "resistance": 1.2 },
+    "victims": { "min": 1, "max": 3, "location": "trapped", "health": [40, 80], "decay": 0.3, "treatTime": 7, "condition": "Ernstige rookvergiftiging" },
+    "objectives": ["fire_out", "victims_safe"],
+    "escalation": { "everySec": 55 }, "failAfterSec": 330,
+    "reward": { "score": 450, "budget": 1100 }
   },
   {
-    "id": "medical_emergency",
-    "name": "Medisch noodgeval",
-    "category": "ambulance",
-    "weight": 3,
-    "spawn": {
-      "on": "building",
-      "buildingTypes": [
-        "residential",
-        "apartment",
-        "commercial"
-      ]
-    },
-    "severity": {
-      "min": 1,
-      "max": 2
-    },
-    "requires": [
-      "ambulance"
-    ],
-    "victims": {
-      "min": 1,
-      "max": 1,
-      "location": "scene",
-      "health": [
-        30,
-        60
-      ],
-      "decay": 0.22
-    },
-    "objectives": [
-      "victims_safe"
-    ],
-    "escalation": {
-      "everySec": 90
-    },
-    "failAfterSec": 260,
-    "reward": {
-      "score": 160,
-      "budget": 350
-    },
-    "icon": "🚑"
+    "id": "office_fire", "name": "Brand in kantoor of school", "category": "fire", "weight": 1.5, "icon": "🏫",
+    "descriptions": ["Brandmelder gaat af, rook zichtbaar achter de ramen.", "Brand in de kelder van een openbaar gebouw."],
+    "spawn": { "on": "building", "buildingTypes": ["office", "school", "shopping", "church"] },
+    "severity": { "min": 1, "max": 3 }, "requires": ["fire", "ambulance"],
+    "fire": { "start": 20, "growth": 0.8, "spread": 0.9, "resistance": 1.1 },
+    "victims": { "min": 0, "max": 2, "location": "trapped", "health": [50, 90], "decay": 0.22, "treatTime": 6, "condition": "Rookvergiftiging" },
+    "objectives": ["fire_out", "victims_safe"],
+    "escalation": { "everySec": 65 }, "failAfterSec": 310,
+    "reward": { "score": 350, "budget": 800 }
   },
   {
-    "id": "crime",
-    "name": "Verdachte / misdrijf",
-    "category": "police",
-    "weight": 3,
-    "spawn": {
-      "on": "building",
-      "buildingTypes": [
-        "commercial",
-        "residential",
-        "industrial"
-      ]
-    },
-    "severity": {
-      "min": 1,
-      "max": 2
-    },
-    "requires": [
-      "police"
-    ],
-    "suspects": {
-      "min": 1,
-      "max": 2
-    },
-    "objectives": [
-      "suspects_arrested"
-    ],
-    "escalation": {
-      "everySec": 75
-    },
-    "failAfterSec": 240,
-    "reward": {
-      "score": 180,
-      "budget": 400
-    },
-    "icon": "🚨"
+    "id": "industrial_fire", "name": "Industriebrand", "category": "fire", "weight": 1.5, "icon": "🏭",
+    "descriptions": ["Zware rookwolk boven een fabriek.", "Brand in een productiehal, explosiegevaar."],
+    "spawn": { "on": "building", "buildingTypes": ["industrial", "commercial"] },
+    "severity": { "min": 2, "max": 3 }, "requires": ["fire"],
+    "fire": { "start": 30, "growth": 1.1, "spread": 1.6, "resistance": 1.4 },
+    "victims": { "min": 0, "max": 0, "location": "trapped", "health": [50, 90], "decay": 0.3 },
+    "objectives": ["fire_out"],
+    "escalation": { "everySec": 55 }, "failAfterSec": 330,
+    "reward": { "score": 400, "budget": 900 }
   },
   {
-    "id": "road_blockage",
-    "name": "Verkeersblokkade",
-    "category": "tech",
-    "weight": 2,
-    "spawn": {
-      "on": "road"
-    },
-    "severity": {
-      "min": 1,
-      "max": 2
-    },
-    "requires": [
-      "tech"
-    ],
-    "obstacle": {
-      "tiles": 2
-    },
-    "objectives": [
-      "obstacle_cleared"
-    ],
-    "escalation": {
-      "everySec": 100
-    },
-    "failAfterSec": 260,
-    "reward": {
-      "score": 140,
-      "budget": 300
-    },
-    "icon": "🚧"
+    "id": "warehouse_fire", "name": "Brand in opslagloods", "category": "fire", "weight": 1, "icon": "📦",
+    "descriptions": ["Brand in een loods vol brandbare opslag.", "Hevige brand in een distributiecentrum."],
+    "spawn": { "on": "building", "buildingTypes": ["warehouse", "industrial"] },
+    "severity": { "min": 2, "max": 3 }, "requires": ["fire"],
+    "fire": { "start": 32, "growth": 1.3, "spread": 2.0, "resistance": 1.6 },
+    "objectives": ["fire_out"],
+    "escalation": { "everySec": 50 }, "failAfterSec": 340,
+    "reward": { "score": 500, "budget": 1200 }
+  },
+  {
+    "id": "medical_emergency", "name": "Medisch noodgeval", "category": "ambulance", "weight": 1.5, "icon": "🚑",
+    "descriptions": ["Iemand voelt zich plotseling erg onwel.", "Bewoner meldt pijn op de borst."],
+    "spawn": { "on": "building", "buildingTypes": ["residential", "apartment", "commercial", "office", "school", "shopping"] },
+    "severity": { "min": 1, "max": 2 }, "requires": ["ambulance"],
+    "victims": { "min": 1, "max": 1, "location": "scene", "health": [30, 60], "decay": 0.22, "treatTime": 6, "condition": "Onwel" },
+    "objectives": ["victims_safe"],
+    "escalation": { "everySec": 90 }, "failAfterSec": 260,
+    "reward": { "score": 160, "budget": 350 }
+  },
+  {
+    "id": "cardiac_arrest", "name": "Hartstilstand", "category": "ambulance", "weight": 2, "icon": "❤️",
+    "descriptions": ["Man (62) is ineengezakt en reageert niet meer.", "Vrouw (48) valt flauw, geen ademhaling.", "Sporter zakt in elkaar tijdens het hardlopen."],
+    "spawn": { "on": "building", "buildingTypes": ["residential", "apartment", "office", "school", "shopping", "church", "commercial"] },
+    "severity": { "min": 2, "max": 3 }, "requires": ["ambulance"],
+    "victims": { "min": 1, "max": 1, "location": "scene", "health": [12, 32], "decay": 0.55, "treatTime": 9, "condition": "Hartstilstand" },
+    "objectives": ["victims_safe"],
+    "escalation": { "everySec": 45 }, "failAfterSec": 200,
+    "reward": { "score": 260, "budget": 600 }
+  },
+  {
+    "id": "fall_injury", "name": "Val met letsel", "category": "ambulance", "weight": 3, "icon": "🦴",
+    "descriptions": ["Oudere dame van de trap gevallen, mogelijk heupfractuur.", "Klusser van een ladder gevallen.", "Kind van de speeltoestellen gevallen."],
+    "spawn": { "on": "building", "buildingTypes": ["residential", "apartment", "school", "shopping", "church"] },
+    "severity": { "min": 1, "max": 2 }, "requires": ["ambulance"],
+    "victims": { "min": 1, "max": 1, "location": "scene", "health": [50, 80], "decay": 0.08, "treatTime": 7, "condition": "Gebroken ledematen" },
+    "objectives": ["victims_safe"],
+    "escalation": { "everySec": 110 }, "failAfterSec": 320,
+    "reward": { "score": 120, "budget": 260 }
+  },
+  {
+    "id": "choking", "name": "Verslikking", "category": "ambulance", "weight": 2, "icon": "😮",
+    "descriptions": ["Kind verslikt zich in een stuk speelgoed.", "Man verslikt zich tijdens het eten, loopt blauw aan."],
+    "spawn": { "on": "building", "buildingTypes": ["residential", "apartment", "commercial", "school", "shopping"] },
+    "severity": { "min": 1, "max": 3 }, "requires": ["ambulance"],
+    "victims": { "min": 1, "max": 1, "location": "scene", "health": [30, 60], "decay": 0.4, "treatTime": 4, "condition": "Verstikking" },
+    "objectives": ["victims_safe"],
+    "escalation": { "everySec": 50 }, "failAfterSec": 180,
+    "reward": { "score": 150, "budget": 320 }
+  },
+  {
+    "id": "childbirth", "name": "Bevalling", "category": "ambulance", "weight": 1, "icon": "👶",
+    "descriptions": ["Vrouw heeft weeën, de vliezen zijn gebroken.", "Bevalling dient zich thuis aan, partner belt in paniek."],
+    "spawn": { "on": "building", "buildingTypes": ["residential", "apartment"] },
+    "severity": { "min": 1, "max": 2 }, "requires": ["ambulance"],
+    "victims": { "min": 1, "max": 1, "location": "scene", "health": [70, 95], "decay": 0.03, "treatTime": 10, "condition": "Bevalling" },
+    "objectives": ["victims_safe"],
+    "escalation": { "everySec": 120 }, "failAfterSec": 360,
+    "reward": { "score": 300, "budget": 700 }
+  },
+  {
+    "id": "allergic_reaction", "name": "Allergische reactie", "category": "ambulance", "weight": 2, "icon": "🐝",
+    "descriptions": ["Wespensteek, gezwollen gezicht en benauwd.", "Notenallergie, patiënt heeft het benauwd."],
+    "spawn": { "on": "building", "buildingTypes": ["residential", "apartment", "commercial", "school", "shopping", "office"] },
+    "severity": { "min": 1, "max": 3 }, "requires": ["ambulance"],
+    "victims": { "min": 1, "max": 1, "location": "scene", "health": [35, 65], "decay": 0.3, "treatTime": 5, "condition": "Anafylaxie" },
+    "objectives": ["victims_safe"],
+    "escalation": { "everySec": 60 }, "failAfterSec": 220,
+    "reward": { "score": 170, "budget": 380 }
+  },
+  {
+    "id": "stroke", "name": "Beroerte", "category": "ambulance", "weight": 1.5, "icon": "🧠",
+    "descriptions": ["Man heeft een scheve mond en kan niet meer praten.", "Vrouw (71) is plotseling verward en verlamd aan één kant."],
+    "spawn": { "on": "building", "buildingTypes": ["residential", "apartment", "church", "shopping", "commercial"] },
+    "severity": { "min": 2, "max": 3 }, "requires": ["ambulance"],
+    "victims": { "min": 1, "max": 1, "location": "scene", "health": [40, 70], "decay": 0.2, "treatTime": 8, "condition": "Beroerte" },
+    "objectives": ["victims_safe"],
+    "escalation": { "everySec": 70 }, "failAfterSec": 260,
+    "reward": { "score": 280, "budget": 650 }
+  },
+  {
+    "id": "car_accident", "name": "Auto-ongeluk met slachtoffer", "category": "ambulance", "weight": 3, "icon": "💥",
+    "descriptions": ["Frontale aanrijding op een kruising.", "Auto geslipt en tegen een lantaarnpaal gereden.", "Kop-staartbotsing, bestuurder bekneld geraakt."],
+    "spawn": { "on": "road" },
+    "severity": { "min": 1, "max": 3 }, "requires": ["ambulance", "police"],
+    "victims": { "min": 1, "max": 2, "location": "scene", "health": [35, 75], "decay": 0.3, "treatTime": 7, "condition": "Letsel na aanrijding" },
+    "obstacle": { "tiles": 1, "mass": 1 },
+    "bystanders": { "min": 2, "max": 4 },
+    "objectives": ["victims_safe", "area_secured", "bystanders_dispersed"],
+    "escalation": { "everySec": 80 }, "failAfterSec": 280,
+    "reward": { "score": 220, "budget": 500 }
+  },
+  {
+    "id": "motorcycle_accident", "name": "Motorongeluk", "category": "ambulance", "weight": 2, "icon": "🏍️",
+    "descriptions": ["Motorrijder onderuitgegaan in een bocht.", "Motor geschept door een afslaande auto."],
+    "spawn": { "on": "road" },
+    "severity": { "min": 1, "max": 3 }, "requires": ["ambulance", "police"],
+    "victims": { "min": 1, "max": 1, "location": "scene", "health": [30, 65], "decay": 0.35, "treatTime": 7, "condition": "Zwaar letsel" },
+    "obstacle": { "tiles": 1, "mass": 0.6 },
+    "bystanders": { "min": 1, "max": 3 },
+    "objectives": ["victims_safe", "area_secured"],
+    "escalation": { "everySec": 70 }, "failAfterSec": 250,
+    "reward": { "score": 200, "budget": 450 }
+  },
+  {
+    "id": "pedestrian_hit", "name": "Aanrijding met voetganger", "category": "ambulance", "weight": 1.5, "icon": "🚸",
+    "descriptions": ["Fietser aangereden op een zebrapad.", "Voetganger geschept bij het oversteken."],
+    "spawn": { "on": "road" },
+    "severity": { "min": 1, "max": 3 }, "requires": ["ambulance", "police"],
+    "victims": { "min": 1, "max": 1, "location": "scene", "health": [30, 70], "decay": 0.3, "treatTime": 6, "condition": "Aangereden" },
+    "bystanders": { "min": 2, "max": 5 },
+    "objectives": ["victims_safe", "area_secured", "bystanders_dispersed"],
+    "escalation": { "everySec": 75 }, "failAfterSec": 260,
+    "reward": { "score": 210, "budget": 480 }
+  },
+  {
+    "id": "truck_collision", "name": "Aanrijding met vrachtwagen", "category": "ambulance", "weight": 1, "icon": "🚛",
+    "descriptions": ["Vrachtwagen en personenauto botsen, de weg is afgesloten.", "Vrachtwagen over de kop geslagen, gewonden in de auto."],
+    "spawn": { "on": "road" },
+    "severity": { "min": 2, "max": 3 }, "requires": ["ambulance", "police", "tech"],
+    "victims": { "min": 2, "max": 3, "location": "scene", "health": [30, 70], "decay": 0.33, "treatTime": 8, "condition": "Zwaar letsel" },
+    "obstacle": { "tiles": 2, "mass": 1.8 },
+    "bystanders": { "min": 2, "max": 5 },
+    "objectives": ["victims_safe", "area_secured", "bystanders_dispersed", "obstacle_cleared"],
+    "escalation": { "everySec": 60 }, "failAfterSec": 360,
+    "reward": { "score": 650, "budget": 1400 }
+  },
+  {
+    "id": "crime", "name": "Verdachte / misdrijf", "category": "police", "weight": 2, "icon": "🚨",
+    "descriptions": ["Verdacht persoon gezien bij een woning.", "Getuige meldt verdachte situatie."],
+    "spawn": { "on": "building", "buildingTypes": ["commercial", "residential", "industrial", "shopping", "office"] },
+    "severity": { "min": 1, "max": 2 }, "requires": ["police"],
+    "suspects": { "min": 1, "max": 2, "arrestTime": 4 },
+    "objectives": ["suspects_arrested"],
+    "escalation": { "everySec": 75 }, "failAfterSec": 240,
+    "reward": { "score": 180, "budget": 400 }
+  },
+  {
+    "id": "burglary", "name": "Inbraak", "category": "police", "weight": 2, "icon": "🔓",
+    "descriptions": ["Inbrekers zijn in een woning, bewoners zijn op vakantie.", "Alarm gaat af bij een bedrijfspand."],
+    "spawn": { "on": "building", "buildingTypes": ["residential", "commercial", "warehouse", "office", "shopping"] },
+    "severity": { "min": 1, "max": 2 }, "requires": ["police"],
+    "suspects": { "min": 1, "max": 3, "arrestTime": 4.5 },
+    "objectives": ["suspects_arrested"],
+    "escalation": { "everySec": 65 }, "failAfterSec": 230,
+    "reward": { "score": 200, "budget": 450 }
+  },
+  {
+    "id": "fight", "name": "Vechtpartij", "category": "police", "weight": 1.5, "icon": "🥊",
+    "descriptions": ["Ruzie loopt uit de hand voor een café.", "Opstootje tussen twee groepen jongeren."],
+    "spawn": { "on": "building", "buildingTypes": ["commercial", "shopping", "school", "residential"] },
+    "severity": { "min": 1, "max": 3 }, "requires": ["police", "ambulance"],
+    "suspects": { "min": 2, "max": 4, "arrestTime": 3.5 },
+    "victims": { "min": 0, "max": 1, "location": "scene", "health": [50, 85], "decay": 0.12, "treatTime": 5, "condition": "Hoofdletsel" },
+    "bystanders": { "min": 2, "max": 5 },
+    "objectives": ["suspects_arrested", "victims_safe", "bystanders_dispersed"],
+    "escalation": { "everySec": 55 }, "failAfterSec": 230,
+    "reward": { "score": 280, "budget": 600 }
+  },
+  {
+    "id": "armed_robbery", "name": "Gewapende overval", "category": "police", "weight": 0.8, "icon": "🔫",
+    "descriptions": ["Gewapende overvaller in een winkel, personeel gegijzeld.", "Overval op een kantoor, daders zijn gewapend."],
+    "spawn": { "on": "building", "buildingTypes": ["commercial", "shopping", "office"] },
+    "severity": { "min": 2, "max": 3 }, "requires": ["police"],
+    "suspects": { "min": 1, "max": 2, "arrestTime": 8 },
+    "bystanders": { "min": 2, "max": 4 },
+    "objectives": ["suspects_arrested", "bystanders_dispersed"],
+    "escalation": { "everySec": 50 }, "failAfterSec": 260,
+    "reward": { "score": 500, "budget": 1100 }
+  },
+  {
+    "id": "vandalism", "name": "Vandalisme", "category": "police", "weight": 2, "icon": "🎨",
+    "descriptions": ["Jongeren bekladden een gevel.", "Vernielingen aan een bushalte."],
+    "spawn": { "on": "building", "buildingTypes": ["school", "shopping", "commercial", "church", "residential"] },
+    "severity": { "min": 1, "max": 1 }, "requires": ["police"],
+    "suspects": { "min": 1, "max": 2, "arrestTime": 3 },
+    "objectives": ["suspects_arrested"],
+    "escalation": { "everySec": 100 }, "failAfterSec": 200,
+    "reward": { "score": 90, "budget": 200 }
+  },
+  {
+    "id": "road_blockage", "name": "Verkeersblokkade", "category": "tech", "weight": 1.5, "icon": "🚧",
+    "descriptions": ["Een lading is van een vrachtwagen gevallen.", "Wegwerkzaamheden zijn uit de hand gelopen."],
+    "spawn": { "on": "road" },
+    "severity": { "min": 1, "max": 2 }, "requires": ["tech"],
+    "obstacle": { "tiles": 2, "mass": 1 },
+    "objectives": ["obstacle_cleared"],
+    "escalation": { "everySec": 100 }, "failAfterSec": 260,
+    "reward": { "score": 140, "budget": 300 }
+  },
+  {
+    "id": "fallen_tree", "name": "Omgevallen boom", "category": "tech", "weight": 2, "icon": "🌳",
+    "descriptions": ["Storm heeft een boom over de weg gegooid.", "Een grote tak blokkeert een rijbaan."],
+    "spawn": { "on": "road" },
+    "severity": { "min": 1, "max": 2 }, "requires": ["tech"],
+    "obstacle": { "tiles": 1, "mass": 0.7 },
+    "objectives": ["obstacle_cleared"],
+    "escalation": { "everySec": 110 }, "failAfterSec": 240,
+    "reward": { "score": 100, "budget": 220 }
+  },
+  {
+    "id": "broken_down_truck", "name": "Pech met vrachtwagen", "category": "tech", "weight": 1, "icon": "🚚",
+    "descriptions": ["Vrachtwagen staat met pech dwars op de weg.", "Zwaar voertuig is vastgelopen en moet worden weggesleept."],
+    "spawn": { "on": "road" },
+    "severity": { "min": 1, "max": 2 }, "requires": ["tech"],
+    "obstacle": { "tiles": 2, "mass": 1.8 },
+    "objectives": ["obstacle_cleared"],
+    "escalation": { "everySec": 100 }, "failAfterSec": 280,
+    "reward": { "score": 170, "budget": 380 }
   }
 ]

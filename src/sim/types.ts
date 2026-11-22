@@ -1,9 +1,9 @@
 import type { Vec } from './pathfinding';
 
 export type Category = 'fire' | 'ambulance' | 'police' | 'tech';
-export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate';
-export type Objective = 'fire_out' | 'victims_safe' | 'suspects_arrested' | 'area_secured' | 'obstacle_cleared';
-export type BuildingType = 'residential' | 'apartment' | 'commercial' | 'industrial' | 'station' | 'hospital';
+export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate' | 'disperse';
+export type Objective = 'fire_out' | 'victims_safe' | 'suspects_arrested' | 'area_secured' | 'obstacle_cleared' | 'bystanders_dispersed';
+export type BuildingType = 'residential' | 'apartment' | 'commercial' | 'industrial' | 'office' | 'warehouse' | 'school' | 'shopping' | 'church' | 'station' | 'hospital';
 
 export interface RoleDef {
   id: string;
@@ -13,6 +13,8 @@ export interface RoleDef {
   speed: number;
   color: string;
   power: number;
+  /** Optional 3D model id (default `person/<id>`). */
+  model?: string;
 }
 export interface VehicleDef {
   id: string;
@@ -25,6 +27,10 @@ export interface VehicleDef {
   equipment: string[];
   crew: { role: string; count: number }[];
   patientCapacity: number;
+  /** Optional 3D model id (default `vehicle/<id>`). */
+  model?: string;
+  /** Price (in budget) to call this vehicle as reinforcement. Default 500. */
+  cost?: number;
   firePowerBonus?: number;
   clearPowerBonus?: number;
 }
@@ -34,17 +40,30 @@ export interface IncidentDef {
   category: Category;
   weight: number;
   icon?: string;
+  /** Flavour texts; one is picked per incident. */
+  descriptions?: string[];
   spawn: { on: 'building' | 'road'; buildingTypes?: BuildingType[] };
   severity: { min: number; max: number };
   requires: Category[];
-  fire?: { start: number; growth: number; spread: number };
-  victims?: { min: number; max: number; location: 'trapped' | 'scene'; health: [number, number]; decay: number };
-  suspects?: { min: number; max: number };
-  obstacle?: { tiles: number };
+  fire?: { start: number; growth: number; spread: number; resistance?: number };
+  victims?: { min: number; max: number; location: 'trapped' | 'scene'; health: [number, number]; decay: number; treatTime?: number; condition?: string };
+  suspects?: { min: number; max: number; arrestTime?: number };
+  bystanders?: { min: number; max: number };
+  obstacle?: { tiles: number; mass?: number };
   objectives: Objective[];
   escalation: { everySec: number };
   failAfterSec: number;
   reward: { score: number; budget: number };
+}
+export interface MissionDef {
+  id: string;
+  name: string;
+  description: string;
+  /** 1 (easy) .. 3 (hard); informative */
+  level: number;
+  /** The mission fails when more incidents than this are lost. */
+  allowedFailures: number;
+  script: { at: number; def: string; severity?: number }[];
 }
 export interface BuildingDef {
   id: string;
@@ -55,12 +74,17 @@ export interface BuildingDef {
   h: number;
   height: number;
   name?: string;
+  /** 3D preparation: number of floors and roof shape (the 2D view only uses `height`). */
+  floors?: number;
+  roof?: 'gable' | 'flat' | 'hip';
 }
 export interface StationDef {
   id: string;
   category: Category;
   buildingId: string;
   fleet: string[];
+  /** Parking bays (tile coordinates on 'P' tiles) where this station's vehicles park. */
+  bays?: { x: number; y: number }[];
 }
 export interface MapDef {
   id: string;
@@ -76,6 +100,7 @@ export interface Content {
   vehicles: Record<string, VehicleDef>;
   incidents: Record<string, IncidentDef>;
   maps: Record<string, MapDef>;
+  missions: Record<string, MissionDef>;
 }
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -94,6 +119,20 @@ export interface Vehicle extends Entity {
   stationId: string;
   path: Vec[];
   dest: Vec | null;
+  /** Parking spot at the station (tile) the vehicle returns to. */
+  home: Vec;
+  /** True while the vehicle is on its way back to the station (set by the 'terug naar kazerne' order). */
+  returning: boolean;
+  /** True while heading for a hospital with patients on board. */
+  toHospital: boolean;
+  /** Emergency vehicle may drive against the lane direction (set after it got blocked). */
+  contraflow: boolean;
+  /** Seconds the vehicle has been waiting for something in its way. */
+  blocked: number;
+  /** Tile keys to route around (blockers met on this trip). */
+  avoid: number[];
+  /** While > 0 the vehicle ignores collisions (deadlock breaker). */
+  ghost: number;
   pathVersion: number;
   crew: number[];
   patients: number[];
@@ -111,7 +150,8 @@ export type Task =
   | { type: 'load'; victimId: number }
   | { type: 'arrest'; suspectId: number; progress: number }
   | { type: 'secure'; incidentId: number; progress: number }
-  | { type: 'clear'; incidentId: number; progress: number };
+  | { type: 'clear'; incidentId: number; progress: number }
+  | { type: 'disperse'; incidentId: number; progress: number };
 export interface Responder extends Entity {
   kind: 'responder';
   role: string;
@@ -135,11 +175,24 @@ export interface Victim extends Entity {
   decay: number;
   buildingId: string | null;
   carriedBy: number | null;
+  /** Seconds of treatment needed; depends on the condition and the incident severity. */
+  treatTime: number;
+  condition: string;
 }
 export interface Suspect extends Entity {
   kind: 'suspect';
   incidentId: number;
   arrested: boolean;
+  /** Seconds needed to arrest this suspect; depends on type and severity. */
+  arrestTime: number;
+}
+export interface Bystander extends Entity {
+  kind: 'bystander';
+  incidentId: number;
+  leaving: boolean;
+  path: Vec[];
+  angle: number;
+  color: number;
 }
 export interface Building extends BuildingDef {
   door: Vec;
@@ -150,6 +203,8 @@ export interface Building extends BuildingDef {
   incidentId: number | null;
   growth: number;
   spread: number;
+  /** Fire resistance: extinguishing power is divided by this. */
+  resistance: number;
 }
 export type IncidentStatus = 'active' | 'resolved' | 'failed';
 export interface Incident {
@@ -157,6 +212,7 @@ export interface Incident {
   defId: string;
   name: string;
   severity: number;
+  description: string;
   x: number;
   y: number;
   buildingId: string | null;
@@ -167,6 +223,7 @@ export interface Incident {
   obstacle: Vec[];
   victims: number[];
   suspects: number[];
+  bystanders: number[];
   deaths: number;
   cleared: boolean;
 }
@@ -176,6 +233,7 @@ export interface Civilian extends Entity {
   angle: number;
   color: number;
   wait: number;
+  stuck: number;
   speed: number;
 }
 export interface Pedestrian extends Entity {
@@ -189,4 +247,4 @@ export interface Pedestrian extends Entity {
 export type GameEvent =
   | { type: 'incident_started' | 'incident_escalated' | 'incident_resolved' | 'incident_failed'; incidentId: number; message: string }
   | { type: 'info' | 'warn'; message: string }
-  | { type: 'game_over'; message: string };
+  | { type: 'game_over' | 'mission_complete'; message: string };

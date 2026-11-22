@@ -18,7 +18,7 @@ describe('save / load', () => {
     expect([...b.incidents.keys()]).toEqual([...a.incidents.keys()]);
   });
   it('rejects unknown save versions', () => {
-    expect(() => World.fromSave(content, { version: 2 } as never)).toThrow();
+    expect(() => World.fromSave(content, { version: 99 } as never)).toThrow();
   });
 });
 

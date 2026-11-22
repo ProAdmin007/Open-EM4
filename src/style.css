@@ -90,3 +90,9 @@ button.primary:hover { background: #d32f2f; }
 #screen .help { color: var(--dim); font-size: 12.5px; }
 #screen button { padding: 9px 14px; }
 @media (max-width: 1000px) { #bottom { grid-template-columns: 1fr 1fr; height: 230px; } #map-panel { display: none; } }
+
+.reinf-title { grid-column: 1 / -1; margin-top: 6px; color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.veh.reinf { border-style: dashed; }
+.toast.mission_complete { border-color: #66bb6a; background: rgba(14, 50, 24, .93); }
+.mission { display: block; text-align: left; width: 100%; }
+.mission small { display: block; color: var(--dim); font-weight: 400; margin-top: 2px; }
