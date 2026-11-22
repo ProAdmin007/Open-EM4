@@ -3,6 +3,9 @@ import { SIM_DT, World, type WorldOptions, type SaveGame, type OrderTarget } fro
 import type { Ability, Building, Content, GameEvent } from '../sim/types';
 import { ART_SCALE } from './assets';
 import type { AudioEngine } from './audio';
+import { Commands, pickUnit, pickVehicle } from './selection';
+import type { GameRenderer } from './renderer';
+import { createSnapshot } from '../sim/snapshot';
 
 export const T = 32;
 
@@ -94,14 +97,32 @@ export class GameScene extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private dragStart: { x: number; y: number; wx: number; wy: number; shift: boolean } | null = null;
   private dragging = false;
-  private lastRight = { id: -1, t: 0 };
   private lastTime = -1;
   private panning: { x: number; y: number; sx: number; sy: number } | null = null;
   fps = 60;
   audio: AudioEngine | null = null;
+  viewMode: '2d' | '3d' = '2d';
+  renderer3d: GameRenderer | null = null;
+  private commands = new Commands(this);
 
   constructor() {
     super('game');
+  }
+
+  /** Switch the active renderer. 3D is loaded lazily so the 2D build stays small (docs/3d.md). */
+  async setViewMode(mode: '2d' | '3d'): Promise<void> {
+    if (mode === this.viewMode) return;
+    if (mode === '3d' && !this.renderer3d) {
+      const { Three3DRenderer } = await import('./three-renderer');
+      this.renderer3d = new Three3DRenderer(this);
+      if (this.world) this.renderer3d.load(this.world);
+      this.renderer3d.resize(this.scale.width, this.scale.height);
+    }
+    this.viewMode = mode;
+    this.game.canvas.style.display = mode === '3d' ? 'none' : '';
+    const el = (this.renderer3d as unknown as { canvas?: HTMLCanvasElement })?.canvas;
+    if (el) el.style.display = mode === '3d' ? '' : 'none';
+    if (mode === '3d' && this.world) this.renderer3d!.centerOn(this.cameras.main.worldView.centerX / T, this.cameras.main.worldView.centerY / T);
   }
 
   onEvent(fn: (e: GameEvent) => void): void {
@@ -119,6 +140,7 @@ export class GameScene extends Phaser.Scene {
     this.setupInput();
     this.makePool();
     this.cameras.main.setBackgroundColor('#1d2a1d');
+    this.scale.on('resize', (size: { width: number; height: number }) => this.renderer3d?.resize(size.width, size.height));
     this.startWorld({ seed: 1, difficulty: 'normal', freeplay: false, traffic: true });
     this.state = 'menu';
     this.cameras.main.setZoom(0.9);
@@ -131,6 +153,7 @@ export class GameScene extends Phaser.Scene {
     this.selected.clear();
     this.inspect = null;
     this.acc = 0;
+    this.renderer3d?.load(this.world);
     this.rebuildStatic();
     this.cameras.main.setBounds(-150, -100, this.world.w * T + 300, this.world.h * T + 450);
     for (const m of Object.values(this.maps)) { for (const t of m.values()) t.img.destroy(); m.clear(); }
@@ -139,7 +162,7 @@ export class GameScene extends Phaser.Scene {
     this.lightPhase = -1;
     for (const p of this.pool) p.img.setVisible(false).setActive(false);
     const st = [...this.world.buildings.values()].find(b => b.type === 'station');
-    if (st) this.cameras.main.centerOn((st.x + st.w / 2) * T, (st.y + st.h / 2) * T);
+    if (st) this.centerOn(st.x + st.w / 2, st.y + st.h / 2);
   }
 
   begin(opts: WorldOptions, save?: SaveGame): void {
@@ -148,7 +171,7 @@ export class GameScene extends Phaser.Scene {
     this.speed = 1;
     this.cameras.main.setZoom(1);
     const first = [...this.world!.vehicles.values()][0];
-    if (first) this.cameras.main.centerOn(first.x * T, first.y * T);
+    if (first) this.centerOn(first.x, first.y);
   }
 
   toMenu(): void {
@@ -156,7 +179,7 @@ export class GameScene extends Phaser.Scene {
     this.state = 'menu';
     this.speed = 1;
     this.cameras.main.setZoom(0.9);
-    this.cameras.main.centerOn(32 * T, 24 * T);
+    this.centerOn(51, 36);
   }
 
   setSpeed(s: number): void {
@@ -166,64 +189,58 @@ export class GameScene extends Phaser.Scene {
     this.speed = this.speed === 0 ? 1 : 0;
   }
 
-  // ---------- commands (used by input and HUD) ----------
+  // ---------- commands (used by input and HUD; shared with the 3D renderer via Commands, see selection.ts) ----------
   selectedVehicleIds(): number[] {
-    return [...this.selected].filter(id => this.world?.vehicles.has(id));
+    return this.commands.selectedVehicleIds();
   }
   selectedResponderIds(): number[] {
-    return [...this.selected].filter(id => this.world?.responders.has(id));
+    return this.commands.selectedResponderIds();
   }
   cmdDismount(): void {
-    const w = this.world!;
-    let vehicles = this.selectedVehicleIds();
-    if (!vehicles.length) vehicles = [...new Set(this.selectedResponderIds().map(id => w.responders.get(id)!.vehicleId))];
-    const out = w.orderDismount(vehicles);
-    if (out.length) { this.selected = new Set(out); this.audio?.play('dismount'); }
+    this.commands.cmdDismount();
   }
   cmdReturn(): void {
-    if (this.world!.orderReturn([...this.selected])) this.audio?.play('order');
+    this.commands.cmdReturn();
   }
   cmdDeploy(): void {
-    const out = this.world!.orderDeployFire([...this.selected]);
-    if (out.length) { this.selected = new Set(out); this.audio?.play('dismount'); }
+    this.commands.cmdDeploy();
   }
   cmdHospital(): void {
-    if (this.world!.orderToHospital([...this.selected])) this.audio?.play('order');
+    this.commands.cmdHospital();
   }
   cmdBoard(): void {
-    this.world!.orderBoard([...this.selected]);
+    this.commands.cmdBoard();
   }
   cmdStop(): void {
-    this.world!.orderStop([...this.selected]);
+    this.commands.cmdStop();
   }
   cmdAbility(a: Ability): void {
-    this.world!.orderAbility(this.selectedResponderIds(), a);
+    this.commands.cmdAbility(a);
   }
   selectCrew(): void {
-    const w = this.world!;
-    const ids = new Set<number>();
-    for (const id of this.selectedVehicleIds()) for (const r of w.vehicles.get(id)!.crew) if (!w.responders.get(r)!.inVehicle) ids.add(r);
-    if (ids.size) this.selected = ids;
+    this.commands.selectCrew();
   }
   select(ids: number[], additive = false): void {
-    if (!additive) this.selected.clear();
-    for (const id of ids) this.selected.add(id);
-    this.inspect = null;
+    this.commands.select(ids, additive);
   }
   centerOn(tx: number, ty: number): void {
+    if (this.viewMode === '3d' && this.renderer3d) { this.renderer3d.centerOn(tx, ty); return; }
     this.cameras.main.centerOn(tx * T, ty * T);
   }
   zoomBy(f: number): void {
+    if (this.viewMode === '3d' && this.renderer3d) { (this.renderer3d as unknown as { zoomBy(f: number): void }).zoomBy(f); return; }
     const c = this.cameras.main;
     c.setZoom(Phaser.Math.Clamp(c.zoom * f, 0.5, 2.2));
   }
   /** Tile coordinates under a screen position (relative to the canvas). */
-  screenToTile(sx: number, sy: number): { x: number; y: number } {
+  screenToTile(sx: number, sy: number): { x: number; y: number } | null {
+    if (this.viewMode === '3d' && this.renderer3d) return this.renderer3d.screenToTile(sx, sy);
     const wp = this.cameras.main.getWorldPoint(sx, sy);
     return { x: wp.x / T, y: wp.y / T };
   }
   /** Screen position (relative to the canvas) of a tile coordinate. Used by tests and the HUD. */
   tileToScreen(tx: number, ty: number): { x: number; y: number } {
+    if (this.viewMode === '3d' && this.renderer3d) return this.renderer3d.tileToScreen(tx, ty);
     const c = this.cameras.main;
     return { x: (tx * T - c.worldView.x) * c.zoom, y: (ty * T - c.worldView.y) * c.zoom };
   }
@@ -236,21 +253,7 @@ export class GameScene extends Phaser.Scene {
       if (p.middleButtonDown()) { this.panning = { x: p.x, y: p.y, sx: this.cameras.main.scrollX, sy: this.cameras.main.scrollY }; return; }
       if (p.rightButtonDown()) {
         const wp = this.cameras.main.getWorldPoint(p.x, p.y);
-        // double right-click on a vehicle: everybody gets out
-        const veh = this.pickVehicle(wp.x / T, wp.y / T);
-        const now = performance.now();
-        if (veh !== null) {
-          const dbl = this.lastRight.id === veh && now - this.lastRight.t < 600;
-          this.lastRight = { id: veh, t: now };
-          if (dbl) {
-            const out = this.world.orderDismount([veh]);
-            if (out.length) { this.selected = new Set(out); this.audio?.play('dismount'); }
-            return;
-          }
-          if (this.selected.size === 1 && this.selected.has(veh)) return; // first click on the selected vehicle itself: nothing to move
-        } else this.lastRight = { id: -1, t: 0 };
-        if (this.selected.size) this.audio?.play('order');
-        this.world.contextOrder([...this.selected], wp.x / T, wp.y / T);
+        this.commands.rightClick(wp.x / T, wp.y / T);
         return;
       }
       const wp = this.cameras.main.getWorldPoint(p.x, p.y);
@@ -271,21 +274,11 @@ export class GameScene extends Phaser.Scene {
       if (!d || !this.world || this.state !== 'playing') return;
       const wp = this.cameras.main.getWorldPoint(p.x, p.y);
       if (this.dragging) {
-        const x0 = Math.min(d.wx, wp.x) / T, x1 = Math.max(d.wx, wp.x) / T, y0 = Math.min(d.wy, wp.y) / T, y1 = Math.max(d.wy, wp.y) / T;
-        const ids: number[] = [];
-        for (const v of this.world.vehicles.values()) if (v.x >= x0 && v.x <= x1 && v.y >= y0 && v.y <= y1) ids.push(v.id);
-        for (const r of this.world.responders.values()) if (!r.inVehicle && r.x >= x0 && r.x <= x1 && r.y >= y0 && r.y <= y1) ids.push(r.id);
-        // when the box holds on-foot responders, prefer them over vehicles that just dropped them off
-        const foot = ids.filter(id => this.world!.responders.has(id));
-        this.select(foot.length ? foot : ids, d.shift);
+        this.commands.boxSelect(d.wx / T, d.wy / T, wp.x / T, wp.y / T, d.shift);
         this.dragging = false;
         return;
       }
-      const hit = this.pickUnit(wp.x / T, wp.y / T);
-      if (hit !== null) { this.select([hit], d.shift); return; }
-      const t = this.world.pick(wp.x / T, wp.y / T);
-      if (t && (t.kind === 'victim' || t.kind === 'suspect' || t.kind === 'building' || t.kind === 'incident')) { this.selected.clear(); this.inspect = t; return; }
-      if (!d.shift) { this.selected.clear(); this.inspect = null; }
+      this.commands.leftClick(wp.x / T, wp.y / T, d.shift);
     });
     const kd = (k: string, fn: () => void) => this.input.keyboard!.on(`keydown-${k}`, () => { if (this.state === 'playing') fn(); });
     kd('SPACE', () => this.togglePause());
@@ -307,22 +300,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   pickVehicle(x: number, y: number): number | null {
-    const w = this.world!;
-    let best: number | null = null, bd = Infinity;
-    for (const v of w.vehicles.values()) {
-      const d = Math.hypot(v.x - x, v.y - y);
-      if (d < w.vehicleDef(v).length * 0.55 && d < bd) { bd = d; best = v.id; }
-    }
-    return best;
+    return pickVehicle(this.world!, x, y);
   }
 
   pickUnit(x: number, y: number): number | null {
-    const w = this.world!;
-    let best: number | null = null, bd = 1.0;
-    for (const r of w.responders.values()) if (!r.inVehicle) { const d = Math.hypot(r.x - x, r.y - y); if (d < Math.min(bd, 0.7)) { bd = d; best = r.id; } }
-    if (best !== null) return best;
-    for (const v of w.vehicles.values()) { const d = Math.hypot(v.x - x, v.y - y); if (d < Math.min(bd, w.vehicleDef(v).length * 0.55)) { bd = d; best = v.id; } }
-    return best;
+    return pickUnit(this.world!, x, y);
   }
 
   // ---------- static world ----------
@@ -565,7 +547,7 @@ export class GameScene extends Phaser.Scene {
     this.lastTime = time;
     this.fps = this.game.loop.actualFps;
     this.frame++;
-    this.moveCamera(dt);
+    if (this.viewMode === '2d') this.moveCamera(dt);
     const w = this.world;
     if (!w) return;
     if (this.speed > 0 && this.state !== 'gameover') {
@@ -581,9 +563,16 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.normaliseSelection();
-    this.render(time, dt);
-    const wv = this.cameras.main.worldView;
-    this.audio?.update(w, { x: wv.centerX / T, y: wv.centerY / T }, this.state === 'playing', this.speed === 0);
+    let centre: { x: number; y: number };
+    if (this.viewMode === '3d' && this.renderer3d) {
+      this.renderer3d.render(createSnapshot(w, this.alpha), dt);
+      centre = (this.renderer3d as unknown as { cameraTile(): { x: number; y: number } }).cameraTile();
+    } else {
+      this.render(time, dt);
+      const wv = this.cameras.main.worldView;
+      centre = { x: wv.centerX / T, y: wv.centerY / T };
+    }
+    this.audio?.update(w, centre, this.state === 'playing', this.speed === 0);
   }
 
   private normaliseSelection(): void {

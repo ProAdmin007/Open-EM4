@@ -11,8 +11,10 @@ export interface Settings {
   volume: number;
   muted: boolean;
   mapId: string;
+  /** Weergave: 2D (Phaser) of 3D (three.js, experimenteel, lazy geladen). */
+  viewMode: '2d' | '3d';
 }
-export const DEFAULT_SETTINGS: Settings = { edgeScroll: false, defaultSpeed: 1, hints: true, difficulty: 'normal', seed: '2006', volume: 0.6, muted: false, mapId: 'default_city' };
+export const DEFAULT_SETTINGS: Settings = { edgeScroll: false, defaultSpeed: 1, hints: true, difficulty: 'normal', seed: '2006', volume: 0.6, muted: false, mapId: 'default_city', viewMode: '2d' };
 
 const K_SETTINGS = 'openrescue.settings', K_SAVE = 'openrescue.save', K_MODS = 'openrescue.mods';
 

@@ -9,7 +9,7 @@ Command fire engines, ambulances, police cars and tow trucks in a living city �
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-75%20unit%20%2B%2015%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-86%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 **English** · [Nederlands](README.nl.md)
@@ -36,8 +36,8 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 - 🔊 **Fully procedural audio** – Dutch-style two-tone sirens, crackling fire, water spray, traffic hum and UI effects, all synthesised with the Web Audio API (no sound files).
 - 🎯 **Game modes** – six missions, endless Freeplay (Easy / Normal / Hard, seeded for reproducible scenarios), save & load, local highscores.
 - 🧩 **Moddable** – vehicles, roles, incidents, missions and maps are validated JSON; an example content pack is included.
-- 🧪 **Well tested** – deterministic simulation with 75 unit tests and 15 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario).
-- 🧱 **3D-ready architecture** – the simulation is renderer-independent, with real-world units, a snapshot API and model ids ([docs/3d.md](docs/3d.md)).
+- 🧪 **Well tested** – deterministic simulation with 86 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
+- 🧊 **Experimental 3D view** – a procedural three.js city (buildings, vehicles, people, fire/smoke, traffic lights) with an RTS camera, next to the original 2D view; switch in Settings or the main menu. Lazily loaded, so it costs nothing if you never turn it on ([docs/3d.md](docs/3d.md)).
 
 ## Play it
 

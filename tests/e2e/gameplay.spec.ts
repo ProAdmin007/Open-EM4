@@ -340,6 +340,52 @@ test('vehicles start parked in the station lot, not on the road', async ({ page 
   expect(res.every((r: any) => r.lot && !r.road)).toBe(true);
 });
 
+test('3D view: select engine, send to a house fire, dismount, extinguish, incident disappears', async ({ page }) => {
+  await openFreeplay(page);
+  await page.evaluate(() => (window as any).__openrescue.scene.setViewMode('3d'));
+  await page.waitForFunction(() => !!(window as any).__openrescue.scene.renderer3d);
+  await expect(page.locator('canvas').nth(1)).toBeVisible(); // the three.js canvas, on top of the hidden Phaser one
+
+  const info = await page.evaluate(() => {
+    const or = (window as any).__openrescue;
+    const w = or.world;
+    const inc = w.spawnIncident('house_fire', { severity: 1 });
+    for (const id of inc.victims) w.victims.delete(id);
+    inc.victims = [];
+    const b = w.buildings.get(inc.buildingId);
+    or.scene.centerOn(b.x + b.w / 2, b.y + b.h / 2);
+    or.scene.zoomBy(0.6);
+    const engine = [...w.vehicles.values()].find((v: any) => v.defId === 'fire_engine');
+    return { incId: inc.id, bx: b.x + b.w / 2, by: b.y + b.h / 2, bid: b.id, vid: engine.id };
+  });
+  await page.waitForTimeout(400); // let the 3D camera render a few frames (matrixWorld) before reading screen coordinates
+
+  await expect(page.locator('#incident-list .inc')).toContainText('Woningbrand');
+  await page.locator(`[data-vid="${info.vid}"]`).click();
+  await expect(page.locator('#unit-panel')).toContainText('Tankautospuit');
+  await page.locator('[data-act="speed4"]').click();
+
+  // Right-click the burning building in the 3D view: ray-picked through the three.js camera to the ground plane.
+  const target = await screenOf(page, info.bx, info.by);
+  await page.mouse.click(target.x, target.y, { button: 'right' });
+  await page.waitForFunction(id => (window as any).__openrescue.world.vehicles.get(id).path.length > 0, info.vid);
+  await page.waitForFunction(id => (window as any).__openrescue.world.vehicles.get(id).path.length === 0, info.vid, { timeout: 60_000 });
+
+  await page.getByRole('button', { name: /Uitstappen/ }).click();
+  await page.waitForFunction(id => (window as any).__openrescue.world.vehicles.get(id).crew.every((r: number) => !(window as any).__openrescue.world.responders.get(r).inVehicle), info.vid);
+  await page.locator('[data-ability="extinguish"]').click();
+  await page.waitForFunction(() => [...(window as any).__openrescue.world.responders.values()].some((r: any) => r.task?.type === 'extinguish'));
+
+  await page.waitForFunction(id => !(window as any).__openrescue.world.incidents.has(id), info.incId, { timeout: 90_000 });
+  const res = await page.evaluate(id => (window as any).__openrescue.world.buildings.get(id).fire, info.bid);
+  expect(res).toBe(0);
+  await page.screenshot({ path: 'test-results/scenario-3d-resolved.png' });
+
+  // switching back to 2D hides the three.js canvas and shows the Phaser one again
+  await page.evaluate(() => (window as any).__openrescue.scene.setViewMode('2d'));
+  await expect(page.locator('canvas').first()).toBeVisible();
+});
+
 test('missions menu: start a mission and see its first incident', async ({ page }) => {
   await gotoHealthy(page);
   await page.getByRole('button', { name: /Missies/ }).click();
