@@ -1,0 +1,3 @@
+["0s:16%","30s:22%","60s:31%","90s:27%","120s:30%","150s:32%","180s:33%","210s:31%"]
+148@74.5,23.6->74,24 t=204
+{"moving":71.3,"wait-nopath":5.7,"signal":8.6,"blocked-civ-halted":3.7,"blocked-civ-moving":1.6,"other-free":3.8,"yield":0.6,"nopath":0.9,"blocked-veh-halted":3.8,"exit-blocked":0}

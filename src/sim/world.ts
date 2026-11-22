@@ -129,6 +129,8 @@ export class World {
   readonly h: number;
   readonly tiles: Uint8Array;
   readonly intersection: Uint8Array;
+  /** junctions with traffic lights: crossings and T-junctions (bends and the like need none) */
+  readonly signal: Uint8Array;
   /** One-way lane per road tile (right-hand traffic): 0 none/intersection, 1 east, 2 west, 3 south, 4 north. */
   readonly lane: Uint8Array;
   private readonly bayTile: Uint8Array;
@@ -175,6 +177,7 @@ export class World {
     this.h = map.height;
     this.tiles = new Uint8Array(this.w * this.h);
     this.intersection = new Uint8Array(this.w * this.h);
+    this.signal = new Uint8Array(this.w * this.h);
     this.lane = new Uint8Array(this.w * this.h);
     this.bayTile = new Uint8Array(this.w * this.h);
     for (const st of map.stations) for (const b of st.bays ?? []) this.bayTile[b.y * this.w + b.x] = 1;
@@ -194,12 +197,24 @@ export class World {
     }
     for (const b of this.buildings.values()) b.door = this.findDoor(b);
     // junctions: a 2x2 road square with roads leaving it on perpendicular sides (crossing, T-junction or bend)
+    const crossings: Vec[] = [];
     for (const r of this.roadList) {
       const { x, y } = r;
       if (!(this.isRoad(x + 1, y) && this.isRoad(x, y + 1) && this.isRoad(x + 1, y + 1))) continue;
       const L = this.isRoad(x - 1, y) && this.isRoad(x - 1, y + 1), R = this.isRoad(x + 2, y) && this.isRoad(x + 2, y + 1);
       const U = this.isRoad(x, y - 1) && this.isRoad(x + 1, y - 1), D = this.isRoad(x, y + 2) && this.isRoad(x + 1, y + 2);
-      if ((L || R) && (U || D)) for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) this.intersection[(y + dy) * this.w + x + dx] = 1;
+      if ((L || R) && (U || D)) {
+        const arms = (L ? 1 : 0) + (R ? 1 : 0) + (U ? 1 : 0) + (D ? 1 : 0);
+        for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) this.intersection[(y + dy) * this.w + x + dx] = 1;
+        if (arms === 4) crossings.push({ x, y });
+      }
+    }
+    // traffic lights only on the big crossings, never closer than 14 tiles to each other; everywhere else the east-west road has priority
+    const lit: Vec[] = [];
+    for (const c of crossings) {
+      if (lit.some(o => Math.max(Math.abs(o.x - c.x), Math.abs(o.y - c.y)) < 14)) continue;
+      lit.push(c);
+      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) this.signal[(c.y + dy) * this.w + c.x + dx] = 1;
     }
     for (const r of this.roadList) {
       if (this.intersection[r.y * this.w + r.x] === 1) continue;
@@ -245,6 +260,9 @@ export class World {
   }
   isIntersection(x: number, y: number): boolean {
     return this.inBounds(x, y) && this.intersection[y * this.w + x] === 1;
+  }
+  isSignalised(x: number, y: number): boolean {
+    return this.inBounds(x, y) && this.signal[y * this.w + x] === 1;
   }
   isParking(x: number, y: number): boolean {
     return this.inBounds(x, y) && this.tiles[y * this.w + x] === TILE_PARKING;
@@ -427,6 +445,7 @@ export class World {
     if (this.opts.freeplay && !this.script.length) this.updateSpawner(dt);
     for (const v of this.vehicles.values()) this.updateVehicle(v, dt);
     for (const r of this.responders.values()) this.updateResponder(r, dt);
+    this.separateResponders(dt);
     this.updateWater(dt);
     this.updateGrip(dt);
     this.updateHearses(dt);
@@ -457,7 +476,38 @@ export class World {
 
   /** 0 = east-west traffic has green, 1 = north-south. */
   get lightPhase(): 0 | 1 {
-    return (Math.floor(this.time / 9) % 2) as 0 | 1;
+    return (Math.floor(this.time / 12) % 2) as 0 | 1;
+  }
+  /** the last 1.4 s of every phase everything is red, so the junction clears before the cross traffic starts */
+  get lightsRed(): boolean {
+    return this.time % 12 > 10.6;
+  }
+  /** May traffic travelling horizontally / vertically enter this junction tile right now? */
+  canGo(x: number, y: number, horizontal: boolean): boolean {
+    if (this.isSignalised(x, y)) return !this.lightsRed && (this.lightPhase === 0) === horizontal;
+    if (!horizontal && this.isIntersection(x, y)) return !this.crossTraffic(x, y); // minor road: give way to the east-west traffic
+    return true;
+  }
+  /** Is east-west traffic in, or about to enter, the junction at this tile? */
+  private crossTraffic(x: number, y: number): boolean {
+    const cx = x + 0.5, cy = y + 0.5;
+    const near = (ox: number, oy: number, ang: number, v: number): boolean => Math.abs(oy - cy) < 1.7 && Math.abs(ox - cx) < 3.6 && Math.abs(Math.cos(ang)) > 0.6 && (v > 0.3 || Math.abs(ox - cx) < 1.6);
+    for (const o of this.civilians) if (near(o.x, o.y, o.angle, o.v)) return true;
+    for (const o of this.vehicles.values()) if (near(o.x, o.y, o.angle, o.speedNow)) return true;
+    return false;
+  }
+  /** Is the first stretch of road behind the junction occupied by a (nearly) stationary vehicle? Then do not enter: never block the box. */
+  private exitBlocked(path: Vec[], selfId: number): boolean {
+    let ex: Vec | null = null;
+    for (let i = 0; i < Math.min(path.length, 5); i++) if (!this.isIntersection(path[i].x, path[i].y)) { ex = path[i]; break; }
+    if (!ex) return false;
+    const cx = ex.x + 0.5, cy = ex.y + 0.5;
+    const lane = this.laneAt(ex.x, ex.y);
+    if (!lane) return false;
+    const inLane = (ox: number, oy: number): boolean => { const rx = ox - cx, ry = oy - cy, along = rx * lane.x + ry * lane.y, lat = Math.abs(rx * lane.y - ry * lane.x); return lat < 0.5 && along > -0.9 && along < 1.1; };
+    for (const o of this.civilians) if (o.id !== selfId && o.v < 0.4 && inLane(o.x, o.y)) return true;
+    for (const o of this.vehicles.values()) if (o.id !== selfId && o.speedNow < 0.4 && inLane(o.x, o.y)) return true;
+    return false;
   }
 
   // ---------- movement helpers ----------
@@ -622,7 +672,7 @@ export class World {
       }
     } else {
       v.state = 'moving';
-      v.lights = !v.silent && v.prio === 1;
+      v.lights = !v.silent;
       this.driveVehicle(v, dt);
     }
     if (!v.path.length && v.state === 'idle') {
@@ -646,12 +696,12 @@ export class World {
 
   private driveVehicle(v: Vehicle, dt: number): void {
     const def = this.vehicleDef(v);
-    // speed: accelerate from a standstill (heavy vehicles slowly), slow down for corners, prio 2 drives a little calmer (and in the rain everybody does)
-    let vmax = def.maxSpeed * KMH_TO_TILES * (v.prio === 2 ? 0.8 : 1) * (this.raining ? 0.88 : 1);
-    const nxt = v.path[1];
-    if (nxt && v.path[0] && (nxt.x - v.path[0].x !== v.path[0].x - Math.floor(v.x) || nxt.y - v.path[0].y !== v.path[0].y - Math.floor(v.y)) && Math.hypot(v.path[0].x + 0.5 - v.x, v.path[0].y + 0.5 - v.y) < 1.3) vmax = Math.min(vmax, 1.8);
-    const accel = 1.5 + 2.2 / Math.max(1, def.length);
-    v.speedNow = Math.max(0, Math.min(vmax, v.speedNow + (v.speedNow < vmax ? accel : -7) * dt));
+    // speed: prio 1 drives hard, prio 2 calmly; accelerate from a standstill, brake for the next corner
+    let vmax = def.maxSpeed * KMH_TO_TILES * (v.prio === 2 ? 0.85 : 1.15) * (this.raining ? 0.9 : 1);
+    const cd = this.cornerDistance(v);
+    if (cd < 8) vmax = Math.min(vmax, Math.sqrt((v.prio === 2 ? 2.6 : 3.4) ** 2 + 2 * 7 * Math.max(0, cd - 0.2)));
+    const accel = 2.8 + 3 / Math.max(1, def.length);
+    v.speedNow = Math.max(0, Math.min(vmax, v.speedNow + (v.speedNow < vmax ? accel : -8) * dt));
     if (v.speedNow < 0.15 && vmax > 0.2) v.speedNow = 0.15; // the first moment of pulling away
     let budget = v.speedNow * dt;
     while (budget > 1e-6 && v.path.length) {
@@ -675,7 +725,7 @@ export class World {
       v.blocked = 0;
       // prio 2 obeys the traffic lights like everybody else
       if (v.prio === 2 && this.isIntersection(v.path[0].x, v.path[0].y) && !this.isIntersection(Math.floor(v.x), Math.floor(v.y)) && d < 0.95) {
-        if ((this.lightPhase === 0) !== (Math.abs(ux) > Math.abs(uy))) { v.speedNow = 0; return; }
+        if (!this.canGo(v.path[0].x, v.path[0].y, Math.abs(ux) > Math.abs(uy))) { v.speedNow = 0; return; }
       }
       // U-turn: sliding into the opposite lane while rotating through 180 degrees
       const la = this.laneAt(Math.floor(v.x), Math.floor(v.y)), lb = this.laneAt(v.path[0].x, v.path[0].y);
@@ -724,6 +774,21 @@ export class World {
     }
     for (const c of this.civilians) if (inWindow(c.x, c.y, CAR_LEN)) return { kind: 'civ', id: c.id, x: c.x, y: c.y, halted: false, civ: c };
     return null;
+  }
+
+  /** Distance along the path to the first real turn (Infinity when straight for the next few tiles). */
+  private cornerDistance(v: Vehicle): number {
+    const p = v.path;
+    if (!p.length) return Infinity;
+    let dist = Math.hypot(p[0].x + 0.5 - v.x, p[0].y + 0.5 - v.y);
+    let hx = Math.cos(v.angle), hy = Math.sin(v.angle);
+    if (dist > 0.05) { hx = (p[0].x + 0.5 - v.x) / dist; hy = (p[0].y + 0.5 - v.y) / dist; }
+    for (let i = 1; i < Math.min(p.length, 8); i++) {
+      const dx = p[i].x - p[i - 1].x, dy = p[i].y - p[i - 1].y;
+      if (dx * hx + dy * hy < 0.7) return dist;
+      dist += 1;
+    }
+    return Infinity;
   }
 
   /** Is there a slower car (or a stopped vehicle) within a few tiles ahead in this lane? */
@@ -971,6 +1036,27 @@ export class World {
     }
     this.stepAlong(r, r.path, this.roleDef(r).speed, SIM_DT);
     return false;
+  }
+
+  /** People do not stand inside each other: anybody closer than ~0.45 tile is eased apart (never onto a building or water tile). */
+  private separateResponders(dt: number): void {
+    const list: Responder[] = [];
+    for (const r of this.responders.values()) if (!r.inVehicle) list.push(r);
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+      const a = list[i], b = list[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      if (Math.abs(dx) > 0.45 || Math.abs(dy) > 0.45) continue;
+      let d = Math.hypot(dx, dy);
+      let ux: number, uy: number;
+      if (d < 1e-3) { const ang = (a.id * 2.399963 + b.id) % (Math.PI * 2); ux = Math.cos(ang); uy = Math.sin(ang); d = 0; } else { ux = dx / d; uy = dy / d; }
+      if (d >= 0.45) continue;
+      const push = Math.min((0.45 - d) / 2, 1.5 * dt);
+      for (const [r, sgn] of [[a, -1], [b, 1]] as [Responder, number][]) {
+        if (r.carrying !== null) continue;
+        const nx = r.x + ux * push * sgn, ny = r.y + uy * push * sgn;
+        if (this.isWalkable(Math.floor(nx), Math.floor(ny))) { r.x = nx; r.y = ny; }
+      }
+    }
   }
 
   private updateResponder(r: Responder, dt: number): void {
@@ -2333,15 +2419,20 @@ export class World {
     const enteringIx = this.isIntersection(next.x, next.y) && !this.isIntersection(Math.floor(c.x), Math.floor(c.y));
     if (enteringIx && d < 1.7) {
       const horizontal = Math.abs(ux) > Math.abs(uy);
-      if ((this.lightPhase === 0) !== horizontal) { // red: stop in front of the junction
+      if (!this.canGo(next.x, next.y, horizontal) || (this.isSignalised(next.x, next.y) && this.exitBlocked(c.path, c.id))) { // red (or no room behind the junction): stop in front of it
         target = d < 0.95 ? 0 : Math.min(target, Math.max(0, (d - 0.9) * 2.5));
         if (d < 0.9) { c.v = Math.max(0, c.v - 10 * dt); c.braking = true; return; }
       }
     }
-    const look = this.findBlocker(c, c.x, c.y, ux, uy, Math.min(1.4, d + 0.4), c.len, c.hw, PRIO_CIVILIAN);
-    if (look) target = Math.min(target, look.kind === 'civ' && !look.halted ? 0.6 : 0);
+    const look = this.findBlocker(c, c.x, c.y, ux, uy, Math.min(2.4, d + 1.0), c.len, c.hw, PRIO_CIVILIAN);
+    if (look) {
+      if (look.kind === 'civ' && look.civ) { // follow: match the speed of the car in front, keeping a gap that grows with the speed
+        const gap = Math.hypot(look.x - c.x, look.y - c.y) - (c.len + look.civ.len) / 2;
+        target = Math.min(target, Math.max(0, look.civ.v + (gap - 0.25 - c.v * 0.18) * 1.6));
+      } else target = 0;
+    }
     const before = c.v;
-    c.v += Math.max(-7 * dt, Math.min(2.6 * dt, target - c.v));
+    c.v += Math.max(-7 * dt, Math.min(3.4 * dt, target - c.v));
     c.braking = c.v < before - 1e-3 || (target === 0 && c.v < 0.3);
     const step = Math.min(c.v * dt, d);
     const la1 = this.laneAt(Math.floor(c.x), Math.floor(c.y)), lb1 = this.laneAt(next.x, next.y);

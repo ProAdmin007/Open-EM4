@@ -22,7 +22,7 @@ describe('realistic driving and priorities', () => {
     w.orderMove([amb.id], 40, 30, 2);
     run(w, 3);
     expect(amb.prio).toBe(2);
-    expect(amb.lights).toBe(false);
+    expect(amb.lights).toBe(true); // beacons, but no siren (the siren is for prio 1)
     w.orderMove([amb.id], 41, 30, 1);
     run(w, 0.2);
     expect(amb.lights).toBe(true);

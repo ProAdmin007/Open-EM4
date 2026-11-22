@@ -40,7 +40,7 @@ describe('unit state', () => {
   it('the traffic light alternates', () => {
     const w = newWorld();
     const a = w.lightPhase;
-    run(w, 10);
+    run(w, 13);
     expect(w.lightPhase).not.toBe(a);
   });
   it('civilian traffic and pedestrians move without ever entering buildings', () => {

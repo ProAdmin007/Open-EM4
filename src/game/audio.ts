@@ -182,7 +182,7 @@ export class AudioEngine {
     let fireLevel = 0, sprayLevel = 0, hb = false, hbHealth = 101;
     if (world && playing && !paused) {
       for (const v of world.vehicles.values()) {
-        if (!v.lights) continue;
+        if (!v.lights || v.prio !== 1) continue; // prio 2: beacons only, no siren
         const d = Math.hypot(v.x - listener.x, v.y - listener.y), g = atten(d);
         if (g > (sirenLevel[v.category] ?? 0)) { sirenLevel[v.category] = g; sirenPan[v.category] = Math.max(-1, Math.min(1, (v.x - listener.x) / 18)); }
       }

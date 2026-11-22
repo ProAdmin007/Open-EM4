@@ -74,13 +74,26 @@ export function projectTileToNDC(camera: THREE.Camera, tx: number, ty: number): 
   return { x: v.x, y: v.y };
 }
 
-function roleColor(model: string): number {
-  if (/fire|rescue/.test(model)) return 0xd8a020; // bunker gear
-  if (/paramedic|doctor/.test(model)) return 0x1f6fd0;
-  if (/officer/.test(model)) return 0x1a2f6a;
-  if (/tech/.test(model)) return 0x2a2a2a;
-  return 0x9aa0a6;
-}
+/** What every kind of responder wears: jacket, trousers, boots, headgear and (optionally) a fluorescent vest or stripes. */
+interface Outfit { top: number; trousers: number; boots?: number; head: 'helmet' | 'cap' | 'hood' | 'none'; headCol: number; vest?: number; vestGlow?: number; stripe?: number; cylinder?: boolean; shield?: boolean; bulky?: boolean }
+const OUTFITS: Record<string, Outfit> = {
+  firefighter: { top: 0x2c3548, trousers: 0x232a38, boots: 0x3a2f1c, head: 'helmet', headCol: 0xf2c230, stripe: 0xffe14a, cylinder: true },
+  fire_officer: { top: 0x1b2438, trousers: 0x1b2438, head: 'helmet', headCol: 0xf2f2f2, vest: 0xd8332a, vestGlow: 0x5a0e0a, stripe: 0xffffff },
+  rescue_specialist: { top: 0xe8590c, trousers: 0xc04a0a, boots: 0x3a2f1c, head: 'helmet', headCol: 0xd8332a, stripe: 0xf4f6f8 },
+  ovd: { top: 0x1b2438, trousers: 0x1b2438, head: 'helmet', headCol: 0xf2f2f2, vest: 0xf0e000, vestGlow: 0x5a5400, stripe: 0xd8332a },
+  hazmat_ff: { top: 0xe6d200, trousers: 0xe6d200, boots: 0x2a2a2a, head: 'hood', headCol: 0xf2f2f2, cylinder: true, bulky: true },
+  tanker_driver: { top: 0x7a2a22, trousers: 0x2a2f38, head: 'cap', headCol: 0x7a2a22, stripe: 0xffe14a },
+  paramedic: { top: 0x1f4f9a, trousers: 0x1a2236, head: 'none', headCol: 0, vest: 0xd4f000, vestGlow: 0x5a6400 },
+  doctor: { top: 0xd9531e, trousers: 0xd9531e, head: 'helmet', headCol: 0xf2f2f2, stripe: 0xf4f6f8 },
+  lgh: { top: 0xf2f2f2, trousers: 0x1a2236, head: 'none', headCol: 0, vest: 0xd8332a, vestGlow: 0x5a0e0a },
+  officer: { top: 0x1a2f6a, trousers: 0x161d33, head: 'cap', headCol: 0x1b2a55, vest: 0xd8e600, vestGlow: 0x505800 },
+  me_officer: { top: 0x20242c, trousers: 0x20242c, boots: 0x101010, head: 'helmet', headCol: 0x15171c, shield: true, bulky: true },
+  bomb_tech: { top: 0x6b6a4a, trousers: 0x5a5a3e, head: 'helmet', headCol: 0x55553a, bulky: true },
+  technician: { top: 0xff6a00, trousers: 0x3a3f4b, head: 'helmet', headCol: 0xf2f2f2, stripe: 0xf4f6f8 },
+  undertaker: { top: 0x15151a, trousers: 0x15151a, head: 'cap', headCol: 0x15151a },
+};
+const DEFAULT_OUTFIT: Outfit = { top: 0x9aa0a6, trousers: 0x2a2f38, head: 'helmet', headCol: 0xdddddd };
+
 function pedColor(model: string): number {
   for (const [name, col] of Object.entries(PED_COLORS)) if (model.includes(name)) return col;
   return 0xbdbdbd;
@@ -270,7 +283,7 @@ export class Three3DRenderer implements GameRenderer {
     this.syncIncidents(snap);
     this.syncObstacles(snap);
     this.syncSelection(snap);
-    this.syncTrafficLights(snap.lightPhase);
+    this.syncTrafficLights(snap.lightsRed ? 2 : snap.lightPhase);
     this.syncHoses(snap);
     this.syncExplosions(snap, dt);
     this.updateFire(snap, dt);
@@ -563,7 +576,7 @@ export class Three3DRenderer implements GameRenderer {
     const poleMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
     for (let y = 0; y < world.h; y++) {
       for (let x = 0; x < world.w; x++) {
-        if (!world.isIntersection(x, y) || world.isIntersection(x - 1, y) || world.isIntersection(x, y - 1)) continue;
+        if (!world.isSignalised(x, y) || world.isSignalised(x - 1, y) || world.isSignalised(x, y - 1)) continue;
         const pts: [number, number, boolean][] = [[x - 0.1, y - 0.1, true], [x + 2.1, y + 2.1, true], [x + 2.1, y - 0.1, false], [x - 0.1, y + 2.1, false]];
         for (const [tx, ty, ew] of pts) {
           if (world.isRoad(Math.floor(tx), Math.floor(ty)) || world.isRoad(Math.floor(tx + (tx > x ? 0.2 : -0.2)), Math.floor(ty + (ty > y ? 0.2 : -0.2)))) continue; // the corner of a missing arm
@@ -649,9 +662,9 @@ export class Three3DRenderer implements GameRenderer {
     const group = new THREE.Group();
     const rig = new THREE.Group();
     group.add(rig);
-    const isFire = /fire|rescue/.test(p.model), isPolice = /officer/.test(p.model), isMed = /paramedic|doctor/.test(p.model), isTech = /tech|berger/.test(p.model), isBomb = /bomb/.test(p.model);
-    const uniform = p.kind === 'responder' ? roleColor(p.model) : p.kind === 'suspect' ? 0x90a4ae : p.kind === 'victim' ? 0xffab91 : pedColor(p.model);
-    const trousers = p.kind === 'responder' ? (isFire ? 0x1f2430 : isPolice ? 0x1b2236 : isTech ? 0xd96a14 : 0x2a2f38) : [0x2d3340, 0x3a3f4b, 0x4a4036, 0x25303a][p.id % 4];
+    const outfit: Outfit = p.kind === 'responder' ? OUTFITS[p.model.replace(/^.*\//, '')] ?? DEFAULT_OUTFIT : DEFAULT_OUTFIT;
+    const uniform = p.kind === 'responder' ? outfit.top : p.kind === 'suspect' ? 0x90a4ae : p.kind === 'victim' ? 0xffab91 : pedColor(p.model);
+    const trousers = p.kind === 'responder' ? outfit.trousers : [0x2d3340, 0x3a3f4b, 0x4a4036, 0x25303a][p.id % 4];
     const skinTones = [0xe8c39e, 0xd2a07a, 0xb27a56, 0x8a5a3c, 0xf2d3b3];
     const skin = lambert(skinTones[p.id % skinTones.length]);
     const hairCols = [0x2b1d12, 0x4a3320, 0x8a6a3a, 0xc9a45a, 0x1a1a1a, 0x7a3a22];
@@ -660,7 +673,7 @@ export class Three3DRenderer implements GameRenderer {
     const legGeo = sharedCapsule(0.075, 0.34), armGeo = sharedCapsule(0.055, 0.28, -0.17), torsoGeo = sharedRounded(0.3, 0.52, 0.46, 0.09);
     const trouserM = lambert(trousers);
     const legA = mk(legGeo, trouserM, 0, 0.25, 0.1), legB = mk(legGeo, trouserM, 0, 0.25, -0.1);
-    const boots = lambert(isFire ? 0x3a2f1c : 0x15151a);
+    const boots = lambert(p.kind === 'responder' ? outfit.boots ?? 0x15151a : 0x15151a);
     mk(sharedRounded(0.26, 0.1, 0.14, 0.04), boots, 0.04, 0.05, 0.1); mk(sharedRounded(0.26, 0.1, 0.14, 0.04), boots, 0.04, 0.05, -0.1);
     const torso = mk(torsoGeo, cloth, 0, 0.78, 0);
     mk(sharedRounded(0.31, 0.07, 0.47, 0.03), lambert(0x15151a), 0, 0.55, 0); // belt
@@ -671,21 +684,25 @@ export class Three3DRenderer implements GameRenderer {
     const head = mk(sharedSphere(0.15), skin, 0, 1.2, 0);
     mk(sharedSphere(0.02), lambert(0x111111), 0.13, 1.22, 0.06); mk(sharedSphere(0.02), lambert(0x111111), 0.13, 1.22, -0.06); // eyes (the face looks along +x)
     if (p.kind === 'responder') {
-      const helmetCol = isFire ? 0xf2c230 : isPolice ? 0x1b2a55 : isMed ? 0xf2f2f2 : isTech || isBomb ? 0xf08a1a : 0xdddddd;
-      const hm = lambert(helmetCol);
-      mk(sharedHelmet(), hm, 0, 1.25, 0);
-      if (isFire) { mk(sharedRounded(0.12, 0.03, 0.36, 0.01), hm, -0.12, 1.2, 0); mk(sharedRounded(0.05, 0.12, 0.2, 0.02), lambert(0x15151a), 0.15, 1.2, 0); } // neck guard + visor
-      if (isPolice) { mk(sharedRounded(0.16, 0.025, 0.3, 0.01), lambert(0x111522), 0.14, 1.26, 0); } // cap peak
-      // conspicuous clothing: a fluorescent vest over the uniform (police, paramedics, technical service), glowing retroreflective bands on everybody
-      const hiVis = new THREE.MeshLambertMaterial({ color: isMed ? 0xd4f000 : isPolice ? 0xd8e600 : 0xff6a00, emissive: isMed ? 0x5a6400 : isPolice ? 0x505800 : 0x6a2200 });
-      if (!isFire) mk(sharedRounded(0.335, 0.5, 0.49, 0.09), hiVis, 0, 0.78, 0);
+      const o = outfit;
+      const hm = lambert(o.headCol);
+      if (o.head === 'none') mk(sharedHair(), lambert(hairCols[(p.id * 7) % hairCols.length]), -0.01, 1.24, 0);
+      else if (o.head === 'hood') mk(sharedSphere(0.175), hm, 0, 1.21, 0);
+      else {
+        mk(sharedHelmet(), hm, 0, 1.25, 0);
+        if (o.head === 'cap') mk(sharedRounded(0.16, 0.025, 0.3, 0.01), lambert(0x111522), 0.14, 1.26, 0); // cap peak
+        else if (o.stripe !== undefined || o.cylinder) { mk(sharedRounded(0.12, 0.03, 0.36, 0.01), hm, -0.12, 1.2, 0); mk(sharedRounded(0.05, 0.12, 0.2, 0.02), lambert(0x15151a), 0.15, 1.2, 0); } // neck guard + visor
+      }
+      // conspicuous clothing: a fluorescent vest over the uniform where the role has one, glowing retroreflective bands on everybody
+      if (o.vest !== undefined) mk(sharedRounded(0.335, 0.5, 0.49, 0.09), new THREE.MeshLambertMaterial({ color: o.vest, emissive: o.vestGlow ?? 0 }), 0, 0.78, 0);
+      if (o.bulky) mk(sharedRounded(0.36, 0.55, 0.54, 0.1), lambert(o.top), 0, 0.78, 0);
       const refl = new THREE.MeshLambertMaterial({ color: 0xf4f6f8, emissive: 0x8a9096 });
       mk(sharedRounded(0.345, 0.06, 0.5, 0.02), refl, 0, 0.64, 0); // reflective band
       mk(sharedRounded(0.345, 0.05, 0.5, 0.02), refl, 0, 0.92, 0);
-      if (isFire) mk(sharedRounded(0.345, 0.045, 0.5, 0.02), new THREE.MeshLambertMaterial({ color: 0xffe14a, emissive: 0x6a5600 }), 0, 0.72, 0);
+      if (o.stripe !== undefined) mk(sharedRounded(0.345, 0.045, 0.5, 0.02), new THREE.MeshLambertMaterial({ color: o.stripe, emissive: 0x3a3a1a }), 0, 0.72, 0);
       mk(sharedRounded(0.07, 0.07, 0.07, 0.02), refl, -0.01, 0.78, 0.26); mk(sharedRounded(0.07, 0.07, 0.07, 0.02), refl, -0.01, 0.78, -0.26);
-      if (isFire) { mk(sharedCapsule(0.09, 0.3), lambert(0xc9ced4), -0.26, 0.82, 0); } // air cylinder
-      if (isMed) mk(sharedRounded(0.32, 0.08, 0.48, 0.02), lambert(0xff7a1a), 0, 0.8, 0);
+      if (o.cylinder) mk(sharedCapsule(0.09, 0.3), lambert(0xc9ced4), -0.26, 0.82, 0); // air cylinder
+      if (o.shield) mk(sharedRounded(0.05, 0.8, 0.5, 0.02), new THREE.MeshLambertMaterial({ color: 0x2a3a4a, transparent: true, opacity: 0.7 }), 0.3, 0.8, 0.34); // riot shield
     } else {
       mk(sharedHair(), lambert(hairCols[(p.id * 7) % hairCols.length]), -0.01, 1.24, 0);
       if (p.kind === 'pedestrian' && p.id % 4 === 0) mk(sharedRounded(0.14, 0.2, 0.28, 0.04), lambert([0x4a3a2a, 0x2a3a4a, 0x7a2a2a][p.id % 3]), -0.24, 0.82, 0); // backpack
@@ -1126,11 +1143,11 @@ export class Three3DRenderer implements GameRenderer {
     for (const [id, g] of this.selectionRings) if (!keep.has(id)) { this.scene.remove(g); this.disposeObj(g); this.selectionRings.delete(id); }
   }
 
-  private syncTrafficLights(phase: 0 | 1): void {
+  private syncTrafficLights(phase: 0 | 1 | 2): void {
     if (phase === this.lightPhase) return;
     this.lightPhase = phase;
     for (const b of this.trafficBulbs) {
-      const green = (phase === 0) === b.ew;
+      const green = phase !== 2 && (phase === 0) === b.ew;
       const mat = b.mesh.material as THREE.MeshStandardMaterial;
       mat.color.set(green ? 0x43e05a : 0xf44336);
       mat.emissive.set(green ? 0x43e05a : 0xf44336);
