@@ -99,6 +99,8 @@ export interface RenderSnapshot {
   hydrants: { x: number; y: number }[];
   /** wind direction (unit vector, tile space) and strength */
   wind: { x: number; y: number; strength: number };
+  /** it is raining (visual weather; traffic drives slower) */
+  raining: boolean;
   /** explosions of the last seconds (the renderer plays each id once) */
   explosions: { id: number; x: number; y: number; age: number }[];
 }
@@ -109,7 +111,7 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
   const ix = (e: { px: number; x: number }) => lerp(e.px, e.x, alpha);
   const iy = (e: { py: number; y: number }) => lerp(e.py, e.y, alpha);
-  const snap: RenderSnapshot = { time: world.time, lightPhase: world.lightPhase, vehicles: [], people: [], cars: [], buildings: [], incidents: [], obstacles: [], hydrants: world.hydrants, wind: world.wind, explosions: world.explosions.filter(e => world.time - e.time < 8).map(e => ({ id: e.id, x: e.x, y: e.y, age: world.time - e.time })) };
+  const snap: RenderSnapshot = { time: world.time, lightPhase: world.lightPhase, vehicles: [], people: [], cars: [], buildings: [], incidents: [], obstacles: [], hydrants: world.hydrants, wind: world.wind, raining: world.raining, explosions: world.explosions.filter(e => world.time - e.time < 8).map(e => ({ id: e.id, x: e.x, y: e.y, age: world.time - e.time })) };
   const aerial = new Map<number, { x: number; y: number }>();
   const defusing = new Set<number>();
   const loading = new Set<number>();

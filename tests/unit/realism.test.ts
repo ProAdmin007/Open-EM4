@@ -291,8 +291,8 @@ describe('parked vehicles line up with the road', () => {
       const tx = Math.floor(v.x), ty = Math.floor(v.y);
       if (!w.isRoad(tx, ty)) continue;
       expect(aligned(v.angle)).toBe(true);
-      expect(Math.abs(v.x - (tx + 0.5))).toBeLessThan(0.05);
-      expect(Math.abs(v.y - (ty + 0.5))).toBeLessThan(0.05);
+      expect(Math.abs(v.x - (tx + 0.5))).toBeLessThan(0.21);
+      expect(Math.abs(v.y - (ty + 0.5))).toBeLessThan(0.21);
       expect(w.isIntersection(tx, ty)).toBe(false);
     }
   });
@@ -307,7 +307,7 @@ describe('parked vehicles line up with the road', () => {
     w.orderStop([v.id]);
     run(w, 3);
     const tx = Math.floor(v.x), ty = Math.floor(v.y);
-    if (w.isRoad(tx, ty)) { expect(aligned(v.angle)).toBe(true); expect(Math.abs(v.x - (tx + 0.5))).toBeLessThan(0.06); expect(Math.abs(v.y - (ty + 0.5))).toBeLessThan(0.06); }
+    if (w.isRoad(tx, ty)) { expect(aligned(v.angle)).toBe(true); expect(Math.abs(v.x - (tx + 0.5))).toBeLessThan(0.21); expect(Math.abs(v.y - (ty + 0.5))).toBeLessThan(0.21); }
   });
 });
 

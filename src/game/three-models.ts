@@ -461,6 +461,33 @@ export function buildVehicle(model: string, category: string, size: { length: nu
     parts.beacons.push({ mesh: f1, on: 2, off: 0.1, phase: 0 }, { mesh: f2, on: 2, off: 0.1, phase: 1 });
   }
 
+  // ---- more light: grille strobes and a longer bar with extra lenses
+  for (const s2 of [-1, 1]) {
+    const gl = box(g, 0.05, 0.08, 0.18, glow(s2 < 0 ? spec.accent : spec.accent2, 0.3), L / 2 + 0.03, H * 0.42, s2 * W * 0.22);
+    gl.material = own(gl.material as THREE.Material);
+    parts.beacons.push({ mesh: gl, on: 2.4, off: 0.1, phase: s2 < 0 ? 0 : 1 });
+  }
+  for (const s2 of [-1, 1]) for (const k of [-1, 1]) {
+    const lens = box(g, 0.1, 0.1, W * 0.12, glow(s2 < 0 ? spec.accent : spec.accent2, 0.3), barX + k * 0.1, roofY + 0.24, s2 * W * 0.3);
+    lens.material = own(lens.material as THREE.Material);
+    parts.beacons.push({ mesh: lens, on: 2.6, off: 0.1, phase: s2 < 0 ? 0 : 1 });
+  }
+
+  // ---- people inside: a driver (and a co-driver in vans and trucks) visible through the windows
+  {
+    const tone = [0xe8c39e, 0xd2a07a, 0xb27a56, 0xf2d3b3][category.length % 4];
+    const unif = category === 'fire' ? 0x1f2430 : category === 'police' ? 0x1a2f6a : category === 'ambulance' ? 0x1f6fd0 : 0x2a2a2a;
+    const hat = category === 'fire' ? 0xf2c230 : category === 'police' ? 0x1b2a55 : 0xf2f2f2;
+    const dx = spec.shape === 'truck' ? L * 0.35 : spec.shape === 'van' ? L * 0.24 : L * 0.04;
+    const seatY = spec.shape === 'car' ? H * 0.5 : H * 0.55;
+    const seats = spec.shape === 'car' ? [-W * 0.22] : [-W * 0.22, W * 0.22];
+    for (const z of seats) {
+      const tors = new THREE.Mesh(boxGeo(0.28, 0.4, 0.4), lambert(unif)); tors.position.set(dx, seatY, z); g.add(tors);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), lambert(tone)); head.position.set(dx + 0.02, seatY + 0.32, z); g.add(head);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), lambert(hat)); cap.position.set(dx + 0.02, seatY + 0.36, z); g.add(cap);
+    }
+  }
+
   spec.extras?.(g, L, W, H, wr);
   return { group: g, parts };
 }
@@ -591,6 +618,73 @@ export function buildWreck(seed: number): THREE.Group {
   group.rotation.z = 0.12 + (seed % 3) * 0.06;
   group.rotation.x = ((seed % 2) - 0.5) * 0.14;
   return group;
+}
+/**
+ * Crash details on a wreck: amber hazard lights that blink, a deployed airbag behind the windscreen and short-circuit sparks.
+ * The renderer animates everything tagged in userData.blink / userData.spark.
+ */
+export function addCrashFx(wreck: THREE.Group, seed: number): void {
+  const fx = new THREE.Group();
+  fx.name = 'crashfx';
+  for (const [x, z] of [[2.0, 0.8], [2.0, -0.8], [-2.0, 0.8], [-2.0, -0.8]]) {
+    const lamp = box(fx, 0.12, 0.14, 0.2, own(glow(0xffa000, 0.2)), x, 0.62, z);
+    lamp.userData.blink = true;
+  }
+  if (seed % 3 !== 0) { // airbag
+    const bag = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8), lambert(0xf2f2ee));
+    bag.scale.set(0.8, 0.9, 1.2); bag.position.set(0.55, 0.95, seed % 2 ? 0.35 : -0.35); fx.add(bag);
+  }
+  for (let i = 0; i < 4; i++) {
+    const sp = box(fx, 0.06, 0.06, 0.06, own(glow(0xffd070, 2.2)), -0.4 + i * 0.5, 0.18, (i % 2 ? 1 : -1) * 0.55);
+    sp.userData.spark = i;
+  }
+  wreck.add(fx);
+}
+/** A lorry lying on its side across the carriageway, wheels in the air. */
+export function buildOverturnedTruck(seed: number): THREE.Group {
+  const { group } = buildVehicle('vehicle/service_van', 'tech', { length: 7.5, width: 2.5, height: 3.1 });
+  group.traverse(o => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && m.material instanceof THREE.MeshStandardMaterial && m.material.emissive.getHex() === 0) {
+      const dim = m.material.clone(); dim.userData = {}; dim.color.multiplyScalar(0.6); m.material = dim;
+    }
+  });
+  const g = new THREE.Group();
+  group.rotation.x = Math.PI / 2 + 0.05; // on its side
+  group.position.y = 1.3;
+  g.add(group);
+  g.rotation.y = seed * 0.7;
+  return g;
+}
+/** Picket signs and a banner for a demonstration: placed amongst the crowd. */
+const SLOGANS = ['NIET IN ONZE BUURT', 'GENOEG GEPRAAT', 'WIJ BLIJVEN', 'HOREN AAN ONS', 'STOP HET PLAN', 'SAMEN STERK'];
+export function buildDemonstration(seed: number): THREE.Group {
+  const g = new THREE.Group();
+  const wood = lambert(0x8a6a44);
+  const board = (text: string, color: string): THREE.Material => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+    const ctx = c.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = color; ctx.fillRect(0, 0, 256, 128);
+      ctx.fillStyle = '#111'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const words = text.split(' ');
+      words.forEach((w, i) => ctx.fillText(w, 128, 64 + (i - (words.length - 1) / 2) * 34));
+    }
+    return new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(c) });
+  };
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.4 + seed, r = 1.6 + (i % 3) * 0.9;
+    const sign = new THREE.Group();
+    box(sign, 0.05, 2.0, 0.05, wood, 0, 1.0, 0);
+    const b = box(sign, 0.04, 0.55, 0.85, board(SLOGANS[(i + seed) % SLOGANS.length], ['#f2f0e6', '#ffe14a', '#f7b6b6', '#bfe3ff'][i % 4]), 0, 2.05, 0);
+    b.rotation.x = ((i % 3) - 1) * 0.06;
+    sign.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+    sign.rotation.y = a + Math.PI / 2 + ((i % 3) - 1) * 0.5;
+    g.add(sign);
+  }
+  box(g, 0.06, 2.3, 0.06, wood, -2.6, 1.15, -3.4); box(g, 0.06, 2.3, 0.06, wood, 2.6, 1.15, -3.4);
+  box(g, 5.0, 0.9, 0.03, board('WIJ ZIJN ER KLAAR MEE', '#f2f2f2'), 0, 1.9, -3.4);
+  return g;
 }
 export function buildFallenTree(seed: number): THREE.Group {
   const g = new THREE.Group();

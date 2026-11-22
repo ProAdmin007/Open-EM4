@@ -6,7 +6,8 @@ import { TILE_METERS, tileToWorld3D, world3DToTile } from '../sim/space';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Commands, type SelectionHost } from './selection';
-import { buildDripStand, buildOxygenBottle, paint, buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
+import { Weather } from './three-weather';
+import { addCrashFx, buildDemonstration, buildOverturnedTruck, buildDripStand, buildOxygenBottle, paint, buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
 import { ParticlePool, setSegment } from './three-fx';
 import { bakeGroundChunks, buildGroundMeshes, groundHeight } from './three-ground';
 import { planarRoofUVs, roofTexture, scaleBoxUVs, wallTexture } from './three-textures';
@@ -150,6 +151,7 @@ export class Three3DRenderer implements GameRenderer {
   private buildingsGroup = new THREE.Group();
   private furnitureGroup = new THREE.Group();
   private env!: Environment;
+  private weather!: Weather;
   private winLit: THREE.InstancedMesh | null = null;
   private winDark: THREE.InstancedMesh | null = null;
   private fireWin: THREE.InstancedMesh | null = null;
@@ -199,6 +201,7 @@ export class Three3DRenderer implements GameRenderer {
     const fog = new THREE.Fog(0xbcd8f0, 260, 900);
     this.scene.fog = fog;
     this.env = new Environment(this.scene, fog);
+    this.weather = new Weather(this.scene);
     { // soft image-based lighting so car paint and glass pick up reflections
       const pmrem = new THREE.PMREMGenerator(this.renderer);
       this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -258,6 +261,7 @@ export class Three3DRenderer implements GameRenderer {
     this.lastDt = dt;
     this.stepCamera(dt);
     this.env.update(snap.time, this.target, this.camera.position);
+    this.weather.update(this.time, dt, snap.raining, this.env.daylight, this.target, this.scene.fog as THREE.Fog, this.env.sun);
     this.anyDefusing = snap.incidents.some(i => i.defusing);
     this.syncVehicles(snap.vehicles);
     this.syncPeople(snap.people);
@@ -827,9 +831,16 @@ export class Three3DRenderer implements GameRenderer {
     const g = new THREE.Group();
     if (/accident|collision|hit/.test(kind)) {
       g.add(buildAccidentDetail(seed));
-      const w = buildWreck(seed); w.position.set(0, 0, 0); w.rotation.y = seed * 0.9; g.add(w);
-      if (kind !== 'pedestrian_hit') { const w2 = buildWreck(seed + 1); w2.position.set(3.2, 0, 2.4); w2.rotation.y = seed * 0.9 + 1.2; g.add(w2); }
+      const w = buildWreck(seed); w.position.set(0, 0, 0); w.rotation.y = seed * 0.9; g.add(w); addCrashFx(w, seed);
+      if (kind !== 'pedestrian_hit') {
+        const w2 = seed % 5 === 0 ? buildOverturnedTruck(seed) : buildWreck(seed + 1);
+        w2.position.set(3.2, 0, 2.4);
+        if (seed % 5 !== 0) { w2.rotation.y = seed * 0.9 + 1.2; addCrashFx(w2, seed + 1); }
+        g.add(w2);
+      }
       const d = buildDebris(seed); d.position.set(1.5, 0, 1); g.add(d);
+    } else if (kind === 'demonstration') {
+      g.add(buildDemonstration(seed));
     } else if (kind === 'burglary' || kind === 'armed_robbery' || kind === 'vandalism' || kind === 'fight' || kind === 'crime') {
       const d = buildDebris(seed); d.position.set(0, 0, 0); g.add(d);
     }
@@ -860,6 +871,10 @@ export class Three3DRenderer implements GameRenderer {
         beam.position.set(p0.x, 20, p0.z);
         const props = this.propsFor(inc.kind, inc.id);
         props.position.set(p0.x + 3.2, 0, p0.z + 1.2);
+        if (inc.kind === 'demonstration') { // in front of the building, on the street side
+          const bd = snap.buildings.find(x => Math.abs(x.x + x.w / 2 - inc.x) < 0.01 && Math.abs(x.y + x.h / 2 - inc.y) < 0.01);
+          props.position.set(p0.x, 0, p0.z + ((bd ? bd.h : 3) / 2 + 1.6) * TILE_METERS);
+        }
         this.scene.add(ring, beam, props);
         let pack: THREE.Group | undefined;
         if (inc.kind === 'suspicious_package') {
@@ -885,6 +900,10 @@ export class Three3DRenderer implements GameRenderer {
         if (fx.robot) { fx.robot.visible = inc.defusing; fx.robot.children.forEach((c, i) => { if (i === 5) c.rotation.z = -0.25 + Math.sin(this.time * 3) * 0.2; }); }
         fx.pack.visible = !inc.defused;
       }
+      fx.props.traverse(o => { // hazard lights blink, sparks flicker
+        if (o.userData.blink) ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).emissiveIntensity = Math.floor(this.time * 2.2) % 2 === 0 ? 2.2 : 0.15;
+        else if (o.userData.spark !== undefined) o.visible = Math.sin(this.time * 23 + o.userData.spark * 2.1) > 0.6 && Math.sin(this.time * 1.3 + o.userData.spark) > -0.2;
+      });
       if (fx.beacon) (fx.beacon.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(this.time * 10) > 0 ? 2 : 0.1;
       if (inc.clearing) { // the wreck is hoisted onto the flatbed: an arc from the road to the truck bed
         const tv = this.lastVehicles.get(inc.clearing.vehicleId);

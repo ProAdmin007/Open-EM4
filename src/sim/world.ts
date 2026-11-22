@@ -546,7 +546,13 @@ export class World {
       if (!this.findBlocker(v, v.x, v.y, Math.cos(goal), Math.sin(goal), 0.01, len0, len0 * 0.5, PRIO_EMERGENCY)) v.angle += Math.max(-4 * dt, Math.min(4 * dt, diff));
     }
     // glide to the middle of the lane
-    const cx = tx + 0.5, cy = ty + 0.5, dx = cx - v.x, dy = cy - v.y, dd = Math.hypot(dx, dy);
+    // a parked vehicle pulls over to the kerb (right-hand side) so the lane stays passable
+    let cx = tx + 0.5, cy = ty + 0.5;
+    if (lane && !this.isIntersection(tx, ty) && !v.path.length) {
+      const rx = -lane.y, ry = lane.x; // right of the direction of travel
+      if (!this.isRoad(tx + rx, ty + ry) && Math.abs(Math.cos(v.angle) * lane.x + Math.sin(v.angle) * lane.y) > 0.9) { cx += rx * 0.2; cy += ry * 0.2; }
+    }
+    const dx = cx - v.x, dy = cy - v.y, dd = Math.hypot(dx, dy);
     if (dd > 1e-3 && Math.abs(diff) < 0.6) {
       const st = Math.min(dd, 1.6 * dt);
       const len = this.vehicleDef(v).length;
