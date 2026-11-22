@@ -256,4 +256,5 @@ export interface Pedestrian extends Entity {
 export type GameEvent =
   | { type: 'incident_started' | 'incident_escalated' | 'incident_resolved' | 'incident_failed'; incidentId: number; message: string }
   | { type: 'info' | 'warn'; message: string }
+  | { type: 'explosion'; x: number; y: number; message: string }
   | { type: 'game_over' | 'mission_complete'; message: string };

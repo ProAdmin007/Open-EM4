@@ -9,7 +9,7 @@ Command fire engines, ambulances, police cars and tow trucks in a living city �
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-94%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-97%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 **English** · [Nederlands](README.nl.md)
@@ -33,12 +33,13 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 - 🔥 **26 kinds of incidents** with their own descriptions: house, kitchen, apartment, office/school, industrial and warehouse fires · cardiac arrest, fall, choking, childbirth, allergic reaction, stroke · car, motorcycle, pedestrian and truck accidents · burglary, fight, armed robbery, vandalism · blockades, fallen trees and broken-down trucks.
 - 🧯 **Realistic firefighting** – every engine carries a water tank (it runs dry!) and hooks up to street hydrants to refill; fires in tall buildings need the aerial ladder (without it your crews only get 40% effect), and the 3D view raises and turns the ladder towards the fire.
 - 🤖 **Bomb squad** (inspired by the Los Angeles mod) – a *suspicious package* incident: secure the area with tape, cones, barriers and flares, send the crowd away and let the bomb-disposal crew roll out the robot.
+- 💥 **Consequences** – an unattended suspicious package explodes (damage, a new fire, injured bystanders, screen shake and a blast sound); a secured scene closes the surrounding road to civilian traffic, which re-routes around the barriers.
 - ⏱️ **Severity matters** – treatment, arrest, securing, clearing and fire-fighting times grow with the severity, differ per incident type, and unattended incidents escalate and eventually fail.
 - 🚦 **Believable traffic** – right-hand lanes, U-turns, emergency vehicles that never overlap other vehicles or people, parking bays at every station, and crews that step out *beside* the vehicle.
 - 🔊 **Fully procedural audio** – Dutch-style two-tone sirens, crackling fire, water spray, traffic hum and UI effects, all synthesised with the Web Audio API (no sound files).
 - 🎯 **Game modes** – six missions, endless Freeplay (Easy / Normal / Hard, seeded for reproducible scenarios), save & load, local highscores.
 - 🧩 **Moddable** – vehicles, roles, incidents, missions and maps are validated JSON; an example content pack is included.
-- 🧪 **Well tested** – deterministic simulation with 94 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
+- 🧪 **Well tested** – deterministic simulation with 97 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
 - 🧊 **Experimental 3D view** – a procedural three.js city (buildings, vehicles, people, fire/smoke, traffic lights) with an RTS camera, next to the original 2D view; switch in Settings or the main menu. Lazily loaded, so it costs nothing if you never turn it on ([docs/3d.md](docs/3d.md)).
 
 The experimental 3D view (procedural three.js, no external assets):
@@ -48,6 +49,8 @@ The experimental 3D view (procedural three.js, no external assets):
 <p align="center"><img src="docs/screenshot-3d-aerial.png" width="49%" alt="3D view: the aerial ladder at a high-rise fire"> <img src="docs/screenshot-3d-bomb.png" width="49%" alt="3D view: the bomb squad at a suspicious package"></p>
 
 <p align="center"><img src="docs/screenshot-3d-fire-big.png" width="32%" alt="3D view: a big house fire at dusk"> <img src="docs/screenshot-3d-fire-night.png" width="32%" alt="3D view: the same fire at night"> <img src="docs/screenshot-3d-medical.png" width="32%" alt="3D view: paramedics treat a casualty at a crash"></p>
+
+<p align="center"><img src="docs/screenshot-3d-cordon.png" width="49%" alt="3D view: a traffic cordon with barriers, cones and flares"> <img src="docs/screenshot-3d-explosion.png" width="49%" alt="3D view: a suspicious package explodes"></p>
 
 ## Play it
 

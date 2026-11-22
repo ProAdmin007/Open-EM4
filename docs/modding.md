@@ -155,3 +155,5 @@ Map character `W` is water (not walkable or drivable).
 - Vehicle `tank` (litres): fire vehicles use `6 L/s` per working nozzle, refill at hydrants (`HYDRANT_REFILL`) and stop spraying when empty. A vehicle parked within 4.5 tiles of a hydrant hooks up and has unlimited water.
 - Buildings with `floors >= 4` need an `aerial_ladder` crew on the fire for full effect (otherwise 40%).
 - Ability `defuse` needs the vehicle equipment `bomb_robot`; incident objective `device_defused` with an optional `defuseTime` (seconds, scaled by severity). See the `suspicious_package` incident and the `bomb_squad` vehicle / `bomb_tech` role in `src/data`.
+
+- An incident with the objective `device_defused` that runs out of time explodes: the building takes damage, a fire incident starts and the bystanders still standing around become casualties. A secured incident closes the road tiles within `CORDON_RADIUS` (3.2) to civilian cars.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newWorld, run } from './helpers';
-import type { World } from '../../src/sim/world';
+import { World } from '../../src/sim/world';
+import { content } from './helpers';
 
 function driveTo(w: World, vid: number, x: number, y: number): void {
   w.orderMove([vid], x, y);
@@ -100,5 +101,54 @@ describe('LA-inspired police work: bomb robot', () => {
     for (const id of inc.bystanders) { const by = w.bystanders.get(id); if (by) by.leaving = true; }
     run(w, 5);
     expect(inc.status).toBe('resolved');
+  });
+});
+
+describe('explosion and cordons', () => {
+  it('an unattended suspicious package explodes: damage, a fire incident and injured bystanders', () => {
+    const w = newWorld(5);
+    const inc = w.spawnIncident('suspicious_package', { severity: 1 })!;
+    const b = w.buildings.get(inc.buildingId!)!;
+    const events: string[] = [];
+    run(w, 400, () => { events.push(...w.drainEvents().map(e => e.type)); return inc.status === 'failed'; });
+    events.push(...w.drainEvents().map(e => e.type));
+    expect(inc.status).toBe('failed');
+    expect(events).toContain('explosion');
+    expect(w.explosions.length).toBe(1);
+    expect(b.damage).toBeGreaterThan(30);
+    const fire = [...w.incidents.values()].find(i => i.buildingId === b.id);
+    expect(fire).toBeTruthy();
+    expect(b.fire).toBeGreaterThan(0);
+    expect(fire!.victims.length).toBeGreaterThan(0);
+  });
+
+  it('a defused package does not explode', () => {
+    const w = newWorld(5);
+    const inc = w.spawnIncident('suspicious_package', { severity: 1 })!;
+    inc.defused = true; inc.secured = true;
+    for (const id of inc.bystanders) { const by = w.bystanders.get(id); if (by) by.leaving = true; }
+    run(w, 10);
+    expect(w.explosions.length).toBe(0);
+    expect(inc.status).toBe('resolved');
+  });
+
+  it('securing a scene closes the road to civilian cars, which re-route', () => {
+    const w = World.create(content, { seed: 21, difficulty: 'normal', freeplay: false, traffic: true });
+    const inc = w.spawnIncident('car_accident', { severity: 1 })!;
+    inc.secured = true;
+    w.rebuildCordon();
+    expect(w.cordon.size).toBeGreaterThan(4);
+    run(w, 5); // cars already inside may drive out
+    const entered = new Set<number>();
+    const key = (x: number, y: number) => y * 4096 + x;
+    const start = new Set(w.civilians.filter(c => w.cordon.has(key(Math.floor(c.x), Math.floor(c.y)))).map(c => c.id));
+    for (let i = 0; i < 30 * 40; i++) {
+      w.tick();
+      for (const c of w.civilians) if (!start.has(c.id) && w.cordon.has(key(Math.floor(c.x), Math.floor(c.y)))) entered.add(c.id);
+    }
+    expect(entered.size).toBe(0);
+    inc.secured = false; inc.status = 'resolved';
+    w.rebuildCordon();
+    expect(w.cordon.size).toBe(0);
   });
 });

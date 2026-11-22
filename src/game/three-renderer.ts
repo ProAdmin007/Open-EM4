@@ -247,6 +247,7 @@ export class Three3DRenderer implements GameRenderer {
     this.syncSelection(snap);
     this.syncTrafficLights(snap.lightPhase);
     this.syncHoses(snap);
+    this.syncExplosions(snap, dt);
     this.updateFire(snap, dt);
     this.renderer.render(this.scene, this.camera);
   }
@@ -291,6 +292,53 @@ export class Three3DRenderer implements GameRenderer {
     this.scene.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.material) (Array.isArray(m.material) ? m.material : [m.material]).forEach(mm => { mm.needsUpdate = true; }); });
   }
   setDayNight(on: boolean): void { this.env.enabled = on; }
+  // ---------- explosions ----------
+  private seenExplosions = new Set<number>();
+  private blasts: { ring: THREE.Mesh; age: number }[] = [];
+  private blastLight = new THREE.PointLight(0xffaa55, 0, 110, 1.3);
+  private shake = 0;
+  private syncExplosions(snap: RenderSnapshot, dt: number): void {
+    if (!this.blastLight.parent) this.scene.add(this.blastLight);
+    for (const e of snap.explosions) {
+      if (this.seenExplosions.has(e.id)) continue;
+      this.seenExplosions.add(e.id);
+      if (e.age > 2) continue;
+      const p = tileToWorld3D(e.x, e.y);
+      const r = (): number => Math.random() - 0.5;
+      this.halo.emit({ x: p.x, y: 2, z: p.z, vx: 0, vy: 0, vz: 0, life: 0.35, size0: 26, size1: 44, c0: 0xffffff, c1: 0xffc060, alpha: 1 });
+      for (let i = 0; i < 70; i++) { // fireball
+        const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 11;
+        this.flames.emit({ x: p.x + r() * 2, y: 1 + Math.random() * 2, z: p.z + r() * 2, vx: Math.cos(a) * sp, vy: 2 + Math.random() * 9, vz: Math.sin(a) * sp, life: 0.7 + Math.random() * 0.9, size0: 3 + Math.random() * 2, size1: 7 + Math.random() * 4, c0: Math.random() < 0.4 ? 0xfff0b0 : 0xff8a1c, c1: 0xc02a08, alpha: 1 });
+      }
+      for (let i = 0; i < 45; i++) this.smoke.emit({ x: p.x + r() * 4, y: 2, z: p.z + r() * 4, vx: r() * 6, vy: 4 + Math.random() * 6, vz: r() * 6, life: 5 + Math.random() * 4, size0: 3, size1: 15 + Math.random() * 8, c0: 0x151515, c1: 0x7a7a80, alpha: 0.6 });
+      for (let i = 0; i < 60; i++) { // glowing debris
+        const a = Math.random() * Math.PI * 2, sp = 6 + Math.random() * 12;
+        this.halo.emit({ x: p.x, y: 1.5, z: p.z, vx: Math.cos(a) * sp, vy: 6 + Math.random() * 14, vz: Math.sin(a) * sp, life: 1.8, size0: 0.4, size1: 0.12, c0: 0xffd060, c1: 0xff3000, alpha: 1 });
+      }
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.25, 56), new THREE.MeshBasicMaterial({ color: 0xffe8c0, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+      ring.rotation.x = -Math.PI / 2; ring.position.set(p.x, 0.4, p.z);
+      this.scene.add(ring);
+      this.blasts.push({ ring, age: 0 });
+      this.blastLight.position.set(p.x, 8, p.z);
+      this.blastLight.intensity = 2200;
+      this.shake = 1;
+    }
+    this.blastLight.intensity *= Math.exp(-dt * 4.5);
+    for (const b of this.blasts) {
+      b.age += dt;
+      b.ring.scale.setScalar(1 + b.age * 55);
+      (b.ring.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.8 - b.age * 1.0);
+    }
+    for (const b of this.blasts.filter(x => x.age > 0.9)) { this.scene.remove(b.ring); this.disposeObj(b.ring); }
+    this.blasts = this.blasts.filter(x => x.age <= 0.9);
+    if (this.shake > 0.01) {
+      this.updateCamera();
+      this.camera.position.x += (Math.random() - 0.5) * this.shake * 1.4;
+      this.camera.position.y += (Math.random() - 0.5) * this.shake * 1.0;
+      this.camera.position.z += (Math.random() - 0.5) * this.shake * 1.4;
+      this.shake *= Math.exp(-dt * 3.5);
+    } else if (this.shake > 0) { this.shake = 0; this.updateCamera(); }
+  }
   private updatePoolScale(): void {
     const h = this.renderer.getDrawingBufferSize(new THREE.Vector2()).y || 768;
     for (const p of [this.flames, this.halo, this.smoke, this.water]) p.setScale(h, this.camera.fov);
@@ -714,6 +762,18 @@ export class Three3DRenderer implements GameRenderer {
             const bar = buildBarrier();
             bar.position.set(p0.x + (A[0] + B[0]) / 2 * a * 1.04, 0, p0.z + (A[1] + B[1]) / 2 * a * 1.04);
             bar.rotation.y = i === 0 ? 0 : Math.PI / 2;
+            tape.add(bar);
+          }
+        }
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { // road closed to traffic at the cordon edge (the simulation re-routes civilians)
+          const tx = Math.floor(inc.x + dx * 3.2), ty = Math.floor(inc.y + dz * 3.2);
+          for (const k of [-1, 0, 1]) {
+            const bx = tx + (dz ? k : 0), by = ty + (dx ? k : 0);
+            if (!this.world?.isRoad(bx, by)) continue;
+            const bp = tileToWorld3D(bx + 0.5, by + 0.5);
+            const bar = buildBarrier();
+            bar.position.set(bp.x, 0, bp.z);
+            bar.rotation.y = dx ? Math.PI / 2 : 0;
             tape.add(bar);
           }
         }

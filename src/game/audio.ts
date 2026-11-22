@@ -5,7 +5,7 @@ import type { World } from '../sim/world';
  * Fully procedural audio (Web Audio API): no sound files, so there is nothing to license.
  * Continuous layers (sirens, fire, water, traffic) follow the camera; one-shot effects react to game events.
  */
-export type Sfx = 'alert' | 'escalate' | 'resolved' | 'failed' | 'click' | 'order' | 'dismount' | 'death' | 'pickup' | 'warn';
+export type Sfx = 'alert' | 'escalate' | 'resolved' | 'failed' | 'click' | 'order' | 'dismount' | 'death' | 'pickup' | 'warn' | 'explosion';
 
 interface Siren { osc: OscillatorNode; osc2: OscillatorNode; amp: GainNode; pan: StereoPannerNode }
 
@@ -210,6 +210,7 @@ export class AudioEngine {
       case 'escalate': [0, 0.15, 0.3].forEach(d => this.tone(330, 0.12, 'square', 0.14, d)); break;
       case 'resolved': [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.22, i * 0.1)); break;
       case 'failed': this.tone(320, 0.7, 'sawtooth', 0.18, 0, 90); break;
+      case 'explosion': this.burst(0.9, 0.9, 260); this.burst(0.5, 0.6, 1400, 'lowpass', 0.02); this.tone(70, 1.2, 'sine', 0.6, 0, 28); break;
       case 'click': this.tone(1400, 0.035, 'square', 0.05); break;
       case 'order': this.burst(0.08, 0.1, 3000, 'bandpass'); this.tone(1500, 0.05, 'sine', 0.08, 0.07); break;
       case 'dismount': this.burst(0.12, 0.3, 500); this.burst(0.1, 0.25, 420, 'lowpass', 0.14); break;
@@ -225,6 +226,7 @@ export class AudioEngine {
       case 'incident_escalated': this.play('escalate'); break;
       case 'incident_resolved': case 'mission_complete': this.play('resolved'); break;
       case 'incident_failed': case 'game_over': this.play('failed'); break;
+      case 'explosion': this.play('explosion'); break;
       case 'warn': this.play(/overleden/.test(e.message) ? 'death' : 'warn'); break;
       case 'info': this.play('pickup'); break;
     }

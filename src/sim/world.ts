@@ -19,6 +19,8 @@ export const HYDRANT_REFILL = 90;
 /** Buildings from this many floors up need an aerial ladder to fight the fire at full strength. */
 export const TALL_FLOORS = 4;
 export const TALL_FACTOR = 0.4;
+/** Road tiles within this many tiles of a secured incident are closed to civilian traffic. */
+export const CORDON_RADIUS = 3.2;
 /** A dismounted responder with the `coordinate` ability (bevelvoerder) within this range makes others 25% more effective. */
 export const COMMANDER_RANGE = 10;
 export const COMMANDER_BONUS = 1.25;
@@ -844,7 +846,7 @@ export class World {
         if (!inc || inc.secured) return done();
         if (this.approach(r, inc.x, inc.y, 3, done)) {
           t.progress += dt;
-          if (t.progress >= 5 * sevFactor(inc.severity, 0.25)) { inc.secured = true; this.emit({ type: 'info', message: `Locatie afgezet: ${inc.name}` }); done(); }
+          if (t.progress >= 5 * sevFactor(inc.severity, 0.25)) { inc.secured = true; this.rebuildCordon(); this.emit({ type: 'info', message: `Locatie afgezet: ${inc.name}; verkeer wordt omgeleid` }); done(); }
         }
         break;
       }
@@ -946,6 +948,49 @@ export class World {
   }
 
   private tallWarned = new Set<string>();
+  /** Road tiles closed to civilian cars around secured incidents (emergency vehicles may still pass). */
+  cordon = new Set<number>();
+  /** Explosions that happened (for the renderer): id, position, time in game seconds. */
+  explosions: { id: number; x: number; y: number; time: number }[] = [];
+
+  /** Recompute the closed road tiles; civilians re-route on their own when their path is blocked. */
+  rebuildCordon(): void {
+    const next = new Set<number>();
+    for (const inc of this.incidents.values()) {
+      if (!inc.secured || inc.status !== 'active') continue;
+      const r = Math.ceil(CORDON_RADIUS);
+      for (let y = Math.floor(inc.y) - r; y <= Math.floor(inc.y) + r; y++) for (let x = Math.floor(inc.x) - r; x <= Math.floor(inc.x) + r; x++) {
+        if (this.isRoad(x, y) && Math.hypot(x + 0.5 - inc.x, y + 0.5 - inc.y) <= CORDON_RADIUS) next.add(key(x, y));
+      }
+    }
+    this.cordon = next;
+  }
+
+  /** May this civilian car enter the tile? Cars that are already inside a cordon may leave through it. */
+  private civCanEnter(c: Civilian, x: number, y: number): boolean {
+    if (!this.isCivDrivable(x, y)) return false;
+    return !this.cordon.has(key(x, y)) || this.cordon.has(key(Math.floor(c.x), Math.floor(c.y)));
+  }
+
+  /** The device went off: damage, a fire, and the people who were still standing around are hurt. */
+  private explode(inc: Incident, b: Building | null, crowd: { x: number; y: number }[]): void {
+    this.explosions.push({ id: this.newId(), x: inc.x, y: inc.y, time: this.time });
+    this.emit({ type: 'explosion', x: inc.x, y: inc.y, message: `Explosie bij ${b?.name ?? 'de melding'}! De lading is afgegaan` });
+    if (!b || b.destroyed) return;
+    b.damage = Math.min(99, b.damage + 35);
+    const def = Object.values(this.content.incidents).find(d => d.fire && d.spawn.on === 'building' && d.spawn.buildingTypes?.includes(b.type)) ?? Object.values(this.content.incidents).find(d => d.fire);
+    const fire = def && !b.incidentId ? this.spawnIncident(def.id, { buildingId: b.id, severity: 2, startFire: 35 }) : null;
+    if (!fire) return;
+    for (const p of crowd.slice(0, 4)) {
+      const v: Victim = {
+        kind: 'victim', ...this.addEntityBase(p.x, p.y), incidentId: fire.id, health: this.rng.range(25, 55), conscious: true, treated: false, transport: 'scene',
+        decay: 0.6, buildingId: null, carriedBy: null, treatTime: 10, condition: 'Gewond door de explosie',
+      };
+      this.victims.set(v.id, v);
+      fire.victims.push(v.id);
+    }
+    for (const r of this.responders.values()) if (!r.inVehicle && Math.hypot(r.x - inc.x, r.y - inc.y) < 4) { r.task = null; r.path = []; } // shaken crews stop what they were doing
+  }
   private _hydrants: Vec[] | null = null;
 
   /** Fire hydrants on the pavements next to the roads; placed deterministically from the map. */
@@ -1174,7 +1219,15 @@ export class World {
       this.emit({ type: 'incident_escalated', incidentId: inc.id, message: `${inc.name} escaleert (ernst ${inc.severity})` });
     }
     if (b?.destroyed && def.fire) return this.endIncident(inc, 'failed', 'Het pand is verloren gegaan');
-    if (inc.elapsed >= def.failAfterSec * scale) return this.endIncident(inc, 'failed', 'Te laat gereageerd');
+    if (inc.elapsed >= def.failAfterSec * scale) {
+      if (def.objectives.includes('device_defused') && !inc.defused) {
+        const crowd = inc.bystanders.map(id => this.bystanders.get(id)).filter((x): x is Bystander => !!x && !x.leaving).map(x => ({ x: x.x, y: x.y }));
+        this.endIncident(inc, 'failed', 'de explosieve lading is afgegaan');
+        this.explode(inc, b ?? null, crowd);
+        return;
+      }
+      return this.endIncident(inc, 'failed', 'Te laat gereageerd');
+    }
     if (this.objectivesMet(inc, def)) this.endIncident(inc, 'resolved', 'Afgerond');
   }
 
@@ -1197,6 +1250,7 @@ export class World {
     }
     // clean up
     if (inc.obstacle.length) this.clearObstacle(inc);
+    this.rebuildCordon();
     for (const id of inc.victims) {
       const v = this.victims.get(id);
       if (!v) continue;
@@ -1520,14 +1574,14 @@ export class World {
       const idle = new Set<number>();
       for (const v of this.vehicles.values()) if (!v.path.length) idle.add(key(Math.floor(v.x), Math.floor(v.y)));
       const from = { x: Math.floor(c.x), y: Math.floor(c.y) };
-      const ok = (x: number, y: number) => this.isCivDrivable(x, y) && !idle.has(key(x, y));
+      const ok = (x: number, y: number) => this.civCanEnter(c, x, y) && !idle.has(key(x, y));
       // cars turn around when they are facing a closed road or a dead end
       const p = findPath(this.w, this.h, from, dest, ok, { edge: this.laneEdgeOk }) ?? findPath(this.w, this.h, from, dest, ok, { edge: this.laneUturnOk });
       if (!p || p.length < 8) { c.wait = 1; return; }
       c.path = p;
     }
     const next = c.path[0];
-    if (!this.isCivDrivable(next.x, next.y)) { c.path = []; c.wait = 0.5; return; }
+    if (!this.civCanEnter(c, next.x, next.y)) { c.path = []; c.wait = 0.5; return; }
     const dx = next.x + 0.5 - c.x, dy = next.y + 0.5 - c.y, d = Math.hypot(dx, dy) || 1;
     const ux = dx / d, uy = dy / d;
     // red light? only checked when about to enter an intersection
@@ -1585,6 +1639,7 @@ export class World {
     for (const b of s.bystanders ?? []) w.bystanders.set(b.id, b);
     for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; w.incidents.set(i.id, i); }
     w.obstacles = new Set(s.obstacles);
+    w.rebuildCordon();
     w.script = s.script ?? [];
     w.won = s.won ?? false;
     w.roadVersion++;
