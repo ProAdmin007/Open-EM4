@@ -9,7 +9,7 @@ Command fire engines, ambulances, police cars and tow trucks in a living city �
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-105%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-112%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 **English** · [Nederlands](README.nl.md)
@@ -28,7 +28,7 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 
 ## Features
 
-- 🏙️ **A big living city** – 102 × 72 tiles, 160+ buildings in 11 kinds (houses, flats, offices, mall, school, church, warehouses, factories…), five districts, parks with ponds, civilian traffic with traffic lights, pedestrians.
+- 🏙️ **A big living city** – 118 × 84 tiles of irregular streets (long avenues, short side streets, T-junctions, dead ends, big and small blocks), 230+ buildings in 11 kinds (houses, flats, offices, mall, school, church, warehouses, factories…), five districts, parks with ponds, civilian traffic with traffic lights, pedestrians.
 - 🚒🚑🚓🔧 **13 vehicle types and 7 crew roles** – tanker, aerial ladder, rescue and command vehicles; ambulance, rapid responder, MMT car; patrol car, van, motorcycle; tow truck, service van, crane. Crew gets out, rolls out hoses, rescues, treats, carries, arrests, secures scenes, disperses crowds and clears wrecks.
 - 🔥 **26 kinds of incidents** with their own descriptions: house, kitchen, apartment, office/school, industrial and warehouse fires · cardiac arrest, fall, choking, childbirth, allergic reaction, stroke · car, motorcycle, pedestrian and truck accidents · burglary, fight, armed robbery, vandalism · blockades, fallen trees and broken-down trucks.
 - 🧯 **Realistic firefighting** – every engine carries a water tank (it runs dry!) and hooks up to street hydrants to refill; fires in tall buildings need the aerial ladder (without it your crews only get 40% effect), and the 3D view raises and turns the ladder towards the fire.
@@ -37,12 +37,13 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 - 🚨 **Clear vehicle status** – every vehicle says what it is doing (*Aanrijdend naar…*, *Ter plaatse bij…*, *Onderweg naar de kazerne*, *Rijdt naar het ziekenhuis*); sirens go off on the way back to the station, and fire crews walk up to the fire before they start spraying.
 - ❄️ **Cooling** (`K`) – hose down the buildings next to a fire so it cannot spread: wet facades are much harder to ignite and slow the fire, and dry out again after a while.
 - 🚓 **Patrols** (`P`, inspired by the Los Angeles mod) – patrol cars, motorcycles and ambulances drive a loop through the city without sirens and rush out on their own to the nearest new incident of their service.
+- 🔥 **Fire jumps the street** – a fully developed fire can spread to buildings on the other side of the street (much less likely than next door, and easier downwind); cooling protects them. Dispatch picks the cheapest route and stopping place, not just the nearest tile.
 - ⏱️ **Severity matters** – treatment, arrest, securing, clearing and fire-fighting times grow with the severity, differ per incident type, and unattended incidents escalate and eventually fail.
 - 🚦 **Believable traffic** – right-hand lanes, U-turns, emergency vehicles that never overlap other vehicles or people, parking bays at every station, and crews that step out *beside* the vehicle.
 - 🔊 **Fully procedural audio** – Dutch-style two-tone sirens, crackling fire, water spray, traffic hum and UI effects, all synthesised with the Web Audio API (no sound files).
 - 🎯 **Game modes** – six missions, endless Freeplay (Easy / Normal / Hard, seeded for reproducible scenarios), save & load, local highscores.
 - 🧩 **Moddable** – vehicles, roles, incidents, missions and maps are validated JSON; an example content pack is included.
-- 🧪 **Well tested** – deterministic simulation with 105 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
+- 🧪 **Well tested** – deterministic simulation with 112 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
 - 🧊 **Experimental 3D view** – a procedural three.js city (buildings, vehicles, people, fire/smoke, traffic lights) with an RTS camera, next to the original 2D view; switch in Settings or the main menu. Lazily loaded, so it costs nothing if you never turn it on ([docs/3d.md](docs/3d.md)).
 
 The experimental 3D view (procedural three.js, no external assets):

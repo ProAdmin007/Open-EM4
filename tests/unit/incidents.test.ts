@@ -27,7 +27,7 @@ describe('incident generation', () => {
       w.tick();
       max = Math.max(max, w.incidents.size);
     }
-    expect(max).toBeLessThanOrEqual(2 + 2); // spreading fires may add linked incidents
+    expect(max).toBeLessThanOrEqual(2 + 5); // unattended fires spread (also over streets) and add linked incidents
     expect(max).toBeGreaterThan(0);
   });
   it('spawns each built-in incident type with the right ingredients', () => {

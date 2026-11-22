@@ -19,6 +19,8 @@ export const HYDRANT_REFILL = 90;
 /** Buildings from this many floors up need an aerial ladder to fight the fire at full strength. */
 export const TALL_FLOORS = 4;
 export const TALL_FACTOR = 0.4;
+/** Fire can jump to buildings up to this many tiles away (over a street) when it is fully developed. */
+export const SPREAD_RANGE = 7;
 /** Road tiles within this many tiles of a secured incident are closed to civilian traffic. */
 export const CORDON_RADIUS = 3.2;
 /** Cooling: wetness added per second per working nozzle, how fast it dries, and how strongly it slows fire spread. */
@@ -84,6 +86,8 @@ export const sevFactor = (severity: number, k = 0.3) => 1 + k * (severity - 1);
 const LANES: (Vec | null)[] = [null, { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
 const PRIO_EMERGENCY = 2, PRIO_CIVILIAN = 1;
 const key = (x: number, y: number) => y * 4096 + x;
+/** Number of changes of direction along a path (every turn slows a vehicle down). */
+const turnCount = (p: Vec[]): number => { let n = 0; for (let i = 2; i < p.length; i++) if (p[i].x - p[i - 1].x !== p[i - 1].x - p[i - 2].x || p[i].y - p[i - 1].y !== p[i - 1].y - p[i - 2].y) n++; return n; };
 
 interface Obb { x: number; y: number; ux: number; uy: number; hl: number; hw: number }
 /** Separating-axis test for two oriented rectangles. */
@@ -154,12 +158,13 @@ export class World {
   mission: MissionDef | null = null;
   won = false;
   events: GameEvent[] = [];
-  private roadList: Vec[] = [];
+  readonly roadList: Vec[] = [];
 
   private constructor(content: Content, opts: WorldOptions) {
     this.content = content;
     this.opts = opts;
     this.rng = new Rng(opts.seed);
+    { const a = (((opts.seed * 2654435761) >>> 0) % 100000) / 100000 * Math.PI * 2; this.wind = { x: Math.cos(a), y: Math.sin(a), strength: 0.5 + (((opts.seed * 40503) >>> 0) % 100) / 200 }; }
     const map = content.maps[opts.mapId ?? 'default_city'] ?? Object.values(content.maps)[0];
     if (!map) throw new Error('Geen kaart beschikbaar');
     this.map = map;
@@ -186,11 +191,20 @@ export class World {
       for (let j = b.y; j < b.y + b.h; j++) for (let i = b.x; i < b.x + b.w; i++) this.buildingAt[j * this.w + i] = b;
     }
     for (const b of this.buildings.values()) b.door = this.findDoor(b);
+    // junctions: a 2x2 road square with roads leaving it on perpendicular sides (crossing, T-junction or bend)
     for (const r of this.roadList) {
+      const { x, y } = r;
+      if (!(this.isRoad(x + 1, y) && this.isRoad(x, y + 1) && this.isRoad(x + 1, y + 1))) continue;
+      const L = this.isRoad(x - 1, y) && this.isRoad(x - 1, y + 1), R = this.isRoad(x + 2, y) && this.isRoad(x + 2, y + 1);
+      const U = this.isRoad(x, y - 1) && this.isRoad(x + 1, y - 1), D = this.isRoad(x, y + 2) && this.isRoad(x + 1, y + 2);
+      if ((L || R) && (U || D)) for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) this.intersection[(y + dy) * this.w + x + dx] = 1;
+    }
+    for (const r of this.roadList) {
+      if (this.intersection[r.y * this.w + r.x] === 1) continue;
       const hz = this.isRoad(r.x - 1, r.y) && this.isRoad(r.x + 1, r.y);
       const vt = this.isRoad(r.x, r.y - 1) && this.isRoad(r.x, r.y + 1);
-      if (hz && vt) this.intersection[r.y * this.w + r.x] = 1;
-      else if (hz) {
+      if (hz && vt) continue;
+      if (hz) {
         const below = this.isRoad(r.x, r.y + 1), above = this.isRoad(r.x, r.y - 1);
         if (below && !above) this.lane[r.y * this.w + r.x] = 2; // north row: westbound
         else if (above && !below) this.lane[r.y * this.w + r.x] = 1; // south row: eastbound
@@ -459,6 +473,16 @@ export class World {
   }
 
   routeVehicle(v: Vehicle, dest: Vec, avoid: number[] = v.avoid): boolean {
+    const path = this.planRoute(v, dest, avoid);
+    if (!path) return false;
+    v.path = path;
+    v.dest = { x: dest.x, y: dest.y };
+    v.pathVersion = this.roadVersion;
+    return true;
+  }
+
+  /** The route a vehicle would take to `dest` (not assigned): lane-compliant, with a U-turn when that saves a long detour. */
+  planRoute(v: Vehicle, dest: Vec, avoid: number[] = v.avoid): Vec[] | null {
     const idle = this.idleTiles(v);
     const skip = new Set(avoid);
     const passable = (x: number, y: number) => this.isDrivable(x, y) && !idle.has(key(x, y)) && !skip.has(key(x, y));
@@ -466,12 +490,7 @@ export class World {
     const plain = findPath(this.w, this.h, start, dest, passable, { edge: v.contraflow ? this.bayEdgeOk : this.laneEdgeOk });
     // emergency vehicles may turn around on the spot when that saves a long detour (or when there is no other way)
     const turning = v.contraflow ? null : findPath(this.w, this.h, start, dest, passable, { edge: this.laneUturnOk });
-    const path = !plain ? turning : turning && plain.length > turning.length + 4 ? turning : plain;
-    if (!path) return false;
-    v.path = path;
-    v.dest = { x: dest.x, y: dest.y };
-    v.pathVersion = this.roadVersion;
-    return true;
+    return !plain ? turning : turning && plain.length > turning.length + 4 ? turning : plain;
   }
 
   /** Nearest drivable tiles to a point that are not blocked by an obstacle or a parked vehicle, best first. */
@@ -521,8 +540,15 @@ export class World {
   private driveNear(v: Vehicle, x: number, y: number): boolean {
     v.contraflow = false;
     v.avoid = [];
-    for (const c of this.candidateTiles(x, y, v)) if (this.routeVehicle(v, c)) return true;
-    return false;
+    // compare the real routes to the best few stopping places: the cheapest one wins, not just the nearest tile
+    let best: { c: Vec; cost: number } | null = null;
+    for (const c of this.candidateTiles(x, y, v, 10)) {
+      const p = this.planRoute(v, c);
+      if (!p) continue;
+      const cost = p.length + Math.hypot(c.x + 0.5 - x, c.y + 0.5 - y) * 1.5 + (this.clearStopTile(c.x, c.y) ? 0 : 8) + turnCount(p) * 0.6;
+      if (!best || cost < best.cost) best = { c, cost };
+    }
+    return best ? this.routeVehicle(v, best.c) : false;
   }
 
   private nearestHospital(x: number, y: number): Building | null {
@@ -990,8 +1016,8 @@ export class World {
       for (const nb of this.buildings.values()) {
         if (nb === b || nb.destroyed || nb.fire > 0) continue;
         const gap = Math.hypot(Math.max(nb.x - (b.x + b.w), b.x - (nb.x + nb.w), 0), Math.max(nb.y - (b.y + b.h), b.y - (nb.y + nb.h), 0));
-        if (gap > 2.5) continue;
-        if (this.rng.chance(dt * 0.012 * b.spread * (b.fire / 100) * nb.flammability * (1 - 0.92 * nb.wet / 100))) this.igniteNeighbour(nb);
+        if (gap > SPREAD_RANGE) continue;
+        if (this.rng.chance(dt * 0.012 * b.spread * this.spreadFactor(b, nb, gap) * nb.flammability * (1 - 0.92 * nb.wet / 100))) this.igniteNeighbour(nb);
       }
     }
   }
@@ -1003,7 +1029,7 @@ export class World {
     for (const o of this.buildings.values()) {
       if (o === b || o.fire <= 0 || o.destroyed) continue;
       const gap = Math.hypot(Math.max(b.x - (o.x + o.w), o.x - (b.x + b.w), 0), Math.max(b.y - (o.y + o.h), o.y - (b.y + b.h), 0));
-      if (gap <= 3.5) return true;
+      if (gap <= SPREAD_RANGE && this.spreadFactor(o, b, gap) > 0.05) return true;
     }
     return false;
   }
@@ -1205,6 +1231,22 @@ export class World {
       if (near && v.water < def.tank) v.water = Math.min(def.tank, v.water + HYDRANT_REFILL * dt);
     }
   }
+
+  /**
+   * How easily the fire of `b` reaches `nb` over a gap of `gap` tiles: nearly full strength next door, weaker over a street,
+   * stronger downwind, and across a street only from a fully developed fire (heat radiation and flying sparks).
+   */
+  spreadFactor(b: Building, nb: Building, gap: number): number {
+    const k = b.fire / 100;
+    if (gap > 2.5 && b.fire < 55) return 0;
+    const reach = Math.max(0, 1 - gap / SPREAD_RANGE);
+    const dx = nb.x + nb.w / 2 - (b.x + b.w / 2), dy = nb.y + nb.h / 2 - (b.y + b.h / 2), len = Math.hypot(dx, dy) || 1;
+    const down = (dx / len) * this.wind.x + (dy / len) * this.wind.y; // -1 upwind .. 1 downwind
+    return k * (gap <= 2.5 ? 1 : reach * reach * 1.4) * (1 + 0.7 * down);
+  }
+
+  /** Wind direction (unit vector) and strength 0.5..1, fixed per game from the seed; smoke and sparks lean this way. */
+  wind!: { x: number; y: number; strength: number };
 
   private igniteNeighbour(nb: Building): void {
     nb.fire = 8;

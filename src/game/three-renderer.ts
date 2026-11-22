@@ -405,6 +405,17 @@ export class Three3DRenderer implements GameRenderer {
     }
   }
 
+  /** The side of a building that faces the nearest street (n, s, e, w). */
+  private doorSide(world: World, b: { x: number; y: number; w: number; h: number }): 'n' | 's' | 'e' | 'w' {
+    const best: Record<string, number> = { s: 99, n: 99, e: 99, w: 99 };
+    for (let d = 1; d <= 7; d++) {
+      for (let i = b.x; i < b.x + b.w; i++) { if (best.s === 99 && world.isRoad(i, b.y + b.h - 1 + d)) best.s = d; if (best.n === 99 && world.isRoad(i, b.y - d)) best.n = d; }
+      for (let j = b.y; j < b.y + b.h; j++) { if (best.e === 99 && world.isRoad(b.x + b.w - 1 + d, j)) best.e = d; if (best.w === 99 && world.isRoad(b.x - d, j)) best.w = d; }
+    }
+    const order: ('s' | 'n' | 'e' | 'w')[] = ['s', 'n', 'e', 'w'];
+    return order.reduce((a, c) => (best[c] < best[a] ? c : a), 's');
+  }
+
   private buildBuildings(world: World): void {
     this.disposeGroup(this.buildingsGroup);
     for (const im of [this.winLit, this.winDark]) if (im) { this.scene.remove(im); im.dispose(); }
@@ -437,16 +448,26 @@ export class Three3DRenderer implements GameRenderer {
       group.position.set((b.x + b.w / 2) * TILE_METERS, 0, (b.y + b.h / 2) * TILE_METERS);
       group.name = `building:${b.id}`;
       group.userData.buildingId = b.id;
-      const side = stationIds.has(b.id) ? 'north' : 'south';
+      // the facade (door, windows, details) faces the nearest street: build it facing south, then turn it
+      const isStation = stationIds.has(b.id);
+      const facing = isStation ? 's' : this.doorSide(world, b);
+      const theta = facing === 's' ? 0 : facing === 'n' ? Math.PI : facing === 'e' ? Math.PI / 2 : -Math.PI / 2;
+      const swap = facing === 'e' || facing === 'w';
+      const wl = swap ? d : w, dl = swap ? w : d;
+      const side = isStation ? 'north' : 'south';
       const seed = hash(b.x, b.y);
       const rise = Math.min(w, d) * 0.28;
-      const decor = decorateBuilding(group, b.type, b.roof ?? 'flat', w, d, heightMeters, seed, side, rise);
-      const slots = windowSlots(b.type, w, d, heightMeters, seed, side);
+      const face = new THREE.Group();
+      face.rotation.y = theta;
+      group.add(face);
+      const decor = decorateBuilding(face, b.type, b.roof ?? 'flat', wl, dl, heightMeters, seed, side, rise);
+      const slots = windowSlots(b.type, wl, dl, heightMeters, seed, side);
+      const rotM = new THREE.Matrix4().makeRotationY(theta);
       const win: BuildingObj['win'] = [];
       const fwMats: THREE.Matrix4[] = [];
       for (const [list, dark, all] of [[slots.lit, false, litAll], [slots.dark, true, darkAll]] as [THREE.Matrix4[], boolean, THREE.Matrix4[]][]) {
         win.push({ start: all.length, count: list.length, dark });
-        for (const m of list) { baseM.compose(new THREE.Vector3(group.position.x, 0, group.position.z), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1)); const wm = baseM.clone().multiply(m); all.push(wm); fwMats.push(wm); }
+        for (const m of list) { baseM.compose(new THREE.Vector3(group.position.x, 0, group.position.z), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1)); const wm = baseM.clone().multiply(rotM).multiply(m); all.push(wm); fwMats.push(wm); }
       }
       this.buildingsGroup.add(group);
       this.buildingObjs.set(b.id, { fw: { start: -1, mats: fwMats, key: '' }, decor, win, group, body, roof, bodyMat, roofMat, wall: new THREE.Color(colors.wall), roofCol: new THREE.Color(colors.roof), h: heightMeters, key: '' });
@@ -505,6 +526,7 @@ export class Three3DRenderer implements GameRenderer {
         if (!world.isIntersection(x, y) || world.isIntersection(x - 1, y) || world.isIntersection(x, y - 1)) continue;
         const pts: [number, number, boolean][] = [[x - 0.1, y - 0.1, true], [x + 2.1, y + 2.1, true], [x + 2.1, y - 0.1, false], [x - 0.1, y + 2.1, false]];
         for (const [tx, ty, ew] of pts) {
+          if (world.isRoad(Math.floor(tx), Math.floor(ty)) || world.isRoad(Math.floor(tx + (tx > x ? 0.2 : -0.2)), Math.floor(ty + (ty > y ? 0.2 : -0.2)))) continue; // the corner of a missing arm
           const p = tileToWorld3D(tx, ty, 2.6);
           const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.6, 5), poleMat);
           pole.position.set(p.x, 1.3, p.z);
@@ -976,6 +998,7 @@ export class Three3DRenderer implements GameRenderer {
 
   private updateFire(snap: RenderSnapshot, dt: number): void {
     const live = this.host.state === 'playing';
+    const wnd = snap.wind;
     this.updateFireWindows(snap);
     const burning: { b: typeof snap.buildings[number]; cx: number; cz: number; k: number }[] = [];
     for (const b of snap.buildings) {
@@ -1010,7 +1033,7 @@ export class Three3DRenderer implements GameRenderer {
         if (Math.random() < Math.min(1, nSmoke)) {
           const dark = 0.12 + Math.random() * 0.14;
           const c = (Math.round(dark * 255 * 1.2) << 16) | (Math.round(dark * 255) << 8) | Math.round(dark * 255);
-          this.smoke.emit({ x: cx(b, w) + (Math.random() - 0.5) * w * 0.7, y: top + 0.8, z: cz(b, d) + (Math.random() - 0.5) * d * 0.7, vx: 1.4 + Math.random() * 0.8, vy: 2.8 + k * 2.8 + Math.random() * 1.2, vz: 0.5 + Math.random() * 0.5, life: 3.6 + Math.random() * 2.4 + k * 1.5, size0: 1.8 + k * 1.2, size1: 6 + k * 5, c0: c, c1: 0x9a9aa0, alpha: 0.2 + k * 0.1 });
+          this.smoke.emit({ x: cx(b, w) + (Math.random() - 0.5) * w * 0.7, y: top + 0.8, z: cz(b, d) + (Math.random() - 0.5) * d * 0.7, vx: wnd.x * (1.6 * wnd.strength + Math.random() * 0.8) + (Math.random() - 0.5) * 0.4, vy: 2.8 + k * 2.8 + Math.random() * 1.2, vz: wnd.y * (1.6 * wnd.strength + Math.random() * 0.8) + (Math.random() - 0.5) * 0.4, life: 3.6 + Math.random() * 2.4 + k * 1.5, size0: 1.8 + k * 1.2, size1: 6 + k * 5, c0: c, c1: 0x9a9aa0, alpha: 0.2 + k * 0.1 });
         }
         nSmoke -= 1;
       }

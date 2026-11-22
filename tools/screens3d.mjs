@@ -15,7 +15,7 @@ await page.getByRole('button', { name: /Start Freeplay/ }).click();
 await page.waitForFunction(() => window.__openrescue?.scene?.state === 'playing');
 await page.evaluate(() => window.__openrescue.scene.setViewMode('3d'));
 await page.waitForFunction(() => !!window.__openrescue.scene.renderer3d);
-await page.evaluate(() => { window.__openrescue.scene.renderer3d.distance = 62; window.__openrescue.scene.centerOn(50, 22); });
+await page.evaluate(() => { window.__openrescue.scene.renderer3d.distance = 130; window.__openrescue.scene.centerOn(55, 40); });
 await page.waitForTimeout(5000);
 await page.screenshot({ path: 'docs/screenshot-3d-city.png' });
 await page.evaluate(() => {
@@ -23,13 +23,13 @@ await page.evaluate(() => {
   const inc = w.spawnIncident('house_fire', { severity: 2 });
   const b = w.buildings.get(inc.buildingId);
   const v = [...w.vehicles.values()].find(x => x.defId === 'fire_engine');
-  or.scene.select([v.id]);
-  w.contextOrder([v.id], b.x + b.w / 2, b.y + b.h / 2);
+  or.scene.select([v.id]); window.__eng = v.id;
+  w.contextOrder([v.id], b.x + b.w / 2, b.y + b.h / 2); window.__fireDoor = b.door;
   or.scene.centerOn(b.x + b.w / 2, b.y + b.h / 2 + 2);
   or.scene.renderer3d.distance = 52; or.scene.centerOn(b.x + b.w / 2, b.y + b.h / 2 + 1);
 });
 await page.locator('[data-act="speed4"]').click().catch(() => {});
-await page.waitForTimeout(9000);
+await page.waitForFunction(() => { const w = window.__openrescue.world, v = w.vehicles.get(window.__eng); return v && !v.path.length && Math.hypot(v.x - window.__fireDoor.x, v.y - window.__fireDoor.y) < 6; }, undefined, { timeout: 120000, polling: 100 });
 await page.keyboard.press('b');
 await page.waitForFunction(() => [...window.__openrescue.world.responders.values()].some(r => r.task?.type === 'extinguish' && r.task.deploy >= 2.5), undefined, { timeout: 90000 });
 await page.locator('[data-act="speed1"]').click().catch(() => {});

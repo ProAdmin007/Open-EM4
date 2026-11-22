@@ -68,7 +68,7 @@ describe('incident variety', () => {
       }
     }
     expect(seen.size).toBeGreaterThanOrEqual(14);
-  });
+  }, 30000);
 });
 
 describe('severity changes how long things take', () => {

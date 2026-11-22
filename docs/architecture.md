@@ -94,3 +94,7 @@ Each frame the scene calls `audio.update(world, cameraCentre, playing, paused)`:
 ## Parking on the road
 
 A stopped vehicle never stands across the road: `settleVehicle` (simulation) turns it onto the axis of its lane and glides it to the middle of the lane tile, also after a stop order halfway a turn or U-turn, and `clearStopTile` makes destinations prefer tiles that are not in a junction or on the zebra crossing next to one.
+
+## The city map
+
+`tools/genmap.mjs` (seeded, `node tools/genmap.mjs`) builds the 118 x 84 map: street lines at uneven distances, secondary streets that lose segments (bigger blocks), cul-de-sacs, then station sites (8x8 with a parking lot against a street), hospitals, a mall and a school, a greedy lot packer that lines buildings up along the streets per district, parks with ponds and trees. The simulation treats any 2x2 road square with roads leaving on perpendicular sides as a junction (crossing, T-junction or bend). Dispatch compares the real routes to the best ten stopping places (`driveNear`), and fire spreads up to `SPREAD_RANGE` tiles (over a street) with a wind-dependent chance (`spreadFactor`).
