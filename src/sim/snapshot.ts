@@ -34,6 +34,8 @@ export interface SnapVehicle {
 export interface SnapPerson {
   id: number;
   kind: 'responder' | 'victim' | 'suspect' | 'bystander' | 'pedestrian';
+  /** responder covering a suspect with a drawn pistol */
+  aiming?: boolean;
   model: string;
   x: number;
   y: number;
@@ -138,7 +140,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
   for (const r of world.responders.values()) {
     if (r.inVehicle) continue;
     const x = ix(r), y = iy(r);
-    const person: SnapPerson = { id: r.id, kind: 'responder', model: modelId('person', r.role, world.roleDef(r).model), x, y, position: tileToWorld3D(x, y), heading: r.angle, state: r.task?.type ?? 'idle' };
+    const person: SnapPerson = { id: r.id, kind: 'responder', model: modelId('person', r.role, world.roleDef(r).model), x, y, position: tileToWorld3D(x, y), heading: r.angle, state: r.task?.type ?? 'idle', aiming: r.aiming !== null };
     if (r.task?.type === 'extinguish' || r.task?.type === 'cool') {
       const veh = world.vehicles.get(r.vehicleId);
       const b = world.buildings.get(r.task.buildingId);
@@ -154,7 +156,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
     const x = ix(v), y = iy(v);
     snap.people.push({ id: v.id, kind: 'victim', model: modelId('person', v.transport === 'dead' ? 'victim_dead' : 'victim'), x, y, position: tileToWorld3D(x, y), heading: 0, state: v.transport, info: { health: v.health, treated: v.treated, incidentKind: world.incidents.get(v.incidentId)?.defId ?? '', carrier: v.transport === 'carried' && v.carriedBy !== null && world.responders.get(v.carriedBy) ? { x: ix(world.responders.get(v.carriedBy)!), y: iy(world.responders.get(v.carriedBy)!), heading: world.responders.get(v.carriedBy)!.angle } : undefined, loading: v.loadT > 0 && v.carriedBy !== null && world.responders.get(v.carriedBy) ? { t: v.loadT, vehicleId: world.responders.get(v.carriedBy)!.vehicleId } : undefined } });
   }
-  for (const s of world.suspects.values()) snap.people.push({ id: s.id, kind: 'suspect', model: modelId('person', 'suspect'), x: s.x, y: s.y, position: tileToWorld3D(s.x, s.y), heading: 0, state: s.arrested ? 'arrested' : 'free' });
+  for (const s of world.suspects.values()) { if (s.mode === 'boarded') continue; snap.people.push({ id: s.id, kind: 'suspect', model: modelId('person', 'suspect'), x: s.x, y: s.y, position: tileToWorld3D(s.x, s.y), heading: s.angle, state: s.arrested ? (s.mode === 'escorted' ? 'escorted' : 'arrested') : s.mode === 'flee' ? 'fleeing' : s.mode === 'surrender' ? 'surrender' : 'free' }); }
   for (const b of world.bystanders.values()) {
     const x = ix(b), y = iy(b);
     snap.people.push({ id: b.id, kind: 'bystander', model: modelId('person', `pedestrian_${b.color}`), x, y, position: tileToWorld3D(x, y), heading: b.angle, state: b.leaving ? 'leaving' : 'watching' });

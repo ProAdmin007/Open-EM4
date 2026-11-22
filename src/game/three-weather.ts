@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /**
- * Weather and life in the sky: drifting clouds (greyer and lower in the rain), rain streaks around the camera and a few flocks of birds.
+ * Weather and life in the sky: drifting clouds (greyer and lower in the rain), rain streaks around the camera 
  * Purely visual; the simulation only knows whether it rains (`World.raining`, which slows the traffic down).
  */
 export class Weather {
@@ -9,7 +9,6 @@ export class Weather {
   private cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, fog: false, depthWrite: false });
   private rain: THREE.LineSegments;
   private rainPos: Float32Array;
-  private birds: { g: THREE.Group; wings: THREE.Mesh[]; cx: number; cz: number; r: number; h: number; s: number; ph: number }[] = [];
   rainK = 0;
   private static readonly DROPS = 1400;
 
@@ -41,21 +40,6 @@ export class Weather {
     this.rain.visible = false;
     scene.add(this.rain);
     for (let i = 0; i < Weather.DROPS; i++) this.dropReset(i, 0, 0);
-    // birds: two small flocks circling high above the city
-    const wingGeo = new THREE.PlaneGeometry(1.1, 0.35);
-    const bm = new THREE.MeshBasicMaterial({ color: 0x1c1f24, side: THREE.DoubleSide, fog: true });
-    for (let i = 0; i < 9; i++) {
-      const g = new THREE.Group();
-      const wl = new THREE.Mesh(wingGeo, bm), wr = new THREE.Mesh(wingGeo, bm);
-      wl.position.z = -0.55; wr.position.z = 0.55;
-      wl.rotation.x = -Math.PI / 2; wr.rotation.x = -Math.PI / 2;
-      g.add(wl, wr);
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.14), bm);
-      g.add(body);
-      g.scale.setScalar(1.6);
-      this.birds.push({ g, wings: [wl, wr], cx: (i < 5 ? -40 : 70) + (i % 3) * 6, cz: (i < 5 ? 20 : -50) + (i % 2) * 7, r: 55 + (i % 4) * 9, h: 30 + (i % 5) * 4, s: 0.22 + (i % 3) * 0.03, ph: i * 1.3 });
-      scene.add(g);
-    }
   }
 
   private dropReset(i: number, cx: number, cz: number): void {
@@ -96,14 +80,5 @@ export class Weather {
     fog.color.lerp(new THREE.Color(0x7d8794).multiplyScalar(0.4 + 0.6 * daylight), k * 0.6);
     fog.near = 260 * (1 - 0.35 * k); fog.far = 900 * (1 - 0.4 * k);
     sun.intensity *= 1 - 0.55 * k;
-    // birds circle (and flap); they stay away in the rain
-    for (const b of this.birds) {
-      const a = time * b.s + b.ph;
-      b.g.visible = k < 0.5 && daylight > 0.3;
-      b.g.position.set(target.x + b.cx + Math.cos(a) * b.r, b.h + Math.sin(a * 2.3) * 2, target.z + b.cz + Math.sin(a) * b.r);
-      b.g.rotation.y = -a - Math.PI / 2;
-      const flap = Math.sin(time * 9 + b.ph) * 0.6;
-      b.wings[0].rotation.x = -Math.PI / 2 + flap; b.wings[1].rotation.x = -Math.PI / 2 - flap;
-    }
   }
 }

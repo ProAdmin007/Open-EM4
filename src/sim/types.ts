@@ -135,6 +135,8 @@ export interface Vehicle extends Entity {
   silent: boolean;
   /** wrecks loaded on the flatbed (tow trucks), unloaded at the depot */
   cargo: number;
+  /** arrested suspects sitting in the back (police vehicles) */
+  prisoners: number[];
   /** until this time the vehicle is overtaking through the opposite lane */
   passUntil: number;
   /** dispatch priority: 1 = lights and sirens, 2 = normal traffic (obeys red lights, no lights) */
@@ -173,7 +175,7 @@ export type Task =
   | { type: 'rescue'; victimId: number; progress: number }
   | { type: 'treat'; victimId: number; progress: number }
   | { type: 'load'; victimId: number }
-  | { type: 'arrest'; suspectId: number; progress: number }
+  | { type: 'arrest'; suspectId: number; progress: number; aim?: number; lx?: number; ly?: number }
   | { type: 'secure'; incidentId: number; progress: number }
   | { type: 'clear'; incidentId: number; progress: number }
   | { type: 'disperse'; incidentId: number; progress: number }
@@ -193,6 +195,8 @@ export interface Responder extends Entity {
   angle: number;
   name: string;
   carrying: number | null;
+  /** the suspect this officer is covering with a drawn pistol */
+  aiming: number | null;
 }
 export type Transport = 'trapped' | 'scene' | 'carried' | 'inAmbulance' | 'atHospital' | 'dead' | 'collected';
 export interface Victim extends Entity {
@@ -223,6 +227,17 @@ export interface Suspect extends Entity {
   arrested: boolean;
   /** Seconds needed to arrest this suspect; depends on type and severity. */
   arrestTime: number;
+  angle: number;
+  path: Vec[];
+  /** free = standing about, flee = running from the police, surrender = hands up, escorted = cuffed and walking with an officer, boarded = inside a police vehicle */
+  mode: 'idle' | 'flee' | 'surrender' | 'escorted' | 'boarded';
+  /** will run when the police approach */
+  runner: boolean;
+  /** gives up when an officer draws a pistol and shouts (otherwise keeps running until caught) */
+  obey: boolean;
+  fleeT: number;
+  escortedBy: number | null;
+  vehicleId: number | null;
 }
 export interface Bystander extends Entity {
   kind: 'bystander';

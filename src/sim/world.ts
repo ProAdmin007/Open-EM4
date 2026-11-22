@@ -9,6 +9,8 @@ import type {
 export const SIM_DT = 1 / 30;
 /** Vehicle speed conversion: km/h in the data files -> tiles per second. */
 export const KMH_TO_TILES = 1 / 12;
+/** How many arrested suspects a police vehicle can take along. */
+const PRISONER_CAP: Record<string, number> = { patrol_car: 2, police_van: 4, riot_van: 8 };
 const FIRE_POWER_SCALE = 0.12;
 const HOSE_LENGTH = 16;
 const DEPLOY_TIME = 2.5;
@@ -407,7 +409,7 @@ export class World {
   createVehicle(def: VehicleDef, stationId: string, x: number, y: number): Vehicle {
     const v: Vehicle = {
       kind: 'vehicle', ...this.addEntityBase(x, y), defId: def.id, category: def.category, stationId, path: [], dest: null, home: { x: Math.floor(x), y: Math.floor(y) }, returning: false, silent: false, cargo: 0, passUntil: 0, prio: 1, speedNow: 0, patrol: false, patrolRoute: [], patrolIdx: 0, toHospital: false, contraflow: false, blocked: 0, avoid: [], ghost: 0,
-      pathVersion: this.roadVersion, water: def.tank ?? 0, hydrant: false, crew: [], patients: [], lights: false, angle: 0, state: 'idle',
+      pathVersion: this.roadVersion, water: def.tank ?? 0, hydrant: false, crew: [], patients: [], prisoners: [], lights: false, angle: 0, state: 'idle',
       name: `${def.name} ${[...this.vehicles.values()].filter(o => o.defId === def.id).length + 1}`,
     };
     this.vehicles.set(v.id, v);
@@ -416,7 +418,7 @@ export class World {
       for (let i = 0; i < slot.count; i++) {
         const r: Responder = {
           kind: 'responder', ...this.addEntityBase(x, y), role: role.id, category: role.category, vehicleId: v.id, inVehicle: true,
-          path: [], task: null, angle: 0, name: `${role.name} ${v.crew.length + 1}`, carrying: null,
+          path: [], task: null, angle: 0, name: `${role.name} ${v.crew.length + 1}`, carrying: null, aiming: null,
         };
         this.responders.set(r.id, r);
         v.crew.push(r.id);
@@ -446,6 +448,7 @@ export class World {
     for (const v of this.vehicles.values()) this.updateVehicle(v, dt);
     for (const r of this.responders.values()) this.updateResponder(r, dt);
     this.separateResponders(dt);
+    this.updateSuspects(dt);
     if (this.pendingSends.length) { const due = this.pendingSends.filter(p => p.at <= this.time); if (due.length) { this.pendingSends = this.pendingSends.filter(p => p.at > this.time); for (const p of due) this.sendToScene(p.defId, p.tx, p.ty); } }
     this.updateWater(dt);
     this.updateGrip(dt);
@@ -465,7 +468,11 @@ export class World {
   }
 
   private updateBystander(b: Bystander, dt: number): void {
-    if (!b.leaving) return;
+    if (!b.leaving) { // onlookers watch what is going on
+      const inc = this.incidents.get(b.incidentId);
+      if (inc) { const want = Math.atan2(inc.y - b.y, inc.x - b.x), d = Math.atan2(Math.sin(want - b.angle), Math.cos(want - b.angle)); b.angle += Math.max(-2 * dt, Math.min(2 * dt, d)); }
+      return;
+    }
     this.stepAlong(b, b.path, 1.9, dt);
     if (!b.path.length) this.bystanders.delete(b.id);
   }
@@ -685,6 +692,7 @@ export class World {
         if (Math.hypot(v.x - (v.home.x + 0.5), v.y - (v.home.y + 0.5)) < 0.1 && this.isParking(v.home.x, v.home.y)) {
         v.angle = -Math.PI / 2; // parked nose-out
         if (v.cargo) v.cargo = 0; // the tow truck unloads the wreck at the depot
+        if (v.prisoners.length) { for (const id of v.prisoners) this.suspects.delete(id); this.emit({ type: 'info', message: `${v.prisoners.length} verdachte(n) overgedragen op het bureau` }); v.prisoners = []; }
         if (this.vehicleDef(v).id === 'hearse' && v.patients.length) { for (const id of v.patients) this.victims.delete(id); v.patients = []; this.emit({ type: 'info', message: 'De overledenen zijn overgedragen aan het uitvaartcentrum' }); }
       }
       }
@@ -993,7 +1001,7 @@ export class World {
       Math.abs(o.x - cx) > reachP || Math.abs(o.y - cy) > reachP ? null : !this.isRoad(Math.floor(o.x), Math.floor(o.y)) && !this.isParking(Math.floor(o.x), Math.floor(o.y)) ? null : obbOverlap(lookP, { x: o.x, y: o.y, ux: 1, uy: 0, hl: 0.26, hw: 0.26 }) ? { kind: 'person', x: o.x, y: o.y, halted: true, responder } : null;
     for (const o of this.responders.values()) { if (!o.inVehicle) { const r = person(o, o); if (r) return r; } }
     for (const o of this.victims.values()) { if (o.transport === 'scene' || o.transport === 'dead') { const r = person(o); if (r) return r; } }
-    for (const o of this.suspects.values()) { const r = person(o); if (r) return r; }
+    for (const o of this.suspects.values()) { if (o.mode === 'boarded') continue; const r = person(o); if (r) return r; }
     for (const o of this.bystanders.values()) { const r = person(o); if (r) return r; }
     return null;
   }
@@ -1076,6 +1084,52 @@ export class World {
     return false;
   }
 
+  /** Can this vehicle take arrested suspects along? */
+  prisonerCapacity(defId: string): number { return PRISONER_CAP[defId] ?? 0; }
+
+  /** Suspects: runners flee from approaching police (until they are out of breath), cuffed ones walk with their officer. */
+  private updateSuspects(dt: number): void {
+    for (const s of this.suspects.values()) {
+      if (s.mode === 'boarded') {
+        const v = s.vehicleId !== null ? this.vehicles.get(s.vehicleId) : null;
+        if (v) { s.x = v.x; s.y = v.y; } else { s.mode = 'idle'; }
+        continue;
+      }
+      if (s.arrested) {
+        if (s.mode === 'escorted') {
+          const r = s.escortedBy !== null ? this.responders.get(s.escortedBy) : null;
+          if (!r || r.task?.type !== 'arrest') { s.mode = 'idle'; s.escortedBy = null; continue; }
+          const tx = r.x - Math.cos(r.angle) * 0.8, ty = r.y - Math.sin(r.angle) * 0.8;
+          const d = Math.hypot(tx - s.x, ty - s.y);
+          if (d > 0.25) { const st = Math.min(d, 2.9 * dt); const nx = s.x + ((tx - s.x) / d) * st, ny = s.y + ((ty - s.y) / d) * st; if (this.isWalkable(Math.floor(nx), Math.floor(ny))) { s.x = nx; s.y = ny; } s.angle = Math.atan2(ty - s.y, tx - s.x); }
+        }
+        continue;
+      }
+      if (s.mode === 'surrender') continue;
+      let police: Responder | null = null, pd = 1e9;
+      for (const r of this.responders.values()) {
+        if (r.inVehicle || r.category !== 'police' || !this.roleDef(r).abilities.includes('arrest')) continue;
+        const d = Math.hypot(r.x - s.x, r.y - s.y);
+        if (d < pd) { pd = d; police = r; }
+      }
+      if (s.mode === 'idle' && s.runner && police && pd < 8) { s.mode = 'flee'; s.fleeT = this.rng.range(14, 24); s.path = []; }
+      if (s.mode === 'flee') {
+        s.fleeT -= dt;
+        if (s.fleeT <= 0 || !police) { s.mode = 'idle'; s.runner = false; s.path = []; continue; } // out of breath
+        if (!s.path.length && police) {
+          const away = Math.atan2(s.y - police.y, s.x - police.x);
+          for (let k = 0; k < 14 && !s.path.length; k++) {
+            const a = away + this.rng.range(-1.0, 1.0), len = this.rng.range(8, 13);
+            const tx = Math.floor(s.x + Math.cos(a) * len), ty = Math.floor(s.y + Math.sin(a) * len);
+            if (!this.isWalkable(tx, ty)) continue;
+            s.path = findPath(this.w, this.h, { x: Math.floor(s.x), y: Math.floor(s.y) }, { x: tx, y: ty }, this.isWalkable, { diagonal: true, maxNodes: 900 }) ?? [];
+          }
+        }
+        this.stepAlong(s, s.path, 2.45, dt);
+      }
+    }
+  }
+
   /** People do not stand inside each other: anybody closer than ~0.45 tile is eased apart (never onto a building or water tile). */
   private separateResponders(dt: number): void {
     const list: Responder[] = [];
@@ -1100,7 +1154,8 @@ export class World {
   private updateResponder(r: Responder, dt: number): void {
     if (r.inVehicle) return;
     const t = r.task;
-    const done = () => { r.task = null; r.path = []; };
+    const done = () => { r.task = null; r.path = []; r.aiming = null; };
+    if (r.aiming !== null && r.task?.type !== 'arrest') r.aiming = null;
     if (!t || t.type === 'move') {
       if (r.path.length) this.stepAlong(r, r.path, this.roleDef(r).speed, dt);
       else if (t) r.task = null;
@@ -1247,10 +1302,42 @@ export class World {
       }
       case 'arrest': {
         const s = this.suspects.get(t.suspectId);
-        if (!s || s.arrested) return done();
+        if (!s || s.mode === 'boarded') return done();
+        const sd = Math.hypot(r.x - s.x, r.y - s.y);
+        if (s.arrested) { // escort the cuffed suspect to the police vehicle and put them in the back
+          const veh = this.vehicles.get(r.vehicleId);
+          if (!veh || (PRISONER_CAP[veh.defId] ?? 0) - veh.prisoners.length <= 0) { s.mode = 'idle'; s.escortedBy = null; return done(); }
+          if (s.mode !== 'escorted') { if (this.approach(r, s.x, s.y, 1.3, done)) { s.mode = 'escorted'; s.escortedBy = r.id; } break; }
+          if (this.approach(r, veh.x, veh.y, this.vehicleDef(veh).length / 2 + 0.9, done)) {
+            veh.prisoners.push(s.id); s.mode = 'boarded'; s.vehicleId = veh.id; s.escortedBy = null;
+            this.emit({ type: 'info', message: `Verdachte zit achterin ${veh.name} – stuur de wagen naar het bureau (Z)` });
+            done();
+          }
+          break;
+        }
+        if (s.mode === 'flee') { // a runner: pistol up and shout, or chase
+          r.angle = Math.atan2(s.y - r.y, s.x - r.x);
+          if (sd <= 6.5) {
+            if (r.aiming !== s.id) this.emit({ type: 'info', message: `${r.name}: "Politie! Blijf staan!"`, speech: 'Politie! Blijf staan!' });
+            r.aiming = s.id; t.aim = (t.aim ?? 0) + dt;
+            if (t.aim >= 1.6 && s.obey) { s.mode = 'surrender'; s.path = []; this.emit({ type: 'info', message: 'De verdachte geeft zich over' }); }
+          } else r.aiming = null;
+          if (!r.path.length || Math.hypot((t.lx ?? -99) - s.x, (t.ly ?? -99) - s.y) > 1.6) { r.path = []; t.lx = s.x; t.ly = s.y; }
+          if (this.approach(r, s.x, s.y, 1.2, done)) { s.mode = 'surrender'; s.path = []; r.aiming = null; } // caught up and tackled
+          break;
+        }
+        r.aiming = null;
         if (this.approach(r, s.x, s.y, 1.2, done)) {
+          r.angle = Math.atan2(s.y - r.y, s.x - r.x);
+          s.angle = r.angle + Math.PI;
           t.progress += dt;
-          if (t.progress >= s.arrestTime) { s.arrested = true; this.emit({ type: 'info', message: `${r.name} heeft een verdachte gearresteerd` }); done(); }
+          if (t.progress >= s.arrestTime) {
+            s.arrested = true; s.mode = 'idle'; s.runner = false;
+            this.emit({ type: 'info', message: `${r.name} heeft een verdachte gearresteerd` });
+            t.progress = 0; r.path = []; // stays on the job: the suspect is walked to the vehicle
+            const veh = this.vehicles.get(r.vehicleId);
+            if (!veh || (PRISONER_CAP[veh.defId] ?? 0) - veh.prisoners.length <= 0) done();
+          }
         }
         break;
       }
@@ -1996,7 +2083,7 @@ export class World {
   private addSuspects(inc: Incident, n: number, b: Building | null, arrestTime = 4): void {
     for (let i = 0; i < n; i++) {
       const pos = this.scenePosition(inc, b, true);
-      const s: Suspect = { kind: 'suspect', ...this.addEntityBase(pos.x, pos.y), incidentId: inc.id, arrested: false, arrestTime };
+      const s: Suspect = { kind: 'suspect', ...this.addEntityBase(pos.x, pos.y), incidentId: inc.id, arrested: false, arrestTime, angle: 0, path: [], mode: 'idle', runner: this.rng.chance(0.55), obey: this.rng.chance(0.65), fleeT: 0, escortedBy: null, vehicleId: null };
       this.suspects.set(s.id, s);
       inc.suspects.push(s.id);
     }
@@ -2073,7 +2160,7 @@ export class World {
       for (const r of this.responders.values()) { if (r.carrying === id) { r.carrying = null; r.task = null; } }
       this.victims.delete(id);
     }
-    for (const id of inc.suspects) this.suspects.delete(id);
+    for (const id of inc.suspects) if (this.suspects.get(id)?.mode !== 'boarded') this.suspects.delete(id); // the ones in a police vehicle are still on their way to the station
     for (const id of inc.bystanders) this.bystanders.delete(id);
     const b = inc.buildingId ? this.buildings.get(inc.buildingId) : null;
     if (b) { b.incidentId = null; if (status === 'failed' && !b.destroyed) { b.fire = Math.max(b.fire, 0); } }
@@ -2161,6 +2248,7 @@ export class World {
     const done = new Set<number>();
     for (const id of ids) {
       const v = this.vehicleOf(id);
+      if (v && (PRISONER_CAP[v.defId] ?? 0) > 0 && v.prisoners.length && !done.has(v.id)) { done.add(v.id); this.orderReturn([v.id]); this.emit({ type: 'info', message: `${v.name} rijdt met ${v.prisoners.length} aangehouden verdachte(n) naar het bureau` }); continue; }
       if (!v || done.has(v.id) || this.vehicleDef(v).patientCapacity <= 0) continue;
       done.add(v.id);
       if (!v.patients.length) { this.emit({ type: 'warn', message: `${v.name}: geen patiënt aan boord` }); done.delete(v.id); continue; }
@@ -2328,7 +2416,7 @@ export class World {
   /** What is under a world position (in tile units)? */
   pick(x: number, y: number): OrderTarget | null {
     for (const v of this.victims.values()) if (v.transport === 'trapped' ? false : (v.transport === 'scene' && Math.hypot(v.x - x, v.y - y) < 0.9)) return { kind: 'victim', id: v.id };
-    for (const s of this.suspects.values()) if (!s.arrested && Math.hypot(s.x - x, s.y - y) < 0.9) return { kind: 'suspect', id: s.id };
+    for (const s of this.suspects.values()) if (s.mode !== 'boarded' && Math.hypot(s.x - x, s.y - y) < 0.9) return { kind: 'suspect', id: s.id };
     for (const by of this.bystanders.values()) if (!by.leaving && Math.hypot(by.x - x, by.y - y) < 0.9) return { kind: 'incident', id: by.incidentId };
     const tx = Math.floor(x), ty = Math.floor(y);
     for (const i of this.incidents.values()) if (i.obstacle.some(o => o.x === tx && o.y === ty)) return { kind: 'incident', id: i.id };
@@ -2549,10 +2637,10 @@ export class World {
     w.time = s.time; w.score = s.score; w.budget = s.budget; w.reputation = s.reputation; w.solved = s.solved; w.failed = s.failed; w.deaths = s.deaths;
     w.over = s.over; w.nextId = s.nextId; w.rng.state = s.rng; w.spawnTimer = s.spawnTimer;
     for (const sb of s.buildings) { const b = w.buildings.get(sb.id); if (b) Object.assign(b, { ...sb, resistance: sb.resistance ?? 1, wet: sb.wet ?? 0 }); }
-    for (const v of s.vehicles) { v.home ??= { x: Math.floor(v.x), y: Math.floor(v.y) }; v.returning ??= false; v.silent ??= false; v.cargo ??= 0; v.passUntil ??= 0; v.prio ??= 1; v.speedNow ??= 0; v.patrol ??= false; v.patrolRoute ??= []; v.patrolIdx ??= 0; v.toHospital ??= false; v.contraflow ??= false; v.blocked ??= 0; v.avoid ??= []; v.ghost ??= 0; v.water ??= content.vehicles[v.defId]?.tank ?? 0; v.hydrant ??= false; w.vehicles.set(v.id, v); }
+    for (const v of s.vehicles) { v.home ??= { x: Math.floor(v.x), y: Math.floor(v.y) }; v.returning ??= false; v.silent ??= false; v.cargo ??= 0; v.passUntil ??= 0; v.prio ??= 1; v.speedNow ??= 0; v.prisoners ??= []; v.patrol ??= false; v.patrolRoute ??= []; v.patrolIdx ??= 0; v.toHospital ??= false; v.contraflow ??= false; v.blocked ??= 0; v.avoid ??= []; v.ghost ??= 0; v.water ??= content.vehicles[v.defId]?.tank ?? 0; v.hydrant ??= false; w.vehicles.set(v.id, v); }
     for (const r of s.responders) w.responders.set(r.id, r);
     for (const v of s.victims) w.victims.set(v.id, v);
-    for (const x of s.suspects) w.suspects.set(x.id, x);
+    for (const x of s.suspects) { x.angle ??= 0; x.path ??= []; x.mode ??= 'idle'; x.runner ??= false; x.obey ??= true; x.fleeT ??= 0; x.escortedBy ??= null; x.vehicleId ??= null; w.suspects.set(x.id, x); }
     for (const b of s.bystanders ?? []) w.bystanders.set(b.id, b);
     for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; i.address ??= ''; i.scouted ??= false; i.pager ??= ''; i.units ??= []; w.incidents.set(i.id, i); }
     w.obstacles = new Set(s.obstacles);

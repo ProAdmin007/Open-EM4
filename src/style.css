@@ -40,7 +40,7 @@ button.primary:hover { background: #d32f2f; }
 .toast.incident_failed, .toast.game_over { border-color: #b71c1c; background: rgba(60, 14, 14, .93); }
 @keyframes in { from { opacity: 0; transform: translateY(-6px); } }
 
-#incidents-panel { position: absolute; top: 52px; right: 10px; width: 300px; max-height: calc(100vh - 290px); overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+#incidents-panel { position: absolute; top: 52px; right: 10px; width: 300px; max-height: calc(100vh - clamp(230px, 32vh, 320px) - 66px); overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
 #incidents-panel h3, .panel h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); }
 .inc { display: block; padding: 6px 8px; margin-bottom: 6px; border-radius: 6px; background: #1c2436; border-left: 4px solid var(--accent); cursor: pointer; }
 .inc:hover { background: #26314a; }
@@ -53,7 +53,7 @@ button.primary:hover { background: #d32f2f; }
 .inc .meter i.low { background: #e53935; }
 .empty { color: var(--dim); padding: 4px 2px; }
 
-#bottom { position: absolute; left: 0; right: 0; bottom: 0; height: 200px; display: grid; grid-template-columns: minmax(300px, 1fr) minmax(300px, 1.3fr) 250px; gap: 8px; padding: 8px; pointer-events: none; }
+#bottom { position: absolute; left: 0; right: 0; bottom: 0; height: clamp(230px, 32vh, 320px); display: grid; grid-template-columns: minmax(300px, 1fr) minmax(300px, 1.3fr) 250px; gap: 8px; padding: 8px; pointer-events: none; }
 #bottom > * { pointer-events: auto; }
 .panel { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow: auto; }
 #map-panel { padding: 6px; display: flex; flex-direction: column; gap: 4px; align-items: center; }
@@ -89,7 +89,7 @@ button.primary:hover { background: #d32f2f; }
 #screen .ok { color: #a5d6a7; font-size: 12.5px; }
 #screen .help { color: var(--dim); font-size: 12.5px; }
 #screen button { padding: 9px 14px; }
-@media (max-width: 1000px) { #bottom { grid-template-columns: 1fr 1fr; height: 230px; } #map-panel { display: none; } }
+@media (max-width: 1000px) { #bottom { grid-template-columns: 1fr 1fr; height: clamp(240px, 34vh, 330px); } #map-panel { display: none; } }
 
 .reinf-title { grid-column: 1 / -1; margin-top: 6px; color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
 .veh.reinf { border-style: dashed; }

@@ -680,6 +680,12 @@ export class Three3DRenderer implements GameRenderer {
     const armL = mk(armGeo, cloth, 0, 1.0, 0.29), armR = mk(armGeo, cloth, 0, 1.0, -0.29);
     mk(sharedSphere(0.045), skin, 0, 0.75, 0.29, armL); mk(sharedSphere(0.045), skin, 0, 0.75, -0.29, armR); // hands rotate with the arms
     armL.children.forEach(c => c.position.set(0, -0.3, 0)); armR.children.forEach(c => c.position.set(0, -0.3, 0));
+    if (p.kind === 'responder' && /officer/.test(p.model) && !/fire_officer|ovd/.test(p.model)) { // service pistol, drawn when covering a suspect
+      const pistol = new THREE.Group(); pistol.name = 'pistol'; pistol.visible = false;
+      const gun = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), lambert(0x15151a)); gun.position.set(0.015, -0.42, 0);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.04), lambert(0x2a2a30)); grip.position.set(0.05, -0.33, 0);
+      pistol.add(gun, grip); armR.add(pistol);
+    }
     mk(sharedCapsule(0.045, 0.06), skin, 0, 1.06, 0); // neck
     const head = mk(sharedSphere(0.15), skin, 0, 1.2, 0);
     mk(sharedSphere(0.02), lambert(0x111111), 0.13, 1.22, 0.06); mk(sharedSphere(0.02), lambert(0x111111), 0.13, 1.22, -0.06); // eyes (the face looks along +x)
@@ -760,15 +766,27 @@ export class Three3DRenderer implements GameRenderer {
         l.position.set(sitting ? 0.3 : 0, kneeling ? 0.14 : sitting ? 0.22 : 0.25, i ? -0.1 : 0.1);
       });
       if (arms) {
-        const walking = p.state === 'walking' || p.state === 'move' || p.state === 'leaving';
+        const fleeing = p.state === 'fleeing';
+        const walking = p.state === 'walking' || p.state === 'move' || p.state === 'leaving' || fleeing || p.state === 'escorted';
         const working = p.state === 'extinguish' || p.state === 'arrest' || p.state === 'clear' || p.state === 'secure' || p.state === 'defuse';
-        if (p.state === 'treat') { // chest compressions
+        const pistol = obj.getObjectByName('pistol');
+        if (pistol) pistol.visible = !!p.aiming;
+        if (p.aiming) { arms[1].rotation.z = -1.52; arms[0].rotation.z = -1.4; } // both hands on the pistol
+        else if (p.state === 'surrender') { arms[0].rotation.z = -2.9; arms[1].rotation.z = -2.9; } // hands up
+        else if (p.state === 'arrested' || p.state === 'escorted') { arms[0].rotation.z = 0.55; arms[1].rotation.z = 0.55; } // cuffed behind the back
+        else if (p.state === 'treat') { // chest compressions
           const pump = Math.sin(this.time * 9 + p.id) * 0.3;
           arms[0].rotation.z = -1.35 + pump; arms[1].rotation.z = -1.35 + pump;
+        } else if (p.state === 'assist' || p.state === 'load' || p.state === 'collect' || p.state === 'rescue') { // hands on the casualty / stretcher
+          arms[0].rotation.z = -1.0; arms[1].rotation.z = -1.0 + Math.sin(this.time * 2 + p.id) * 0.08;
+        } else if (p.state === 'disperse') { // waving the crowd back
+          arms[0].rotation.z = -0.6; arms[1].rotation.z = -2.0 + Math.sin(this.time * 5 + p.id) * 0.5;
         } else {
-          arms[0].rotation.z = walking ? Math.sin(t) * 0.7 : working ? -1.1 : 0;
-          arms[1].rotation.z = walking ? -Math.sin(t) * 0.7 : working ? -1.1 : 0;
+          const sw = fleeing ? 1.5 : 1;
+          arms[0].rotation.z = walking ? Math.sin(t * sw) * 0.7 * sw : working ? -1.1 : 0;
+          arms[1].rotation.z = walking ? -Math.sin(t * sw) * 0.7 * sw : working ? -1.1 : 0;
         }
+        if (fleeing) rig.rotation.x = 0.22; // running: leaning forward
       }
       if (p.kind === 'victim' && info) {
         seenVictims.add(p.id);
