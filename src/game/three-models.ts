@@ -80,6 +80,10 @@ export interface VehicleParts {
   wheels: THREE.Mesh[];
   /** emergency lights: `phase` 0/1 alternate while the sirens are on */
   beacons: { mesh: THREE.Mesh; on: number; off: number; phase: 0 | 1 }[];
+  /** brake lights (shared material per car) and turn indicators (left / right sets) of civilian cars */
+  brake?: THREE.MeshStandardMaterial;
+  blinkL?: THREE.MeshStandardMaterial;
+  blinkR?: THREE.MeshStandardMaterial;
 }
 
 interface Spec {
@@ -449,10 +453,11 @@ function addWheels(g: THREE.Group, parts: VehicleParts, axles: number[], wr: num
 const CAR_PALETTE = [0xb03030, 0x2a5cb8, 0x2a7d4f, 0xdcb830, 0x6e4cb0, 0xe07c1e, 0xe9e9e9, 0x24282f, 0x8d9199, 0x6e4426];
 
 /** A civilian car: sedan, hatchback or delivery van, chosen from the numeric id in the model string. */
-export function buildCivilianCar(model: string, id: number): { group: THREE.Group; parts: VehicleParts } {
+export function buildCivilianCar(model: string, id: number, type: 'car' | 'van' | 'bike' = 'car'): { group: THREE.Group; parts: VehicleParts } {
+  if (type === 'bike') return buildBicycle(id);
   const num = parseInt(model.replace(/\D+/g, ''), 10);
   const color = CAR_PALETTE[((Number.isFinite(num) ? num : 0) * 3 + id) % CAR_PALETTE.length];
-  const kind = id % 5 === 0 ? 'van' : id % 3 === 0 ? 'hatch' : 'sedan';
+  const kind = type === 'van' ? 'van' : id % 3 === 0 ? 'hatch' : 'sedan';
   const g = new THREE.Group();
   const parts: VehicleParts = { wheels: [], beacons: [] };
   const body = paint(color), glass = glassMat(), dark = lambert(0x24262a), chrome = lambert(CHROME);
@@ -487,10 +492,49 @@ export function buildCivilianCar(model: string, id: number): { group: THREE.Grou
   box(g, 0.03, 0.12, 0.46, lambert(0xf2c21b), L / 2 + 0.1, 0.3, 0);
   box(g, 0.03, 0.12, 0.46, lambert(0xf2c21b), -L / 2 - 0.1, 0.3, 0);
   addWheels(g, parts, [L / 2 - 0.85, -L / 2 + 0.85], wr, W, 0.24);
+  // lights: head lights, brake lights (own material, brighter when braking) and amber indicators at all four corners
+  const brakeMat = own(glow(0xff2a1a, 0.5)) as THREE.MeshStandardMaterial, blinkL = own(glow(0xffa000, 0.05)) as THREE.MeshStandardMaterial, blinkR = own(glow(0xffa000, 0.05)) as THREE.MeshStandardMaterial;
   for (const s2 of [-1, 1]) {
     box(g, 0.05, 0.12, 0.26, glow(0xfff3c0, 0.9), L / 2 + 0.01, 0.5, s2 * W * 0.32);
-    box(g, 0.05, 0.12, 0.26, glow(0xff2a1a, 0.7), -L / 2 - 0.01, 0.5, s2 * W * 0.32);
+    box(g, 0.05, 0.12, 0.26, brakeMat, -L / 2 - 0.01, 0.5, s2 * W * 0.32);
+    const bm = s2 < 0 ? blinkL : blinkR;
+    box(g, 0.05, 0.08, 0.14, bm, L / 2 + 0.01, 0.42, s2 * W * 0.44);
+    box(g, 0.05, 0.08, 0.14, bm, -L / 2 - 0.01, 0.42, s2 * W * 0.44);
   }
+  parts.brake = brakeMat; parts.blinkL = blinkL; parts.blinkR = blinkR;
+  return { group: g, parts };
+}
+
+/** A bicycle with a rider (the Dutch way): frame, two spoked wheels, handlebar, rider in a jacket. */
+export function buildBicycle(id: number): { group: THREE.Group; parts: VehicleParts } {
+  const g = new THREE.Group();
+  const parts: VehicleParts = { wheels: [], beacons: [] };
+  const frameCol = [0x2a2a30, 0x8a1c1c, 0x1c4a8a, 0x2d6a3a, 0xcfcfcf][id % 5];
+  const frame = lambert(frameCol), dark = lambert(0x15151a);
+  const wr = 0.34;
+  for (const x of [-0.62, 0.62]) {
+    const w = new THREE.Mesh(wheelGeo(wr, 0.05), lambert(0x1a1a1c));
+    w.position.set(x, wr, 0); g.add(w); parts.wheels.push(w);
+    const hub = new THREE.Mesh(wheelGeo(wr * 0.82, 0.02), lambert(0xb8bcc2)); w.add(hub);
+    hub.scale.set(1, 1, 0.5);
+  }
+  box(g, 1.2, 0.05, 0.05, frame, 0, 0.62, 0).rotation.z = 0.12;
+  box(g, 0.05, 0.55, 0.05, frame, 0.55, 0.65, 0); // fork / steering column
+  box(g, 0.05, 0.5, 0.05, frame, -0.35, 0.6, 0); // seat tube
+  box(g, 0.08, 0.04, 0.55, dark, 0.58, 0.95, 0); // handlebar
+  box(g, 0.28, 0.07, 0.16, dark, -0.4, 0.88, 0); // saddle
+  box(g, 0.4, 0.04, 0.3, frame, -0.82, 0.62, 0); // rear carrier
+  // rider
+  const jacket = lambert([0x2a5a8a, 0x8a2a2a, 0x2a2a2a, 0x3a6a3a, 0xc9a02a][id % 5]);
+  rbox(g, 0.28, 0.55, 0.42, 0.1, jacket, -0.28, 1.2, 0).rotation.z = -0.28; // torso leaning forward
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), lambert(0xe0b894)); head.position.set(-0.05, 1.62, 0); g.add(head);
+  if (id % 3 === 0) { const h = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), lambert(0xf2f2f2)); h.position.set(-0.05, 1.66, 0); g.add(h); }
+  for (const s2 of [-1, 1]) {
+    box(g, 0.45, 0.1, 0.1, lambert(0x2a2f3a), 0.02, 0.8, s2 * 0.12).rotation.z = 0.5; // legs on the pedals
+    box(g, 0.5, 0.08, 0.08, jacket, 0.25, 1.28, s2 * 0.26).rotation.z = -0.45; // arms to the handlebar
+  }
+  box(g, 0.05, 0.1, 0.1, glow(0xff2a1a, 0.9), -1.0, 0.7, 0); // rear lamp
+  box(g, 0.05, 0.1, 0.12, glow(0xfff3c0, 0.9), 0.62, 0.95, 0); // front lamp
   return { group: g, parts };
 }
 

@@ -9,12 +9,12 @@ Stuur brandweer, ambulances, politie en bergingsvoertuigen aan in een levende st
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-115%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-119%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 [English](README.md) · **Nederlands**
 
-![OpenRescue RTS – een stad onder druk: branden, medische noodgevallen en ongelukken tegelijk](docs/screenshot-city.png)
+![OpenRescue RTS – een stad onder druk: branden, medische noodgevallen en ongelukken tegelijk](docs/screenshot-3d-city.png)
 
 </div>
 
@@ -40,13 +40,15 @@ Het spel is geïnspireerd op de gameplay van *Emergency 4* (2006), maar is een *
 - 🔥 **Brand slaat de straat over** – een volledig ontwikkelde brand kan overslaan naar gebouwen aan de overkant van de straat (veel minder kans dan bij de buren, en makkelijker met de wind mee); koelen beschermt ze. De uitruk kiest de goedkoopste route en stopplaats, niet alleen de dichtstbijzijnde tegel.
 - 📻 **Meldkamer** – elke nieuwe melding wordt in het Nederlands over de portofoon ingesproken (spraaksynthese van de browser; uit te zetten bij Instellingen) met adres, prioriteit en een korte omschrijving. De meldingen zijn willekeurig (een anti-herhaling houdt de mix gevarieerd), een nieuw spel begint met een willekeurige brand-, medische en politiemelding, en de Freeplay-seed is willekeurig tenzij je er zelf een invult.
 - 🚑 **Medische scenes** – familie zit geknield naast de patiënt, slachtoffers worden op een brancard met infuusstandaard en zuurstoffles gedragen, zittende houdingen bij verslikking en allergische reacties; de ambulance rijdt na het ziekenhuis zonder sirene terug naar de kazerne.
+- 🤝 **Jij kiest wie helpt** – selecteer een brandweerman, agent of monteur en klik met rechts (of druk op *Helpen*) op een slachtoffer: die assisteert de verpleegkundige, wat de behandeling versnelt (tot twee helpers) en loopt mee naast de brancard. Geselecteerde eenheden krijgen in 3D een pulserende ring, een lichtzuil, een pijl en een naamlabel.
+- 🚦 **Levendiger verkeer** – auto's trekken soepel op en remmen af, wachten voor rood, hebben remlichten en knipperlichten, er rijden bestelbussen en fietsers die rechts in de baan blijven. Gebouwen houden altijd een stoepstrook van de weg.
 - ⏱️ **Ernst telt** – behandel-, arrestatie-, afzet-, ruim- en bluswerk duren langer naarmate de ernst stijgt en verschillen per soort melding. Een melding die je negeert escaleert en mislukt uiteindelijk.
 - 🚦 **Geloofwaardig verkeer** – rechts rijden, keren op de weg, hulpdiensten die nooit door andere voertuigen of mensen heen rijden, parkeervakken bij elke post en bemanning die *naast* het voertuig uitstapt.
 - 🔊 **Volledig gegenereerd geluid** – Nederlandse tweetonige sirenes, knetterend vuur, waterstralen, verkeer en interface-effecten, allemaal met de Web Audio API (geen geluidsbestanden).
 - 🎯 **Spelmodi** – zes missies, eindeloze Freeplay (Easy / Normal / Hard, met seed voor reproduceerbare scenario's), opslaan en laden, lokale highscores.
 - 🧩 **Moddable** – voertuigen, rollen, meldingen, missies en kaarten zijn gevalideerde JSON; er zit een voorbeeldpakket bij.
-- 🧪 **Goed getest** – een deterministische simulatie met 115 unit-tests en 16 browsertests (Playwright), waaronder het complete scenario "rij naar een brand, stap uit, blus, melding verdwijnt" in zowel de 2D- als de 3D-weergave.
-- 🧊 **Experimentele 3D-weergave** – een procedurele three.js-stad (gebouwen, voertuigen, mensen, vuur/rook, verkeerslichten) met een RTS-camera, naast de originele 2D-weergave; omschakelen via Instellingen of het hoofdmenu. Wordt pas geladen zodra je hem aanzet, dus kost niets als je hem nooit gebruikt ([docs/3d.md](docs/3d.md)).
+- 🧪 **Goed getest** – een deterministische simulatie met 119 unit-tests en 16 browsertests (Playwright), waaronder het complete scenario "rij naar een brand, stap uit, blus, melding verdwijnt" in zowel de 2D- als de 3D-weergave.
+- 🧊 **Het 3D-spel** – het spel wordt standaard in 3D gespeeld (de 2D-weergave is er nog als lichte variant): een procedurele three.js-stad (gebouwen, voertuigen, mensen, vuur/rook, verkeerslichten) met een RTS-camera, naast de originele 2D-weergave; omschakelen via Instellingen of het hoofdmenu. Wordt pas geladen zodra je hem aanzet, dus kost niets als je hem nooit gebruikt ([docs/3d.md](docs/3d.md)).
 
 De experimentele 3D-weergave (procedureel, three.js, geen externe assets):
 

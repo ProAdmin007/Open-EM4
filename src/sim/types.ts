@@ -1,7 +1,7 @@
 import type { Vec } from './pathfinding';
 
 export type Category = 'fire' | 'ambulance' | 'police' | 'tech';
-export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate' | 'disperse' | 'defuse' | 'cool';
+export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate' | 'disperse' | 'defuse' | 'cool' | 'assist';
 export type Objective = 'fire_out' | 'victims_safe' | 'suspects_arrested' | 'area_secured' | 'obstacle_cleared' | 'bystanders_dispersed' | 'device_defused';
 export type BuildingType = 'residential' | 'apartment' | 'commercial' | 'industrial' | 'office' | 'warehouse' | 'school' | 'shopping' | 'church' | 'station' | 'hospital';
 
@@ -168,7 +168,8 @@ export type Task =
   | { type: 'clear'; incidentId: number; progress: number }
   | { type: 'disperse'; incidentId: number; progress: number }
   | { type: 'defuse'; incidentId: number; progress: number }
-  | { type: 'cool'; buildingId: string; deploy: number };
+  | { type: 'cool'; buildingId: string; deploy: number }
+  | { type: 'assist'; victimId: number; idle: number };
 export interface Responder extends Entity {
   kind: 'responder';
   role: string;
@@ -256,7 +257,17 @@ export interface Civilian extends Entity {
   color: number;
   wait: number;
   stuck: number;
+  /** cruising speed (tiles/s) */
   speed: number;
+  /** current speed (tiles/s): cars accelerate, brake for lights and traffic and slow down for turns */
+  v: number;
+  /** car, van or (slower, narrower) bicycle */
+  type: 'car' | 'van' | 'bike';
+  len: number;
+  hw: number;
+  /** braking now / turn indicator (-1 left, 1 right) for the renderer */
+  braking: boolean;
+  signal: number;
 }
 export interface Pedestrian extends Entity {
   kind: 'pedestrian';

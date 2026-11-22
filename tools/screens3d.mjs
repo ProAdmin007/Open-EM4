@@ -29,7 +29,7 @@ await page.evaluate(() => {
   or.scene.renderer3d.distance = 52; or.scene.centerOn(b.x + b.w / 2, b.y + b.h / 2 + 1);
 });
 await page.locator('[data-act="speed4"]').click().catch(() => {});
-await page.waitForFunction(() => { const w = window.__openrescue.world, v = w.vehicles.get(window.__eng); return v && !v.path.length && Math.hypot(v.x - window.__fireDoor.x, v.y - window.__fireDoor.y) < 6; }, undefined, { timeout: 120000, polling: 100 });
+await page.waitForFunction(() => { const w = window.__openrescue.world, v = w.vehicles.get(window.__eng); return v && !v.path.length && Math.hypot(v.x - window.__fireDoor.x, v.y - window.__fireDoor.y) < 14; }, undefined, { timeout: 120000, polling: 100 });
 await page.keyboard.press('b');
 await page.waitForFunction(() => [...window.__openrescue.world.responders.values()].some(r => r.task?.type === 'extinguish' && r.task.deploy >= 2.5), undefined, { timeout: 90000 });
 await page.locator('[data-act="speed1"]').click().catch(() => {});

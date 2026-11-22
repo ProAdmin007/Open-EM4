@@ -725,7 +725,7 @@ export class World {
     }
     for (const o of this.civilians) {
       if (o.id === self.id) continue;
-      const r = check(o, CAR_LEN, CAR_HW, PRIO_CIVILIAN, 'civ', o);
+      const r = check(o, o.len, o.hw, PRIO_CIVILIAN, 'civ', o);
       if (r) return r;
     }
     const lookP: Obb = { x: cx + ux * 0.12, y: cy + uy * 0.12, ux, uy, hl: len / 2 + 0.17, hw: hw + 0.04 };
@@ -878,13 +878,26 @@ export class World {
         const v = this.victims.get(t.victimId);
         if (!v || v.transport !== 'scene') return done();
         if (this.approach(r, v.x, v.y, 1.3, done)) {
-          t.progress += dt * (role.power >= 2 ? 2 : 1);
+          t.progress += dt * (role.power >= 2 ? 2 : 1) * (1 + 0.6 * this.helpers(v));
           if (t.progress >= v.treatTime) {
             v.treated = true; v.conscious = true; v.health = Math.min(100, v.health + 10);
             this.emit({ type: 'info', message: `${r.name} heeft een slachtoffer gestabiliseerd` });
             done();
           }
         }
+        break;
+      }
+      case 'assist': {
+        const v = this.victims.get(t.victimId);
+        if (!v || (v.transport !== 'scene' && v.transport !== 'carried')) return done();
+        // stay with the casualty: next to the one who is treating, or alongside the trolley while it is carried
+        const carrier = v.transport === 'carried' && v.carriedBy !== null ? this.responders.get(v.carriedBy) : null;
+        const tx = carrier ? carrier.x : v.x, ty = carrier ? carrier.y : v.y;
+        if (Math.hypot(r.x - tx, r.y - ty) > 1.5) { if (!r.path.length) this.walkTo(r, (x, y) => this.isWalkable(x, y) && Math.hypot(x + 0.5 - tx, y + 0.5 - ty) <= 1.5); this.stepAlong(r, r.path, role.speed * 1.1, dt); }
+        else { r.path = []; r.angle = Math.atan2(ty - r.y, tx - r.x); }
+        const busy = [...this.responders.values()].some(o => o !== r && (o.task?.type === 'treat' || o.task?.type === 'load') && (o.task as { victimId: number }).victimId === v.id);
+        t.idle = busy ? 0 : t.idle + dt;
+        if (t.idle > 10) { this.emit({ type: 'info', message: `${r.name} heeft niemand meer om te helpen` }); done(); }
         break;
       }
       case 'load': {
@@ -1028,6 +1041,13 @@ export class World {
   }
 
   private tallWarned = new Set<string>();
+
+  /** How many responders (chosen by the player) are assisting next to this casualty: they speed up treatment (max 2). */
+  helpers(v: { id: number; x: number; y: number }): number {
+    let n = 0;
+    for (const o of this.responders.values()) if (o.task?.type === 'assist' && o.task.victimId === v.id && Math.hypot(o.x - v.x, o.y - v.y) < 2.2) n++;
+    return Math.min(2, n);
+  }
 
   /** Is a burning building close enough to this one that it could catch fire? */
   threatened(b: Building): boolean {
@@ -1679,6 +1699,7 @@ export class World {
       case 'cool': for (const b of this.buildings.values()) if (b.fire <= 0 && !b.destroyed && b.wet < 60 && this.threatened(b)) consider({ kind: 'building', id: b.id }, rectDist(b, r.x, r.y)); break;
       case 'rescue': for (const v of this.victims.values()) if (v.transport === 'trapped') consider({ kind: 'victim', id: v.id }, dist(r, v)); break;
       case 'treat': for (const v of this.victims.values()) if (v.transport === 'scene' && !v.treated) consider({ kind: 'victim', id: v.id }, dist(r, v)); break;
+      case 'assist': for (const v of this.victims.values()) if (v.transport === 'scene' || v.transport === 'carried') consider({ kind: 'victim', id: v.id }, dist(r, v) - (v.treated ? 0 : 3)); break;
       case 'carry': for (const v of this.victims.values()) if (v.transport === 'scene') consider({ kind: 'victim', id: v.id }, dist(r, v) - (v.treated ? 100 : 0)); break;
       case 'arrest': for (const s of this.suspects.values()) if (!s.arrested) consider({ kind: 'suspect', id: s.id }, dist(r, s)); break;
       case 'secure': for (const i of this.incidents.values()) if (this.content.incidents[i.defId].objectives.includes('area_secured') && !i.secured) consider({ kind: 'incident', id: i.id }, dist(r, i)); break;
@@ -1721,6 +1742,7 @@ export class World {
       case 'clear': return t.kind === 'incident' ? { type: 'clear', incidentId: t.id, progress: 0 } : null;
       case 'disperse': return t.kind === 'incident' ? { type: 'disperse', incidentId: t.id, progress: 0 } : null;
       case 'cool': return t.kind === 'building' ? { type: 'cool', buildingId: t.id, deploy: 0 } : null;
+      case 'assist': return t.kind === 'victim' ? { type: 'assist', victimId: t.id, idle: 0 } : null;
       case 'defuse': return t.kind === 'incident' ? { type: 'defuse', incidentId: t.id, progress: 0 } : null;
       default: return null;
     }
@@ -1772,6 +1794,7 @@ export class World {
         else if (v.treated && abil.includes('carry')) ability = 'carry';
         else if (abil.includes('treat')) ability = 'treat';
         else if (abil.includes('carry')) ability = 'carry';
+        else ability = 'assist'; // anyone else: help the paramedic (the player chooses who)
       }
       if (ability && this.roleDef(r).abilities.includes(ability) && this.orderAbility([id], ability, target!)) continue;
       const p = this.targetPoint(target, x, y);
@@ -1795,7 +1818,12 @@ export class World {
     for (let i = 0; i < cars; i++) {
       let r = this.rng.pick(roads);
       for (let k = 0; k < 20 && this.civilians.some(o => Math.hypot(o.x - r.x - 0.5, o.y - r.y - 0.5) < 2.5); k++) r = this.rng.pick(roads);
-      this.civilians.push({ kind: 'civilian', ...this.addEntityBase(r.x + 0.5, r.y + 0.5), path: [], angle: 0, color: this.rng.int(0, 5), wait: this.rng.range(0, 3), stuck: 0, speed: this.rng.range(3.2, 4.2) });
+      const roll = this.rng.next(), type: Civilian['type'] = roll < 0.16 ? 'bike' : roll < 0.26 ? 'van' : 'car';
+      this.civilians.push({
+        kind: 'civilian', ...this.addEntityBase(r.x + 0.5, r.y + 0.5), path: [], angle: 0, color: this.rng.int(0, 5), wait: this.rng.range(0, 3), stuck: 0,
+        speed: type === 'bike' ? this.rng.range(1.5, 2.1) : type === 'van' ? this.rng.range(2.9, 3.7) : this.rng.range(3.2, 4.2),
+        v: 0, type, len: type === 'bike' ? 0.55 : type === 'van' ? 1.7 : CAR_LEN, hw: type === 'bike' ? 0.17 : CAR_HW, braking: false, signal: 0,
+      });
     }
     const walk: Vec[] = [];
     for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) if (this.tiles[y * this.w + x] === TILE_GRASS) walk.push({ x, y });
@@ -1834,14 +1862,34 @@ export class World {
     if (!this.civCanEnter(c, next.x, next.y)) { c.path = []; c.wait = 0.5; return; }
     const dx = next.x + 0.5 - c.x, dy = next.y + 0.5 - c.y, d = Math.hypot(dx, dy) || 1;
     const ux = dx / d, uy = dy / d;
-    // red light? only checked when about to enter an intersection
-    if (this.isIntersection(next.x, next.y) && !this.isIntersection(Math.floor(c.x), Math.floor(c.y)) && d < 0.9) {
-      const horizontal = Math.abs(ux) > Math.abs(uy);
-      if ((this.lightPhase === 0) !== horizontal) return;
+    // target speed: cruising speed, slower for a turn ahead, zero for a red light or a car in front (smooth acceleration and braking)
+    let target = c.speed;
+    const after = c.path[1];
+    const turning = !!after && (after.x - next.x !== next.x - Math.floor(c.x) || after.y - next.y !== next.y - Math.floor(c.y)) && d < 1.2;
+    if (turning) target = Math.min(target, 1.3);
+    c.signal = 0;
+    for (let k = 0; k < Math.min(3, c.path.length - 1); k++) { // indicator on for a turn within the next tiles
+      const a = c.path[k], b = c.path[k + 1], cx0 = k === 0 ? Math.floor(c.x) : c.path[k - 1].x, cy0 = k === 0 ? Math.floor(c.y) : c.path[k - 1].y;
+      const cross = (a.x - cx0) * (b.y - a.y) - (a.y - cy0) * (b.x - a.x);
+      if (cross !== 0) { c.signal = cross > 0 ? 1 : -1; break; }
     }
-    const step = Math.min(c.speed * dt, d);
-    const blocker = this.findBlocker(c, c.x, c.y, ux, uy, step, CAR_LEN, CAR_HW, PRIO_CIVILIAN);
+    const enteringIx = this.isIntersection(next.x, next.y) && !this.isIntersection(Math.floor(c.x), Math.floor(c.y));
+    if (enteringIx && d < 1.7) {
+      const horizontal = Math.abs(ux) > Math.abs(uy);
+      if ((this.lightPhase === 0) !== horizontal) { // red: stop in front of the junction
+        target = d < 0.95 ? 0 : Math.min(target, Math.max(0, (d - 0.9) * 2.5));
+        if (d < 0.9) { c.v = Math.max(0, c.v - 10 * dt); c.braking = true; return; }
+      }
+    }
+    const look = this.findBlocker(c, c.x, c.y, ux, uy, Math.min(1.4, d + 0.4), c.len, c.hw, PRIO_CIVILIAN);
+    if (look) target = Math.min(target, look.kind === 'civ' && !look.halted ? 0.6 : 0);
+    const before = c.v;
+    c.v += Math.max(-7 * dt, Math.min(2.6 * dt, target - c.v));
+    c.braking = c.v < before - 1e-3 || (target === 0 && c.v < 0.3);
+    const step = Math.min(c.v * dt, d);
+    const blocker = this.findBlocker(c, c.x, c.y, ux, uy, Math.max(step, 0.02), c.len, c.hw, PRIO_CIVILIAN);
     if (blocker) {
+      c.v = Math.max(0, c.v - 10 * dt); c.braking = true;
       c.stuck += dt;
       if (c.stuck > 3 && blocker.kind === 'veh') { c.path = []; c.wait = 0.3; } // re-plan around a parked emergency vehicle
       if (c.stuck > 8) this.respawnCivilian(c); // deadlock breaker: this car drives off somewhere else

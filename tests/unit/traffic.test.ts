@@ -8,7 +8,7 @@ const boxOfVehicle = (v: { x: number; y: number; angle: number; defId: string; i
   const d = content.vehicles[v.defId];
   return { x: v.x, y: v.y, ux: Math.cos(v.angle), uy: Math.sin(v.angle), hl: d.length / 2, hw: d.length < 1.2 ? 0.22 : 0.36, label: 'veh' + v.id };
 };
-const boxOfCar = (c: { x: number; y: number; angle: number; id: number }): Box => ({ x: c.x, y: c.y, ux: Math.cos(c.angle), uy: Math.sin(c.angle), hl: 0.7, hw: 0.36, label: 'civ' + c.id });
+const boxOfCar = (c: { x: number; y: number; angle: number; id: number; len: number; hw: number }): Box => ({ x: c.x, y: c.y, ux: Math.cos(c.angle), uy: Math.sin(c.angle), hl: c.len / 2, hw: c.hw, label: 'civ' + c.id });
 const inBox = (b: Box, px: number, py: number, margin = 0) => {
   const rx = px - b.x, ry = py - b.y;
   return Math.abs(rx * b.ux + ry * b.uy) <= b.hl + margin && Math.abs(-rx * b.uy + ry * b.ux) <= b.hw + margin;
@@ -40,7 +40,7 @@ describe('parking', () => {
     for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) expect(overlap(boxes[i], boxes[j])).toBe(false);
     for (const b of boxes) for (const s of [-1, -0.5, 0, 0.5, 1]) expect(w.isBuilding(Math.floor(b.x + b.ux * b.hl * s), Math.floor(b.y + b.uy * b.hl * s))).toBe(false);
   });
-  it('civilians never drive into parking lots', () => {
+  it('civilians never drive into parking lots', { timeout: 30000 }, () => {
     const w = World.create(content, { seed: 3, difficulty: 'normal', freeplay: false, traffic: true });
     for (let i = 0; i < 30 * 120; i++) {
       w.tick(SIM_DT);

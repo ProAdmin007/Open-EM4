@@ -1,9 +1,9 @@
-// Generates docs/social-preview.png (1280x640, the size GitHub and social networks expect) from docs/screenshot-city.png.
+// Generates docs/social-preview.png (1280x640, the size GitHub and social networks expect) from docs/screenshot-3d-city.png.
 // Usage: node tools/social-preview.mjs
 import { chromium } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-const shot = readFileSync(new URL('../docs/screenshot-city.png', import.meta.url)).toString('base64');
+const shot = readFileSync(new URL('../docs/screenshot-3d-city.png', import.meta.url)).toString('base64');
 const html = `<!doctype html><html><body style="margin:0;width:1280px;height:640px;position:relative;overflow:hidden;font-family:system-ui,'Segoe UI',sans-serif;background:#11141a">
 <img src="data:image/png;base64,${shot}" style="position:absolute;inset:0;width:1280px;height:720px;object-fit:cover;filter:brightness(.55) saturate(1.1)">
 <div style="position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,14,22,.92) 0%,rgba(10,14,22,.55) 55%,rgba(10,14,22,0) 100%)"></div>

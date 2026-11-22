@@ -16,7 +16,7 @@ export interface Settings {
   /** The control room reads each call out loud (speech synthesis). */
   voice: boolean;
 }
-export const DEFAULT_SETTINGS: Settings = { edgeScroll: false, defaultSpeed: 1, hints: true, difficulty: 'normal', seed: '2006', volume: 0.6, muted: false, mapId: 'default_city', viewMode: '2d', voice: true };
+export const DEFAULT_SETTINGS: Settings = { edgeScroll: false, defaultSpeed: 1, hints: true, difficulty: 'normal', seed: '2006', volume: 0.6, muted: false, mapId: 'default_city', viewMode: '3d', voice: true };
 
 const K_SETTINGS = 'openrescue.settings', K_SAVE = 'openrescue.save', K_MODS = 'openrescue.mods';
 

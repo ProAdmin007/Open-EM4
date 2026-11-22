@@ -78,7 +78,8 @@ const add = (type, x, y, w, h, height, extra = {}) => {
   buildings.push(b);
   return b;
 };
-const clear = (x, y, w, h, m = 1) => { for (let j = y - m; j < y + h + m; j++) for (let i = x - m; i < x + w + m; i++) { const c = at(i, j); if (c === 'B' || c === 'P' || c === 'W' || c === '#') return false; } for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (grid[j][i] !== '.') return false; return true; };
+// margin tiles keep a free strip (pavement) between a building and the road unless `roadOk` (station lots front a street)
+const clear = (x, y, w, h, m = 1, roadOk = false) => { for (let j = y - m; j < y + h + m; j++) for (let i = x - m; i < x + w + m; i++) { const c = at(i, j); if (c === 'B' || c === 'P' || c === 'W' || c === '#' || (c === 'R' && !roadOk && m > 0)) return false; } for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (grid[j][i] !== '.') return false; return true; };
 const nearRoad = (x, y, w, h, lo = 2, hi = 6) => { // a street within lo..hi tiles of the footprint, so the building faces it
   for (let d = lo; d <= hi; d++) { for (let i = x; i < x + w; i++) if (at(i, y - d) === 'R' || at(i, y + h - 1 + d) === 'R') return true; for (let j = y; j < y + h; j++) if (at(x - d, j) === 'R' || at(x + w - 1 + d, j) === 'R') return true; }
   return false;
@@ -97,11 +98,11 @@ const sites = [];
 for (let y = 2; y < H - 9; y++) for (let x = 2; x < W - 10; x++) {
   let ok = true;
   for (let i = 0; i < 8 && ok; i++) if (at(x + i, y - 1) !== 'R') ok = false;
-  if (ok && clear(x, y, 8, 8, 1)) sites.push({ x, y });
+  if (ok && clear(x, y, 8, 8, 1, true)) sites.push({ x, y });
 }
 const used = [];
 const take = (prefer) => { // farthest-point choice among the free station sites (or the one closest to `prefer`)
-  const ok = sites.filter(s => clear(s.x, s.y, 8, 8, 1));
+  const ok = sites.filter(s => clear(s.x, s.y, 8, 8, 1, true));
   if (!ok.length) throw new Error('no site left for a station');
   let best = ok[0], bs = -Infinity;
   for (const s of ok) {

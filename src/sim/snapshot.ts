@@ -47,6 +47,11 @@ export interface SnapPerson {
 export interface SnapCar {
   id: number;
   model: string;
+  type: 'car' | 'van' | 'bike';
+  braking: boolean;
+  /** turn indicator: -1 left, 0 none, 1 right */
+  signal: number;
+  speed: number;
   x: number;
   y: number;
   position: { x: number; y: number; z: number };
@@ -152,7 +157,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
   }
   for (const c of world.civilians) {
     const x = ix(c), y = iy(c);
-    snap.cars.push({ id: c.id, model: modelId('vehicle', `civilian_${c.color}`), x, y, position: tileToWorld3D(x, y), heading: c.angle });
+    snap.cars.push({ id: c.id, type: c.type, braking: c.braking, signal: c.signal, speed: c.v, model: modelId('vehicle', `civilian_${c.color}`), x, y, position: tileToWorld3D(x, y), heading: c.angle });
   }
   for (const b of world.buildings.values()) {
     const heightMeters = buildingHeightMeters(b);

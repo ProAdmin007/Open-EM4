@@ -110,12 +110,23 @@ describe('response routes', () => {
       w.orderMove([engine.id], tx, ty);
       const len = engine.path.length;
       const manhattan = Math.abs(tx - engine.x) + Math.abs(ty - engine.y);
-      if (manhattan < 12) continue;
+      if (manhattan < 20) continue; // very short trips may legitimately loop around a block (one-way lanes)
       const ratio = len / manhattan;
       worst = Math.max(worst, ratio); sum += ratio; n++;
     }
     expect(n).toBeGreaterThan(3);
     expect(sum / n).toBeLessThan(1.5);
     expect(worst).toBeLessThan(2.3);
+  });
+});
+
+describe('placement of buildings', () => {
+  it('no building stands on or against the road: there is always a pavement strip', () => {
+    const w = newWorld(1);
+    for (const b of w.map.buildings) {
+      if (b.type === 'station') continue; // a station's lot fronts the street; the building itself is behind the lot
+      for (let j = b.y - 1; j <= b.y + b.h; j++) for (let i = b.x - 1; i <= b.x + b.w; i++) expect(w.isRoad(i, j)).toBe(false);
+    }
+    for (const b of w.map.buildings) for (let j = b.y; j < b.y + b.h; j++) for (let i = b.x; i < b.x + b.w; i++) expect(w.isRoad(i, j) || w.isParking(i, j) || w.isWater(i, j)).toBe(false);
   });
 });

@@ -162,7 +162,7 @@ export class Three3DRenderer implements GameRenderer {
   private people = new Map<number, Tracked>();
   private cars = new Map<number, Tracked>();
   private incidentMarkers = new Map<number, THREE.Sprite>();
-  private selectionRings = new Map<number, THREE.Mesh>();
+  private selectionRings = new Map<number, THREE.Object3D>();
   private frame = 0;
   private lightPhase = -1;
   private time = 0;
@@ -736,14 +736,24 @@ export class Three3DRenderer implements GameRenderer {
   }
   private syncCars(list: SnapCar[]): void {
     this.track(this.cars, list, c => {
-      const { group, parts } = buildCivilianCar(c.model, c.id);
+      const { group, parts } = buildCivilianCar(c.model, c.id, c.type);
       group.userData.parts = parts;
       return group;
     }, (obj, c) => {
       const px = obj.position.x, pz = obj.position.z;
       obj.position.set(c.position.x, 0, c.position.z);
       obj.rotation.y = -c.heading;
-      this.animateParts(obj.userData.parts as VehicleParts, Math.hypot(c.position.x - px, c.position.z - pz) > 0.002, false, this.lastDt);
+      const parts = obj.userData.parts as VehicleParts;
+      this.animateParts(parts, Math.hypot(c.position.x - px, c.position.z - pz) > 0.002, false, this.lastDt);
+      if (parts.brake) parts.brake.emissiveIntensity = c.braking ? 2.2 : 0.45; // brake lights
+      const blink = Math.floor(this.time * 3.2) % 2 === 0;
+      if (parts.blinkL) parts.blinkL.emissiveIntensity = c.signal < 0 && blink ? 2.4 : 0.05; // indicators
+      if (parts.blinkR) parts.blinkR.emissiveIntensity = c.signal > 0 && blink ? 2.4 : 0.05;
+      if (c.type === 'bike') { // cyclists keep to the right edge of the lane
+        const rx = Math.sin(-c.heading), rz = Math.cos(-c.heading);
+        obj.position.x += rx * 1.15; obj.position.z += rz * 1.15;
+        obj.rotation.z = Math.sin(this.time * 2 + c.id) * 0.03; // a little wobble
+      }
     });
   }
 
@@ -974,22 +984,60 @@ export class Three3DRenderer implements GameRenderer {
     for (let i = n; i < this.hoseSegs.length; i++) this.hoseSegs[i].visible = false;
   }
 
+  private labelTextures = new Map<string, THREE.CanvasTexture>();
+  private labelTexture(text: string): THREE.CanvasTexture {
+    let t = this.labelTextures.get(text);
+    if (t) return t;
+    const c = document.createElement('canvas');
+    c.width = 320; c.height = 72;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = 'rgba(12,18,28,0.82)'; ctx.strokeStyle = '#66ff66'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.roundRect(4, 4, 312, 64, 14); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#f4fff4'; ctx.font = 'bold 30px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text.length > 22 ? text.slice(0, 21) + '…' : text, 160, 38);
+    t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.userData.shared = true;
+    this.labelTextures.set(text, t);
+    return t;
+  }
+
+  /** Selected units are impossible to miss: a pulsing ring on the ground, a light column, a bobbing arrow and a name label. */
   private syncSelection(snap: RenderSnapshot): void {
     const keep = new Set<number>();
-    const ring = (id: number, x: number, z: number, r: number): void => {
+    const mark = (id: number, x: number, z: number, r: number, top: number, name: string): void => {
       keep.add(id);
-      let m = this.selectionRings.get(id);
-      if (!m) {
-        m = new THREE.Mesh(new THREE.RingGeometry(r * 0.82, r, 24), new THREE.MeshBasicMaterial({ color: 0x66ff66, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
-        m.rotation.x = -Math.PI / 2;
-        this.scene.add(m);
-        this.selectionRings.set(id, m);
+      let g = this.selectionRings.get(id);
+      if (!g) {
+        g = new THREE.Group();
+        const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.78, r, 40), new THREE.MeshBasicMaterial({ color: 0x66ff66, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+        ring.rotation.x = -Math.PI / 2; ring.position.y = 0.1; ring.name = 'ring'; g.add(ring);
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(r * 0.78, 32), new THREE.MeshBasicMaterial({ color: 0x66ff66, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }));
+        disc.rotation.x = -Math.PI / 2; disc.position.y = 0.09; g.add(disc);
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.55, top + 3, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x66ff66, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+        col.position.y = (top + 3) / 2; g.add(col);
+        const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.8, 4), new THREE.MeshBasicMaterial({ color: 0x66ff66 }));
+        arrow.rotation.x = Math.PI; arrow.name = 'arrow'; g.add(arrow);
+        const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.labelTexture(name), depthTest: false, transparent: true }));
+        label.scale.set(3.6, 0.8, 1); label.name = 'label'; label.renderOrder = 10; g.add(label);
+        g.userData.top = top;
+        this.scene.add(g);
+        this.selectionRings.set(id, g);
       }
-      m.position.set(x, 0.06, z);
+      g.position.set(x, 0, z);
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * 5);
+      const ringM = g.getObjectByName('ring') as THREE.Mesh;
+      ringM.scale.setScalar(1 + pulse * 0.1);
+      (ringM.material as THREE.MeshBasicMaterial).opacity = 0.6 + pulse * 0.4;
+      const arrow = g.getObjectByName('arrow')!, label = g.getObjectByName('label')!;
+      arrow.position.y = top + 1.0 + Math.sin(this.time * 4) * 0.18;
+      arrow.rotation.y = this.time * 2;
+      label.position.y = top + 2.1;
     };
-    for (const v of snap.vehicles) if (this.host.selected.has(v.id)) ring(v.id, v.position.x, v.position.z, v.size.length * 0.65);
-    for (const p of snap.people) if (p.kind === 'responder' && this.host.selected.has(p.id)) ring(p.id, p.position.x, p.position.z, 0.75);
-    for (const [id, m] of this.selectionRings) if (!keep.has(id)) { this.scene.remove(m); this.disposeObj(m); this.selectionRings.delete(id); }
+    const w = this.world;
+    for (const v of snap.vehicles) if (this.host.selected.has(v.id)) mark(v.id, v.position.x, v.position.z, v.size.length * 0.62, v.size.height + 0.3, w?.vehicles.get(v.id)?.name ?? 'Voertuig');
+    for (const p of snap.people) if (p.kind === 'responder' && this.host.selected.has(p.id)) mark(p.id, p.position.x, p.position.z, 0.95, 1.9, w?.responders.get(p.id)?.name ?? 'Hulpverlener');
+    for (const [id, g] of this.selectionRings) if (!keep.has(id)) { this.scene.remove(g); this.disposeObj(g); this.selectionRings.delete(id); }
   }
 
   private syncTrafficLights(phase: 0 | 1): void {

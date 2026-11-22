@@ -199,13 +199,29 @@ describe('vehicle status, sirens and crews walking up to the fire', () => {
   });
 });
 
+
+/** A burning building and a non-burning neighbour a street or less away (map independent). */
+function burningPair(w: ReturnType<typeof newWorld>) {
+  const bs = [...w.buildings.values()].filter(b => b.type !== 'station' && b.type !== 'hospital');
+  for (const a of bs) for (const b of bs) {
+    if (a === b) continue;
+    const gap = Math.hypot(Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), 0), Math.max(b.y - (a.y + a.h), a.y - (b.y + b.h), 0));
+    if (gap >= 2 && gap <= 4.5) {
+      const inc = w.spawnIncident('industrial_fire', { buildingId: a.id, severity: 2 });
+      if (!inc) continue;
+      a.fire = 90; a.growth = 0;
+      return { burning: a, neighbour: b, inc };
+    }
+  }
+  throw new Error('no building pair');
+}
+
 describe('cooling buildings and police patrols (LA-mod inspired)', () => {
   it('crews cool a threatened neighbour: it gets wet, slows the spread, and dries out again', () => {
     const w = newWorld(4);
-    const inc = w.spawnIncident('industrial_fire', { severity: 2 })!;
-    const burning = w.buildings.get(inc.buildingId!)!;
-    const neighbour = [...w.buildings.values()].find(b => b !== burning && !b.destroyed && b.fire <= 0 && w.threatened(b));
-    expect(neighbour).toBeTruthy();
+    const { neighbour: nb0 } = burningPair(w);
+    const neighbour = nb0;
+    expect(w.threatened(neighbour)).toBe(true);
     const v = [...w.vehicles.values()].find(x => x.defId === 'fire_engine')!;
     w.orderMove([v.id], neighbour!.door.x + 0.5, neighbour!.door.y + 0.5);
     run(w, 150, () => !v.path.length);
@@ -223,9 +239,7 @@ describe('cooling buildings and police patrols (LA-mod inspired)', () => {
 
   it('a right-click on a building that is not burning means cooling, on a burning one extinguishing', () => {
     const w = newWorld(4);
-    const inc = w.spawnIncident('industrial_fire', { severity: 2 })!;
-    const burning = w.buildings.get(inc.buildingId!)!;
-    const neighbour = [...w.buildings.values()].find(b => b !== burning && b.fire <= 0 && w.threatened(b))!;
+    const { burning, neighbour } = burningPair(w);
     const v = [...w.vehicles.values()].find(x => x.defId === 'fire_engine')!;
     const ids = w.orderDismount([v.id]);
     w.contextOrder(ids, neighbour.x, neighbour.y);
@@ -360,4 +374,63 @@ describe('control room, random calls, ambulance return', () => {
     run(w, 400, () => w.vehicleStatus(amb).startsWith('Gereed'));
     expect(w.vehicleStatus(amb)).toMatch(/Gereed/);
   });
+});
+
+describe('player-chosen assistants and realistic traffic', () => {
+  it('a firefighter chosen by the player helps the paramedic: treatment is faster', () => {
+    const treatTime = (withHelp: boolean): number => {
+      const w = newWorld(9);
+      const inc = w.spawnIncident('car_accident', { severity: 1 })!;
+      const amb = [...w.vehicles.values()].find(v => v.defId === 'ambulance')!;
+      const eng = [...w.vehicles.values()].find(v => v.defId === 'fire_engine')!;
+      const victim = [...w.victims.values()].find(x => x.incidentId === inc.id)!;
+      // put both crews next to the casualty
+      const medics = w.orderDismount([amb.id]);
+      const fighters = w.orderDismount([eng.id]);
+      for (const id of [...medics, ...fighters]) { const r = w.responders.get(id)!; r.x = r.px = victim.x + 0.7; r.y = r.py = victim.y + 0.4; r.inVehicle = false; r.path = []; }
+      expect(w.orderAbility([medics[0]], 'treat', { kind: 'victim', id: victim.id })).toBe(1);
+      if (withHelp) {
+        expect(w.orderAbility([fighters[0], fighters[1]], 'assist', { kind: 'victim', id: victim.id })).toBe(2);
+        expect(w.responders.get(fighters[0])!.task?.type).toBe('assist');
+      }
+      let t = 0;
+      while (!victim.treated && t < 120) { w.tick(); t += 1 / 30; }
+      return t;
+    };
+    expect(treatTime(true)).toBeLessThan(treatTime(false) * 0.7);
+  });
+
+  it('a right-click on a casualty with a non-medic means assist, with a paramedic it means treat', () => {
+    const w = newWorld(9);
+    const inc = w.spawnIncident('car_accident', { severity: 1 })!;
+    const victim = [...w.victims.values()].find(x => x.incidentId === inc.id)!;
+    const eng = [...w.vehicles.values()].find(v => v.defId === 'fire_engine')!;
+    const amb = [...w.vehicles.values()].find(v => v.defId === 'ambulance')!;
+    const f = w.orderDismount([eng.id])[1], m = w.orderDismount([amb.id])[0];
+    w.contextOrder([f, m], victim.x, victim.y);
+    expect(w.responders.get(f)!.task?.type).toBe('assist');
+    expect(w.responders.get(m)!.task?.type).toBe('treat');
+  });
+
+  it('civilian cars accelerate and brake smoothly, queue for red lights, and cyclists are slower', () => {
+    const w = World.create(content, { seed: 13, difficulty: 'normal', freeplay: false, traffic: true });
+    expect(w.civilians.some(c => c.type === 'bike')).toBe(true);
+    const speeds = (t: string) => w.civilians.filter(c => c.type === t).map(c => c.speed);
+    expect(Math.max(...speeds('bike'))).toBeLessThan(Math.min(...speeds('car')));
+    const prev = new Map<number, { v: number; x: number; y: number }>();
+    let maxJerk = 0, braking = 0, moving = 0;
+    for (let i = 0; i < 30 * 60; i++) {
+      w.tick();
+      for (const c of w.civilians) {
+        const p = prev.get(c.id);
+        if (p !== undefined && Math.hypot(c.x - p.x, c.y - p.y) < 2) maxJerk = Math.max(maxJerk, Math.abs(c.v - p.v) * 30); // (a respawned car jumps)
+        prev.set(c.id, { v: c.v, x: c.x, y: c.y });
+        if (c.braking && c.v > 0.05) braking++;
+        if (c.v > 1) moving++;
+      }
+    }
+    expect(maxJerk).toBeLessThanOrEqual(18); // tiles/s^2: no instantaneous stops from cruising speed (that would be >100)
+    expect(braking).toBeGreaterThan(50);
+    expect(moving).toBeGreaterThan(500);
+  }, 60000);
 });

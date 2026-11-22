@@ -8,9 +8,9 @@ import { mergeContent, type ModPack } from '../sim/content';
 
 const CAT_LABEL: Record<Category, string> = { fire: '🚒 Brandweer', ambulance: '🚑 Ambulance', police: '🚓 Politie', tech: '🔧 Techniek' };
 const ABILITY_LABEL: Partial<Record<Ability, string>> = {
-  extinguish: '💧 Blussen', rescue: '🆘 Redden', treat: '🩺 Behandelen', carry: '🛏 Inladen', arrest: '🔗 Arresteren', secure: '🚧 Afzetten', clear: '🏗 Bergen', disperse: '📣 Wegsturen', defuse: '🤖 Ontmijnen', cool: '❄️ Koelen',
+  extinguish: '💧 Blussen', rescue: '🆘 Redden', treat: '🩺 Behandelen', carry: '🛏 Inladen', arrest: '🔗 Arresteren', secure: '🚧 Afzetten', clear: '🏗 Bergen', disperse: '📣 Wegsturen', defuse: '🤖 Ontmijnen', cool: '❄️ Koelen', assist: '🤝 Helpen',
 };
-const ABILITY_ORDER: Ability[] = ['extinguish', 'cool', 'rescue', 'treat', 'carry', 'arrest', 'secure', 'disperse', 'defuse', 'clear'];
+const ABILITY_ORDER: Ability[] = ['extinguish', 'cool', 'rescue', 'treat', 'assist', 'carry', 'arrest', 'secure', 'disperse', 'defuse', 'clear'];
 const TASK_LABEL = (t: Task | null): string => {
   if (!t) return 'Wacht op opdracht';
   switch (t.type) {
@@ -18,6 +18,7 @@ const TASK_LABEL = (t: Task | null): string => {
     case 'board': return 'Stapt in';
     case 'extinguish': return t.deploy < 2.5 ? 'Rolt slang uit' : 'Blust brand';
     case 'cool': return t.deploy < 2.5 ? 'Rolt slang uit' : 'Koelt pand';
+    case 'assist': return 'Helpt bij het slachtoffer';
     case 'rescue': return 'Redt slachtoffer';
     case 'treat': return 'Behandelt slachtoffer';
     case 'load': return 'Draagt slachtoffer naar voertuig';
@@ -48,6 +49,9 @@ export class UI {
 
   constructor(private scene: GameScene) {
     scene.edgeScroll = this.settings.edgeScroll;
+    // automated tests (`?e2e`) stay in the fast 2D view unless they ask for 3D; players get the 3D game by default
+    const q = new URLSearchParams(location.search);
+    if (q.has('e2e') && !q.has('fx')) this.settings.viewMode = '2d';
     void scene.setViewMode(this.settings.viewMode);
     scene.onEvent(e => { this.toast(e); scene.audio?.onGameEvent(e); });
     this.bind();
@@ -305,7 +309,7 @@ export class UI {
         card(`<h1>🚒 OpenRescue RTS</h1><div class="sub">Open source hulpdienstensimulatie in je browser</div><div class="col">
           <button id="b-new" class="primary">▶ Nieuw spel</button><button id="b-free">♾ Freeplay</button><button id="b-miss">🎯 Missies</button>
           <button id="b-cont" ${save ? '' : 'disabled'}>⏵ Doorgaan met opgeslagen spel</button><button id="b-scores">🏆 Highscores</button><button id="b-set">⚙ Instellingen</button>
-          <button id="b-view">${this.settings.viewMode === '3d' ? '🧊 Weergave: 3D (experimenteel)' : '▦ Weergave: 2D'}</button></div>
+          <button id="b-view">${this.settings.viewMode === '3d' ? '🧊 Weergave: 3D' : '▦ Weergave: 2D'}</button></div>
           <p class="help">Nieuw spel start met een willekeurige brand, medische melding en politiemelding en gaat daarna door in Freeplay. De meldkamer spreekt elke melding in.</p>`);
         on('b-new', () => this.start({ seed: hashSeed(String(Date.now()) + Math.random()), difficulty: this.settings.difficulty, freeplay: true, scripted: true }));
         on('b-free', () => this.showScreen('freeplay'));
@@ -357,7 +361,7 @@ export class UI {
           <label>Geluid uit<input id="s-muted" type="checkbox" ${this.settings.muted ? 'checked' : ''}></label>
           <label>Volume<input id="s-vol" type="range" min="0" max="100" value="${Math.round(this.settings.volume * 100)}"></label>
           <label>Standaard spelsnelheid<select id="s-speed">${[1, 2, 4].map(n => `<option value="${n}" ${this.settings.defaultSpeed === n ? 'selected' : ''}>${n}×</option>`).join('')}</select></label>
-          <label>Weergave<select id="s-view"><option value="2d" ${this.settings.viewMode === '2d' ? 'selected' : ''}>2D</option><option value="3d" ${this.settings.viewMode === '3d' ? 'selected' : ''}>3D (experimenteel)</option></select></label>
+          <label>Weergave<select id="s-view"><option value="2d" ${this.settings.viewMode === '2d' ? 'selected' : ''}>2D</option><option value="3d" ${this.settings.viewMode === '3d' ? 'selected' : ''}>3D</option></select></label>
           <label>Meldkamer spreekt meldingen in<input id="s-voice" type="checkbox" ${this.settings.voice !== false ? 'checked' : ''}></label>
           <label>3D: schaduwen<input id="s-shadows" type="checkbox" ${localStorage.getItem('openrescue.shadows') !== '0' ? 'checked' : ''}></label>
           <label>3D: dag en nacht<input id="s-daynight" type="checkbox" ${localStorage.getItem('openrescue.daynight') !== '0' ? 'checked' : ''}></label>
