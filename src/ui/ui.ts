@@ -46,6 +46,7 @@ export class UI {
 
   constructor(private scene: GameScene) {
     scene.edgeScroll = this.settings.edgeScroll;
+    void scene.setViewMode(this.settings.viewMode);
     scene.onEvent(e => { this.toast(e); scene.audio?.onGameEvent(e); });
     this.bind();
     this.applyAudio();
@@ -294,7 +295,8 @@ export class UI {
       case 'main':
         card(`<h1>🚒 OpenRescue RTS</h1><div class="sub">Open source hulpdienstensimulatie in je browser</div><div class="col">
           <button id="b-new" class="primary">▶ Nieuw spel</button><button id="b-free">♾ Freeplay</button><button id="b-miss">🎯 Missies</button>
-          <button id="b-cont" ${save ? '' : 'disabled'}>⏵ Doorgaan met opgeslagen spel</button><button id="b-scores">🏆 Highscores</button><button id="b-set">⚙ Instellingen</button></div>
+          <button id="b-cont" ${save ? '' : 'disabled'}>⏵ Doorgaan met opgeslagen spel</button><button id="b-scores">🏆 Highscores</button><button id="b-set">⚙ Instellingen</button>
+          <button id="b-view">${this.settings.viewMode === '3d' ? '🧊 Weergave: 3D (experimenteel)' : '▦ Weergave: 2D'}</button></div>
           <p class="help">Nieuw spel start met een woningbrand, een ongeluk en een misdrijf en gaat daarna door in Freeplay.</p>`);
         on('b-new', () => this.start({ seed: hashSeed(this.settings.seed), difficulty: this.settings.difficulty, freeplay: true, scripted: true }));
         on('b-free', () => this.showScreen('freeplay'));
@@ -302,6 +304,12 @@ export class UI {
         on('b-set', () => this.showScreen('settings', 'main'));
         on('b-scores', () => this.showScreen('scores'));
         on('b-miss', () => this.showScreen('missions'));
+        on('b-view', () => {
+          this.settings.viewMode = this.settings.viewMode === '3d' ? '2d' : '3d';
+          saveSettings(this.settings);
+          void this.scene.setViewMode(this.settings.viewMode);
+          this.showScreen('main');
+        });
         break;
       case 'missions': {
         const list = Object.values(this.scene.content.missions).map(m => `<button class="mission" data-mission="${esc(m.id)}"><b>${esc(m.name)}</b> ${'★'.repeat(m.level)}<small>${esc(m.description)}</small></button>`).join('');
@@ -340,6 +348,7 @@ export class UI {
           <label>Geluid uit<input id="s-muted" type="checkbox" ${this.settings.muted ? 'checked' : ''}></label>
           <label>Volume<input id="s-vol" type="range" min="0" max="100" value="${Math.round(this.settings.volume * 100)}"></label>
           <label>Standaard spelsnelheid<select id="s-speed">${[1, 2, 4].map(n => `<option value="${n}" ${this.settings.defaultSpeed === n ? 'selected' : ''}>${n}×</option>`).join('')}</select></label>
+          <label>Weergave<select id="s-view"><option value="2d" ${this.settings.viewMode === '2d' ? 'selected' : ''}>2D</option><option value="3d" ${this.settings.viewMode === '3d' ? 'selected' : ''}>3D (experimenteel)</option></select></label>
           <hr style="border-color:#34405a;width:100%">
           <div><b>Mods</b> <span class="help">(JSON-bestand met voertuigen, incidenten, rollen of kaarten — zie docs/modding.md)</span></div>
           <input id="s-mod" type="file" accept=".json,application/json">
@@ -353,6 +362,8 @@ export class UI {
           this.settings.defaultSpeed = Number((sc.querySelector('#s-speed') as HTMLSelectElement).value) as 1 | 2 | 4;
           this.settings.muted = (sc.querySelector('#s-muted') as HTMLInputElement).checked;
           this.settings.volume = Number((sc.querySelector('#s-vol') as HTMLInputElement).value) / 100;
+          const view = (sc.querySelector('#s-view') as HTMLSelectElement).value as '2d' | '3d';
+          if (view !== this.settings.viewMode) { this.settings.viewMode = view; void this.scene.setViewMode(this.settings.viewMode); }
           this.scene.edgeScroll = this.settings.edgeScroll;
           this.applyAudio();
           saveSettings(this.settings);

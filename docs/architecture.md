@@ -12,11 +12,17 @@ src/
     world.ts        World: terrain, entities, fixed-step tick, orders, fire, victims,
                     incidents, civilian traffic, save/load
   data/           JSON content: roles, vehicles, incidents, default map
-  game/           Phaser layer (rendering only)
+  game/           rendering (2D Phaser + experimental 3D three.js)
     assets.ts       SVG art generation + rasterisation
     audio.ts        AudioEngine: procedural Web Audio (sirens, fire, water, traffic, SFX)
     scene.ts        GameScene: camera, input/selection, sprite sync + interpolation,
-                    effects (pooled particles), static city rendering
+                    effects (pooled particles), static city rendering; also drives the
+                    world tick regardless of which renderer is on screen
+    selection.ts    Commands/pickVehicle/pickUnit: selection and order logic shared by
+                    the 2D and 3D input handlers (docs/3d.md)
+    three-renderer.ts Three3DRenderer: the experimental 3D view (lazy-loaded), implements
+                    the GameRenderer contract (docs/3d.md)
+    renderer.ts     GameRenderer: the interface a renderer must implement
   ui/ui.ts        DOM HUD (Dutch): top bar, incidents, unit panel, dispatch bar, minimap, menus
   storage.ts      localStorage: settings, savegame, mods
   main.ts         bootstrap

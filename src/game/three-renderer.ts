@@ -32,6 +32,25 @@ const PED_COLORS: Record<string, number> = { red: 0xc0392b, blue: 0x2e6bd6, gree
 
 const hash = (x: number, y: number) => ((x * 73856093) ^ (y * 19349663)) >>> 0;
 
+/**
+ * Ray-pick from a camera through a normalised-device-coordinate point (x, y in [-1, 1]) to the ground plane (Y=0),
+ * returned as tile coordinates. Pure three.js math (no canvas/WebGL), so it can be unit-tested headlessly. Returns
+ * null when the ray is parallel to the ground (looking straight along it) or points away from it.
+ */
+export function pickGroundTile(camera: THREE.Camera, ndcX: number, ndcY: number): { x: number; y: number } | null {
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+  const hit = new THREE.Vector3();
+  if (!raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit)) return null;
+  return world3DToTile({ x: hit.x, y: hit.y, z: hit.z });
+}
+/** Inverse direction: a tile's ground position projected to normalised device coordinates for the given camera. */
+export function projectTileToNDC(camera: THREE.Camera, tx: number, ty: number): { x: number; y: number } {
+  const p = tileToWorld3D(tx, ty);
+  const v = new THREE.Vector3(p.x, p.y, p.z).project(camera);
+  return { x: v.x, y: v.y };
+}
+
 function roleColor(model: string): number {
   if (/fire|rescue/.test(model)) return CAT_COLOR.fire;
   if (/paramedic|doctor/.test(model)) return CAT_COLOR.ambulance;
@@ -45,7 +64,7 @@ function pedColor(model: string): number {
 }
 
 /** A triangular-prism gable roof, ridge along X, centred on the building footprint. */
-function gableRoofGeometry(w: number, d: number, rise: number): THREE.BufferGeometry {
+export function gableRoofGeometry(w: number, d: number, rise: number): THREE.BufferGeometry {
   const hw = w / 2, hd = d / 2;
   const p = (x: number, y: number, z: number) => [x, y, z];
   const v: number[] = [
@@ -98,8 +117,6 @@ export class Three3DRenderer implements GameRenderer {
   private cars = new Map<number, Tracked>();
   private incidentMarkers = new Map<number, THREE.Sprite>();
   private selectionRings = new Map<number, THREE.Mesh>();
-  private raycaster = new THREE.Raycaster();
-  private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private frame = 0;
   private lightPhase = -1;
   private time = 0;
@@ -192,14 +209,10 @@ export class Three3DRenderer implements GameRenderer {
     const rect = this.canvas.getBoundingClientRect();
     const ndcX = (sx / (rect.width || this.canvas.width)) * 2 - 1;
     const ndcY = -(sy / (rect.height || this.canvas.height)) * 2 + 1;
-    this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
-    const hit = new THREE.Vector3();
-    if (!this.raycaster.ray.intersectPlane(this.groundPlane, hit)) return null;
-    return world3DToTile({ x: hit.x, y: hit.y, z: hit.z });
+    return pickGroundTile(this.camera, ndcX, ndcY);
   }
   tileToScreen(tx: number, ty: number): { x: number; y: number } {
-    const p = tileToWorld3D(tx, ty);
-    const v = new THREE.Vector3(p.x, p.y, p.z).project(this.camera);
+    const v = projectTileToNDC(this.camera, tx, ty);
     const rect = this.canvas.getBoundingClientRect();
     const w = rect.width || this.canvas.width, h = rect.height || this.canvas.height;
     return { x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * h };
@@ -570,6 +583,7 @@ export class Three3DRenderer implements GameRenderer {
     });
     this.canvas.addEventListener('pointerup', e => {
       if (this.pointer.rotating) { this.pointer.rotating = false; return; }
+      if (e.button !== 0) return; // only the primary button completes a left-click / box-select; right/middle are handled on pointerdown
       this.dragBox.visible = false;
       if (!this.world || this.host.state !== 'playing') return;
       const t = this.screenToTile(e.offsetX, e.offsetY);
