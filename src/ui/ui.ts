@@ -8,15 +8,16 @@ import { mergeContent, type ModPack } from '../sim/content';
 
 const CAT_LABEL: Record<Category, string> = { fire: '🚒 Brandweer', ambulance: '🚑 Ambulance', police: '🚓 Politie', tech: '🔧 Techniek' };
 const ABILITY_LABEL: Partial<Record<Ability, string>> = {
-  extinguish: '💧 Blussen', rescue: '🆘 Redden', treat: '🩺 Behandelen', carry: '🛏 Inladen', arrest: '🔗 Arresteren', secure: '🚧 Afzetten', clear: '🏗 Bergen', disperse: '📣 Wegsturen', defuse: '🤖 Ontmijnen',
+  extinguish: '💧 Blussen', rescue: '🆘 Redden', treat: '🩺 Behandelen', carry: '🛏 Inladen', arrest: '🔗 Arresteren', secure: '🚧 Afzetten', clear: '🏗 Bergen', disperse: '📣 Wegsturen', defuse: '🤖 Ontmijnen', cool: '❄️ Koelen',
 };
-const ABILITY_ORDER: Ability[] = ['extinguish', 'rescue', 'treat', 'carry', 'arrest', 'secure', 'disperse', 'defuse', 'clear'];
+const ABILITY_ORDER: Ability[] = ['extinguish', 'cool', 'rescue', 'treat', 'carry', 'arrest', 'secure', 'disperse', 'defuse', 'clear'];
 const TASK_LABEL = (t: Task | null): string => {
   if (!t) return 'Wacht op opdracht';
   switch (t.type) {
     case 'move': return 'Loopt';
     case 'board': return 'Stapt in';
     case 'extinguish': return t.deploy < 2.5 ? 'Rolt slang uit' : 'Blust brand';
+    case 'cool': return t.deploy < 2.5 ? 'Rolt slang uit' : 'Koelt pand';
     case 'rescue': return 'Redt slachtoffer';
     case 'treat': return 'Behandelt slachtoffer';
     case 'load': return 'Draagt slachtoffer naar voertuig';
@@ -130,6 +131,8 @@ export class UI {
       case 'return': s.cmdReturn(); break;
       case 'hospital': s.cmdHospital(); break;
       case 'deploy': s.cmdDeploy(); break;
+      case 'cool': s.cmdCool(); break;
+      case 'patrol': s.cmdPatrol(); break;
       case 'crew': s.selectCrew(); break;
     }
   }
@@ -241,7 +244,7 @@ export class UI {
           `<div class="row">Uitrusting: ${def.equipment.map(e => esc(e.replace(/_/g, ' '))).join(', ') || '—'}</div>` +
           (def.tank ? `<div class="row">💧 Water: ${Math.round(v.water)} / ${def.tank} L${v.hydrant ? ' · aangesloten op brandkraan' : ''}</div><div class="meter"><i class="${v.water / def.tank < 0.25 && !v.hydrant ? 'low' : ''}" style="width:${Math.round((v.water / def.tank) * 100)}%"></i></div>` : '') +
           `<div class="actions"><button data-act="dismount">⬇ Uitstappen (E)</button><button data-act="board">⬆ Instappen (R)</button><button data-act="crew" ${out ? '' : 'disabled'}>👥 Bemanning</button><button data-act="stop">⏹ Stop (X)</button></div>` +
-          `<div class="actions">${def.equipment.includes('fire_hose') ? '<button data-act="deploy" class="primary" title="Bemanning stapt uit, rolt slangen uit en begint direct te blussen">🧯 Slangen aansluiten & blussen (B)</button>' : ''}${def.patientCapacity > 0 ? `<button data-act="hospital" class="${v.patients.length ? 'primary' : ''}" ${v.patients.length ? '' : 'disabled'} title="Rijdt met de patiënt naar het dichtstbijzijnde ziekenhuis">🏥 Naar ziekenhuis (Z)</button>` : ''}<button data-act="return">🏠 Terug naar kazerne (H)</button></div>` +
+          `<div class="actions">${def.equipment.includes('fire_hose') ? '<button data-act="deploy" class="primary" title="Bemanning stapt uit, rolt slangen uit en begint direct te blussen">🧯 Slangen aansluiten & blussen (B)</button><button data-act="cool" title="Bemanning koelt de panden naast de brand, zodat het vuur niet overslaat">❄️ Koelen (K)</button>' : ''}${def.canPatrol ? `<button data-act="patrol" class="${v.patrol ? 'primary' : ''}" title="Rijdt zonder sirene een ronde door de stad en rukt automatisch uit bij een melding">🚓 Patrouilleren (P)</button>` : ''}${def.patientCapacity > 0 ? `<button data-act="hospital" class="${v.patients.length ? 'primary' : ''}" ${v.patients.length ? '' : 'disabled'} title="Rijdt met de patiënt naar het dichtstbijzijnde ziekenhuis">🏥 Naar ziekenhuis (Z)</button>` : ''}<button data-act="return">🏠 Terug naar kazerne (H)</button></div>` +
           `<div class="row">Rechtermuisknop op de kaart = rijden, dubbel rechtsklikken op het voertuig = iedereen uitstappen. Op een ziekenhuis = patiënt afleveren.</div>`;
       } else if (rs.length && !vs.length) {
         const first = rs[0];

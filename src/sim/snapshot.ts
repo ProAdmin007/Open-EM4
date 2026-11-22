@@ -63,6 +63,7 @@ export interface SnapBuilding {
   floors: number;
   roof: string;
   fire: number;
+  wet: number;
   damage: number;
   destroyed: boolean;
 }
@@ -103,7 +104,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
   const loading = new Set<number>();
   for (const r of world.responders.values()) {
     const t = r.task;
-    if (t?.type === 'extinguish' && t.deploy >= 2.5) {
+    if ((t?.type === 'extinguish' || t?.type === 'cool') && t.deploy >= 2.5) {
       const v = world.vehicles.get(r.vehicleId), b = world.buildings.get(t.buildingId);
       if (v && b && world.vehicleDef(v).equipment.includes('aerial_ladder')) aerial.set(v.id, { x: b.x + b.w / 2, y: b.y + b.h / 2 });
     }
@@ -123,7 +124,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
     if (r.inVehicle) continue;
     const x = ix(r), y = iy(r);
     const person: SnapPerson = { id: r.id, kind: 'responder', model: modelId('person', r.role, world.roleDef(r).model), x, y, position: tileToWorld3D(x, y), heading: r.angle, state: r.task?.type ?? 'idle' };
-    if (r.task?.type === 'extinguish') {
+    if (r.task?.type === 'extinguish' || r.task?.type === 'cool') {
       const veh = world.vehicles.get(r.vehicleId);
       const b = world.buildings.get(r.task.buildingId);
       if (veh) {
@@ -155,7 +156,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
     const heightMeters = buildingHeightMeters(b);
     snap.buildings.push({
       id: b.id, model: modelId('building', `${b.type}_${b.roof ?? 'flat'}`), x: b.x, y: b.y, w: b.w, h: b.h, heightMeters, floors: b.floors ?? Math.max(1, Math.round(heightMeters / 3.2)),
-      roof: b.roof ?? 'flat', fire: b.fire, damage: b.damage, destroyed: b.destroyed,
+      roof: b.roof ?? 'flat', fire: b.fire, wet: b.wet, damage: b.damage, destroyed: b.destroyed,
     });
   }
   for (const i of world.incidents.values()) snap.incidents.push({ id: i.id, kind: i.defId, severity: i.severity, x: i.x, y: i.y, secured: i.secured, defusing: defusing.has(i.id), defused: i.defused });

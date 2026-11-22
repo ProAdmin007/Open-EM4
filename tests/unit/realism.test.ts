@@ -198,3 +198,69 @@ describe('vehicle status, sirens and crews walking up to the fire', () => {
     for (const r of fighters) expect(rd(r)).toBeLessThanOrEqual(2.7);
   });
 });
+
+describe('cooling buildings and police patrols (LA-mod inspired)', () => {
+  it('crews cool a threatened neighbour: it gets wet, slows the spread, and dries out again', () => {
+    const w = newWorld(4);
+    const inc = w.spawnIncident('industrial_fire', { severity: 2 })!;
+    const burning = w.buildings.get(inc.buildingId!)!;
+    const neighbour = [...w.buildings.values()].find(b => b !== burning && !b.destroyed && b.fire <= 0 && w.threatened(b));
+    expect(neighbour).toBeTruthy();
+    const v = [...w.vehicles.values()].find(x => x.defId === 'fire_engine')!;
+    w.orderMove([v.id], neighbour!.door.x + 0.5, neighbour!.door.y + 0.5);
+    run(w, 150, () => !v.path.length);
+    const ids = w.orderDismount([v.id]);
+    expect(w.orderAbility(ids, 'cool', { kind: 'building', id: neighbour!.id })).toBeGreaterThan(0);
+    run(w, 30);
+    expect(neighbour!.wet).toBeGreaterThan(40);
+    expect(neighbour!.fire).toBe(0);
+    // a wet building is much harder to ignite: compare with the spread model's multiplier
+    expect(1 - 0.92 * neighbour!.wet / 100).toBeLessThan(0.6);
+    w.orderStop(ids);
+    const wet = neighbour!.wet;
+    run(w, 20);
+    expect(neighbour!.wet).toBeLessThan(wet);
+  });
+
+  it('a right-click on a building that is not burning means cooling, on a burning one extinguishing', () => {
+    const w = newWorld(4);
+    const inc = w.spawnIncident('industrial_fire', { severity: 2 })!;
+    const burning = w.buildings.get(inc.buildingId!)!;
+    const neighbour = [...w.buildings.values()].find(b => b !== burning && b.fire <= 0 && w.threatened(b))!;
+    const v = [...w.vehicles.values()].find(x => x.defId === 'fire_engine')!;
+    const ids = w.orderDismount([v.id]);
+    w.contextOrder(ids, neighbour.x, neighbour.y);
+    expect(w.responders.get(ids[1])!.task?.type).toBe('cool');
+    w.contextOrder(ids, burning.x, burning.y);
+    expect(w.responders.get(ids[1])!.task?.type).toBe('extinguish');
+  });
+
+  it('police cars patrol without sirens and the nearest one rushes to a new incident', () => {
+    const w = newWorld(6);
+    const car = [...w.vehicles.values()].find(v => v.defId === 'patrol_car')!;
+    expect(w.orderPatrol([car.id])).toBe(1);
+    run(w, 40);
+    expect(car.patrol).toBe(true);
+    expect(car.state).toBe('moving');
+    expect(car.lights).toBe(false);
+    expect(w.vehicleStatus(car)).toBe('Patrouilleert');
+    const start = { x: car.x, y: car.y };
+    run(w, 60);
+    expect(Math.hypot(car.x - start.x, car.y - start.y)).toBeGreaterThan(5);
+    const inc = w.spawnIncident('burglary', { severity: 1 })!;
+    expect(inc).toBeTruthy();
+    expect(car.patrol).toBe(false);
+    run(w, 3);
+    expect(car.lights).toBe(true);
+    // patrols stop on any other order
+    w.orderPatrol([car.id]);
+    w.orderMove([car.id], car.x + 10, car.y);
+    expect(car.patrol).toBe(false);
+  });
+
+  it('only vehicles that can patrol are sent', () => {
+    const w = newWorld(6);
+    const engine = [...w.vehicles.values()].find(v => v.defId === 'fire_engine')!;
+    expect(w.orderPatrol([engine.id])).toBe(0);
+  });
+});

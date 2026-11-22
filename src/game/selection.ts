@@ -69,6 +69,15 @@ export class Commands {
     const out = this.host.world!.orderDeployFire([...this.host.selected]);
     if (out.length) { this.host.selected = new Set(out); this.host.audio?.play('dismount'); }
   }
+  cmdCool(): void {
+    const out = this.host.world!.orderCoolFire([...this.host.selected]);
+    if (out.length) { this.host.selected = new Set(out); this.host.audio?.play('dismount'); }
+  }
+  cmdPatrol(): void {
+    const w = this.host.world!;
+    const ids = [...this.host.selected].map(id => (w.vehicles.has(id) ? id : w.responders.get(id)?.vehicleId ?? id));
+    if (w.orderPatrol(ids)) this.host.audio?.play('order');
+  }
   cmdHospital(): void {
     if (this.host.world!.orderToHospital([...this.host.selected])) this.host.audio?.play('order');
   }

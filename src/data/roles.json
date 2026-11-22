@@ -5,6 +5,7 @@
     "category": "fire",
     "abilities": [
       "extinguish",
+      "cool",
       "rescue"
     ],
     "speed": 2.6,
@@ -17,6 +18,7 @@
     "category": "fire",
     "abilities": [
       "extinguish",
+      "cool",
       "coordinate"
     ],
     "speed": 2.6,
@@ -29,6 +31,7 @@
     "category": "fire",
     "abilities": [
       "rescue",
+      "cool",
       "clear",
       "extinguish"
     ],

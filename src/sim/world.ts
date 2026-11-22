@@ -21,6 +21,9 @@ export const TALL_FLOORS = 4;
 export const TALL_FACTOR = 0.4;
 /** Road tiles within this many tiles of a secured incident are closed to civilian traffic. */
 export const CORDON_RADIUS = 3.2;
+/** Cooling: wetness added per second per working nozzle, how fast it dries, and how strongly it slows fire spread. */
+export const COOL_RATE = 3;
+export const WET_DECAY = 0.8;
 /** A dismounted responder with the `coordinate` ability (bevelvoerder) within this range makes others 25% more effective. */
 export const COMMANDER_RANGE = 10;
 export const COMMANDER_BONUS = 1.25;
@@ -41,6 +44,7 @@ export const ABILITY_EQUIPMENT: Partial<Record<Ability, string[]>> = {
   secure: ['barrier_tape'],
   clear: ['tow_gear', 'rescue_tools'],
   defuse: ['bomb_robot'],
+  cool: ['fire_hose'],
 };
 
 export interface WorldOptions {
@@ -104,7 +108,7 @@ export interface SaveGame {
   opts: WorldOptions;
   time: number; score: number; budget: number; reputation: number; solved: number; failed: number; deaths: number;
   over: boolean; nextId: number; rng: number; spawnTimer: number;
-  buildings: { id: string; fire: number; damage: number; destroyed: boolean; incidentId: number | null; growth: number; spread: number; resistance?: number }[];
+  buildings: { id: string; fire: number; damage: number; destroyed: boolean; incidentId: number | null; growth: number; spread: number; resistance?: number; wet?: number }[];
   vehicles: Vehicle[]; responders: Responder[]; victims: Victim[]; suspects: Suspect[]; bystanders?: Bystander[]; incidents: Incident[];
   obstacles: number[];
   won?: boolean;
@@ -177,7 +181,7 @@ export class World {
     }
     for (const bd of map.buildings) {
       const flam = { residential: 1, apartment: 0.9, commercial: 0.8, industrial: 1.2, office: 0.8, warehouse: 1.3, school: 0.8, shopping: 0.9, church: 0.7, station: 0.4, hospital: 0.4 }[bd.type];
-      const b: Building = { ...bd, door: { x: bd.x, y: bd.y }, fire: 0, damage: 0, destroyed: false, flammability: flam, incidentId: null, growth: 0, spread: 0, resistance: 1 };
+      const b: Building = { ...bd, door: { x: bd.x, y: bd.y }, fire: 0, damage: 0, destroyed: false, flammability: flam, incidentId: null, growth: 0, spread: 0, resistance: 1, wet: 0 };
       this.buildings.set(b.id, b);
       for (let j = b.y; j < b.y + b.h; j++) for (let i = b.x; i < b.x + b.w; i++) this.buildingAt[j * this.w + i] = b;
     }
@@ -365,7 +369,7 @@ export class World {
 
   createVehicle(def: VehicleDef, stationId: string, x: number, y: number): Vehicle {
     const v: Vehicle = {
-      kind: 'vehicle', ...this.addEntityBase(x, y), defId: def.id, category: def.category, stationId, path: [], dest: null, home: { x: Math.floor(x), y: Math.floor(y) }, returning: false, silent: false, toHospital: false, contraflow: false, blocked: 0, avoid: [], ghost: 0,
+      kind: 'vehicle', ...this.addEntityBase(x, y), defId: def.id, category: def.category, stationId, path: [], dest: null, home: { x: Math.floor(x), y: Math.floor(y) }, returning: false, silent: false, patrol: false, patrolRoute: [], patrolIdx: 0, toHospital: false, contraflow: false, blocked: 0, avoid: [], ghost: 0,
       pathVersion: this.roadVersion, water: def.tank ?? 0, hydrant: false, crew: [], patients: [], lights: false, angle: 0, state: 'idle',
       name: `${def.name} ${[...this.vehicles.values()].filter(o => o.defId === def.id).length + 1}`,
     };
@@ -517,6 +521,15 @@ export class World {
         v.avoid = [];
         if (!this.routeVehicle(v, v.home)) this.emit({ type: 'warn', message: `${v.name}: geen route naar de kazerne` });
       }
+    }
+    if (v.patrol && !v.path.length && this.groundVehicle(v) && v.patrolRoute.length) {
+      for (let tries = 0; tries < v.patrolRoute.length && !v.path.length; tries++) {
+        const wp = v.patrolRoute[v.patrolIdx % v.patrolRoute.length];
+        v.patrolIdx = (v.patrolIdx + 1) % v.patrolRoute.length;
+        if (Math.hypot(wp.x + 0.5 - v.x, wp.y + 0.5 - v.y) < 3) continue;
+        this.driveNear(v, wp.x + 0.5, wp.y + 0.5);
+      }
+      v.silent = true;
     }
     if (!v.path.length) {
       if (v.state === 'moving') {
@@ -750,9 +763,12 @@ export class World {
         if (this.approach(r, v.x, v.y, 1.9, done)) { r.inVehicle = true; r.x = v.x; r.y = v.y; done(); }
         break;
       }
-      case 'extinguish': {
+      case 'extinguish': case 'cool': {
         const b = this.buildings.get(t.buildingId);
-        if (!b || b.fire <= 0 || b.destroyed) return done();
+        if (!b || b.destroyed || (t.type === 'extinguish' && b.fire <= 0) || (t.type === 'cool' && b.wet >= 100)) {
+          if (b && t.type === 'cool' && !b.destroyed) this.emit({ type: 'info', message: `${b.name ?? 'Pand'} is gekoeld` });
+          return done();
+        }
         const inRange = rectDist(b, r.x, r.y) <= 2.6 && (!veh || dist(r, veh) <= HOSE_LENGTH);
         if (!inRange) {
           if (!r.path.length) {
@@ -779,6 +795,7 @@ export class World {
             if (!this.tallWarned.has(b.id)) { this.tallWarned.add(b.id); this.emit({ type: 'warn', message: `${b.name ?? 'Hoogbouw'}: de brand zit te hoog, zet de hoogwerker in` }); }
           }
           if (veh && tanked && !veh.hydrant) veh.water = Math.max(0, veh.water - WATER_PER_SEC * dt);
+          if (t.type === 'cool') { b.wet = Math.min(100, b.wet + COOL_RATE * eff * bonus * dt); break; }
           b.fire = Math.max(0, b.fire - (role.power * bonus * eff * (this.commanderNear(r) ? COMMANDER_BONUS : 1) * FIRE_POWER_SCALE * dt) / b.resistance);
         }
         break;
@@ -930,12 +947,13 @@ export class World {
 
   // ---------- fire ----------
   private updateFire(dt: number): void {
+    for (const b of this.buildings.values()) if (b.wet > 0) b.wet = Math.max(0, b.wet - (WET_DECAY + (b.fire / 100) * 4) * dt);
     for (const b of this.buildings.values()) {
       if (b.destroyed) { b.fire = Math.max(0, b.fire - 2 * dt); continue; }
       if (b.fire <= 0) continue;
       const inc = b.incidentId ? this.incidents.get(b.incidentId) : null;
       const sev = inc ? inc.severity : 1;
-      b.fire = Math.min(100, b.fire + b.growth * (0.8 + 0.2 * sev) * dt);
+      b.fire = Math.min(100, b.fire + b.growth * (0.8 + 0.2 * sev) * (1 - 0.5 * b.wet / 100) * dt);
       b.damage += (b.fire / 100) * 2.2 * b.flammability * dt;
       if (b.damage >= 100) { b.damage = 100; b.destroyed = true; continue; }
       if (b.fire < 35) continue;
@@ -943,12 +961,97 @@ export class World {
         if (nb === b || nb.destroyed || nb.fire > 0) continue;
         const gap = Math.hypot(Math.max(nb.x - (b.x + b.w), b.x - (nb.x + nb.w), 0), Math.max(nb.y - (b.y + b.h), b.y - (nb.y + nb.h), 0));
         if (gap > 2.5) continue;
-        if (this.rng.chance(dt * 0.012 * b.spread * (b.fire / 100) * nb.flammability)) this.igniteNeighbour(nb);
+        if (this.rng.chance(dt * 0.012 * b.spread * (b.fire / 100) * nb.flammability * (1 - 0.92 * nb.wet / 100))) this.igniteNeighbour(nb);
       }
     }
   }
 
   private tallWarned = new Set<string>();
+
+  /** Is a burning building close enough to this one that it could catch fire? */
+  threatened(b: Building): boolean {
+    for (const o of this.buildings.values()) {
+      if (o === b || o.fire <= 0 || o.destroyed) continue;
+      const gap = Math.hypot(Math.max(b.x - (o.x + o.w), o.x - (b.x + b.w), 0), Math.max(b.y - (o.y + o.h), o.y - (b.y + b.h), 0));
+      if (gap <= 3.5) return true;
+    }
+    return false;
+  }
+
+  /** Fire crews hose down the buildings that are threatened by a fire next door. */
+  orderCoolFire(ids: number[]): number[] {
+    const out: number[] = [];
+    const seen = new Set<number>();
+    for (const id of ids) {
+      const v = this.vehicleOf(id);
+      if (!v || seen.has(v.id)) continue;
+      seen.add(v.id);
+      if (!this.vehicleDef(v).equipment.includes('fire_hose')) continue;
+      v.returning = false;
+      this.orderDismount([v.id]);
+      const outside = v.crew.filter(rid => this.responders.get(rid)?.inVehicle === false);
+      if (!outside.length) continue;
+      out.push(...outside);
+      if (this.orderAbility(outside, 'cool') === 0) this.emit({ type: 'warn', message: `${v.name}: geen pand dat gekoeld hoeft te worden` });
+    }
+    return out;
+  }
+
+  // ---------- patrols ----------
+  private _patrolRoutes: Vec[][] | null = null;
+  /** Three fixed city loops through the junctions (outer ring, inner ring, a snake through the middle rows). */
+  get patrolRoutes(): Vec[][] {
+    if (this._patrolRoutes) return this._patrolRoutes;
+    const nodes: Vec[] = [];
+    for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) if (this.isIntersection(x, y) && !this.isIntersection(x - 1, y) && !this.isIntersection(x, y - 1)) nodes.push({ x, y });
+    const cx = this.w / 2, cy = this.h / 2;
+    const norm = (n: Vec) => Math.max(Math.abs(n.x - cx) / cx, Math.abs(n.y - cy) / cy);
+    const ang = (n: Vec) => Math.atan2(n.y - cy, n.x - cx);
+    const ring = (lo: number, hi: number) => nodes.filter(n => norm(n) >= lo && norm(n) < hi).sort((a, b) => ang(a) - ang(b));
+    const rows = [...new Set(nodes.map(n => n.y))].sort((a, b) => a - b);
+    const mid = rows.slice(Math.floor(rows.length / 3), Math.ceil((rows.length * 2) / 3));
+    const snake: Vec[] = [];
+    mid.forEach((ry, i) => { const row = nodes.filter(n => n.y === ry).sort((a, b) => (i % 2 ? b.x - a.x : a.x - b.x)); snake.push(...row.filter((_, k) => k % 2 === 0)); });
+    this._patrolRoutes = [ring(0.78, 2), ring(0.3, 0.78), snake].filter(r => r.length >= 3);
+    return this._patrolRoutes;
+  }
+
+  /** Send vehicles on patrol: they drive a route through the city without sirens until given another order or called out. */
+  orderPatrol(ids: number[]): number {
+    const done = new Set<number>();
+    for (const id of ids) {
+      const v = this.vehicleOf(id);
+      if (!v || done.has(v.id) || !this.vehicleDef(v).canPatrol) continue;
+      const routes = this.patrolRoutes;
+      if (!routes.length) continue;
+      done.add(v.id);
+      const near = (r: Vec[]) => Math.min(...r.map(n => Math.hypot(n.x - v.x, n.y - v.y)));
+      let route = routes.reduce((a, b) => (near(a) <= near(b) ? a : b));
+      if (this.rng.chance(0.5)) route = [...route].reverse();
+      v.patrolRoute = route;
+      v.patrolIdx = route.reduce((best, n, i) => (Math.hypot(n.x - v.x, n.y - v.y) < Math.hypot(route[best].x - v.x, route[best].y - v.y) ? i : best), 0);
+      v.patrol = true; v.silent = true; v.returning = false; v.toHospital = false; v.path = []; v.dest = null;
+      if (!this.groundVehicle(v)) this.orderBoard([v.id]);
+      this.emit({ type: 'info', message: `${v.name} gaat op patrouille` });
+    }
+    return done.size;
+  }
+
+  /** The nearest patrolling vehicle of a service rushes to a new incident. */
+  private dispatchPatrols(inc: Incident, def: IncidentDef, b: Building | null): void {
+    const tx = b ? b.door.x + 0.5 : inc.x, ty = b ? b.door.y + 0.5 : inc.y;
+    for (const cat of def.requires) {
+      let best: Vehicle | null = null, bd = Infinity;
+      for (const v of this.vehicles.values()) {
+        if (!v.patrol || v.category !== cat || !this.groundVehicle(v)) continue;
+        const d = Math.hypot(v.x - tx, v.y - ty);
+        if (d < bd) { bd = d; best = v; }
+      }
+      if (!best) continue;
+      best.patrol = false; best.silent = false; best.returning = false;
+      if (this.driveNear(best, tx, ty)) this.emit({ type: 'info', message: `Patrouille ${best.name} rukt uit naar ${inc.name}` });
+    }
+  }
 
   /** The incident (if any) whose scene a point is at: within `radius` tiles of the building or the incident spot. */
   incidentNear(x: number, y: number, radius: number): Incident | null {
@@ -964,6 +1067,7 @@ export class World {
   /** What a vehicle is doing, in words: 'Ter plaatse bij ...', 'Aanrijdend naar ...', 'Onderweg naar kazerne', ... */
   vehicleStatus(v: Vehicle): string {
     const homeD = (x: number, y: number) => Math.hypot(v.home.x + 0.5 - x, v.home.y + 0.5 - y);
+    if (v.patrol) return 'Patrouilleert';
     if (v.state === 'moving') {
       const d = v.dest ?? v.path[v.path.length - 1] ?? null;
       const dx = d ? d.x + 0.5 : v.x, dy = d ? d.y + 0.5 : v.y;
@@ -1051,7 +1155,7 @@ export class World {
   aerialActive(buildingId: string): boolean {
     for (const r of this.responders.values()) {
       const t = r.task;
-      if (t?.type !== 'extinguish' || t.buildingId !== buildingId || t.deploy < DEPLOY_TIME) continue;
+      if ((t?.type !== 'extinguish' && t?.type !== 'cool') || t.buildingId !== buildingId || t.deploy < DEPLOY_TIME) continue;
       const v = this.vehicles.get(r.vehicleId);
       if (v && this.vehicleDef(v).equipment.includes('aerial_ladder')) return true;
     }
@@ -1195,6 +1299,7 @@ export class World {
       }
     }
     this.incidents.set(inc.id, inc);
+    this.dispatchPatrols(inc, def, b);
     this.emit({ type: 'incident_started', incidentId: inc.id, message: `Nieuwe melding: ${inc.name}` });
     return inc;
   }
@@ -1326,6 +1431,7 @@ export class World {
         if (!this.groundVehicle(v)) { this.emit({ type: 'warn', message: `${v.name}: bemanning staat nog buiten het voertuig` }); continue; }
         v.returning = false;
         v.silent = false;
+        v.patrol = false;
         v.toHospital = false;
         if (!this.driveNear(v, x, y)) this.emit({ type: 'warn', message: `${v.name}: geen route beschikbaar` });
         continue;
@@ -1342,7 +1448,7 @@ export class World {
   orderStop(ids: number[]): void {
     for (const id of ids) {
       const v = this.vehicles.get(id);
-      if (v) { v.path = []; v.dest = null; v.returning = false; v.toHospital = false; }
+      if (v) { v.path = []; v.dest = null; v.returning = false; v.toHospital = false; v.patrol = false; v.silent = false; }
       const r = this.responders.get(id);
       if (r && !r.inVehicle) { r.task = null; r.path = []; }
     }
@@ -1384,6 +1490,7 @@ export class World {
       done.add(v.id);
       if (!v.patients.length) { this.emit({ type: 'warn', message: `${v.name}: geen patiënt aan boord` }); done.delete(v.id); continue; }
       v.returning = false;
+      v.patrol = false;
       v.toHospital = true;
       v.path = [];
       v.dest = null;
@@ -1401,6 +1508,7 @@ export class World {
       if (!v || done.has(v.id)) continue;
       done.add(v.id);
       v.returning = true;
+      v.patrol = false;
       v.toHospital = false;
       v.path = [];
       v.dest = null;
@@ -1464,6 +1572,7 @@ export class World {
     const consider = (t: OrderTarget, d: number) => { if (d < bd) { bd = d; best = t; } };
     switch (ability) {
       case 'extinguish': for (const b of this.buildings.values()) if (b.fire > 0 && !b.destroyed) consider({ kind: 'building', id: b.id }, rectDist(b, r.x, r.y)); break;
+      case 'cool': for (const b of this.buildings.values()) if (b.fire <= 0 && !b.destroyed && b.wet < 60 && this.threatened(b)) consider({ kind: 'building', id: b.id }, rectDist(b, r.x, r.y)); break;
       case 'rescue': for (const v of this.victims.values()) if (v.transport === 'trapped') consider({ kind: 'victim', id: v.id }, dist(r, v)); break;
       case 'treat': for (const v of this.victims.values()) if (v.transport === 'scene' && !v.treated) consider({ kind: 'victim', id: v.id }, dist(r, v)); break;
       case 'carry': for (const v of this.victims.values()) if (v.transport === 'scene') consider({ kind: 'victim', id: v.id }, dist(r, v) - (v.treated ? 100 : 0)); break;
@@ -1507,6 +1616,7 @@ export class World {
       case 'secure': return t.kind === 'incident' ? { type: 'secure', incidentId: t.id, progress: 0 } : null;
       case 'clear': return t.kind === 'incident' ? { type: 'clear', incidentId: t.id, progress: 0 } : null;
       case 'disperse': return t.kind === 'incident' ? { type: 'disperse', incidentId: t.id, progress: 0 } : null;
+      case 'cool': return t.kind === 'building' ? { type: 'cool', buildingId: t.id, deploy: 0 } : null;
       case 'defuse': return t.kind === 'incident' ? { type: 'defuse', incidentId: t.id, progress: 0 } : null;
       default: return null;
     }
@@ -1543,7 +1653,7 @@ export class World {
       const r = this.responders.get(id)!;
       if (r.inVehicle) continue;
       let ability: Ability | null = null;
-      if (target?.kind === 'building') ability = 'extinguish';
+      if (target?.kind === 'building') ability = (this.buildings.get(target.id)?.fire ?? 0) > 0 ? 'extinguish' : this.roleDef(r).abilities.includes('cool') ? 'cool' : 'extinguish';
       else if (target?.kind === 'suspect') ability = 'arrest';
       else if (target?.kind === 'incident') {
         const inc = this.incidents.get(target.id)!;
@@ -1655,7 +1765,7 @@ export class World {
     return {
       version: 2, opts: { ...this.opts }, time: this.time, score: this.score, budget: this.budget, reputation: this.reputation,
       solved: this.solved, failed: this.failed, deaths: this.deaths, over: this.over, nextId: this.nextId, rng: this.rng.state, spawnTimer: this.spawnTimer,
-      buildings: [...this.buildings.values()].map(b => ({ id: b.id, fire: b.fire, damage: b.damage, destroyed: b.destroyed, incidentId: b.incidentId, growth: b.growth, spread: b.spread, resistance: b.resistance })),
+      buildings: [...this.buildings.values()].map(b => ({ id: b.id, fire: b.fire, damage: b.damage, destroyed: b.destroyed, incidentId: b.incidentId, growth: b.growth, spread: b.spread, resistance: b.resistance, wet: b.wet })),
       vehicles: structuredClone([...this.vehicles.values()]), responders: structuredClone([...this.responders.values()]),
       victims: structuredClone([...this.victims.values()]), suspects: structuredClone([...this.suspects.values()]), bystanders: structuredClone([...this.bystanders.values()]),
       incidents: structuredClone([...this.incidents.values()]), obstacles: [...this.obstacles], won: this.won, script: this.script.map(e => ({ ...e })),
@@ -1667,8 +1777,8 @@ export class World {
     const w = new World(content, s.opts);
     w.time = s.time; w.score = s.score; w.budget = s.budget; w.reputation = s.reputation; w.solved = s.solved; w.failed = s.failed; w.deaths = s.deaths;
     w.over = s.over; w.nextId = s.nextId; w.rng.state = s.rng; w.spawnTimer = s.spawnTimer;
-    for (const sb of s.buildings) { const b = w.buildings.get(sb.id); if (b) Object.assign(b, { ...sb, resistance: sb.resistance ?? 1 }); }
-    for (const v of s.vehicles) { v.home ??= { x: Math.floor(v.x), y: Math.floor(v.y) }; v.returning ??= false; v.silent ??= false; v.toHospital ??= false; v.contraflow ??= false; v.blocked ??= 0; v.avoid ??= []; v.ghost ??= 0; v.water ??= content.vehicles[v.defId]?.tank ?? 0; v.hydrant ??= false; w.vehicles.set(v.id, v); }
+    for (const sb of s.buildings) { const b = w.buildings.get(sb.id); if (b) Object.assign(b, { ...sb, resistance: sb.resistance ?? 1, wet: sb.wet ?? 0 }); }
+    for (const v of s.vehicles) { v.home ??= { x: Math.floor(v.x), y: Math.floor(v.y) }; v.returning ??= false; v.silent ??= false; v.patrol ??= false; v.patrolRoute ??= []; v.patrolIdx ??= 0; v.toHospital ??= false; v.contraflow ??= false; v.blocked ??= 0; v.avoid ??= []; v.ghost ??= 0; v.water ??= content.vehicles[v.defId]?.tank ?? 0; v.hydrant ??= false; w.vehicles.set(v.id, v); }
     for (const r of s.responders) w.responders.set(r.id, r);
     for (const v of s.victims) w.victims.set(v.id, v);
     for (const x of s.suspects) w.suspects.set(x.id, x);

@@ -107,7 +107,8 @@
       }
     ],
     "patientCapacity": 1,
-    "cost": 700
+    "cost": 700,
+    "canPatrol": true
   },
   {
     "id": "rapid_responder",
@@ -127,7 +128,8 @@
       }
     ],
     "patientCapacity": 0,
-    "cost": 500
+    "cost": 500,
+    "canPatrol": true
   },
   {
     "id": "mmt_car",
@@ -173,7 +175,8 @@
       }
     ],
     "patientCapacity": 0,
-    "cost": 500
+    "cost": 500,
+    "canPatrol": true
   },
   {
     "id": "police_van",
@@ -216,7 +219,8 @@
       }
     ],
     "patientCapacity": 0,
-    "cost": 400
+    "cost": 400,
+    "canPatrol": true
   },
   {
     "id": "tow_truck",

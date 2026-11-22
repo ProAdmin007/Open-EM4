@@ -1,7 +1,7 @@
 import type { Vec } from './pathfinding';
 
 export type Category = 'fire' | 'ambulance' | 'police' | 'tech';
-export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate' | 'disperse' | 'defuse';
+export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate' | 'disperse' | 'defuse' | 'cool';
 export type Objective = 'fire_out' | 'victims_safe' | 'suspects_arrested' | 'area_secured' | 'obstacle_cleared' | 'bystanders_dispersed' | 'device_defused';
 export type BuildingType = 'residential' | 'apartment' | 'commercial' | 'industrial' | 'office' | 'warehouse' | 'school' | 'shopping' | 'church' | 'station' | 'hospital';
 
@@ -32,6 +32,8 @@ export interface VehicleDef {
   /** Price (in budget) to call this vehicle as reinforcement. Default 500. */
   cost?: number;
   firePowerBonus?: number;
+  /** May drive patrol routes on its own (patrol cars, motorcycles, ambulances). */
+  canPatrol?: boolean;
   /** Water tank in litres (fire vehicles); refilled at hydrants. */
   tank?: number;
   clearPowerBonus?: number;
@@ -129,6 +131,10 @@ export interface Vehicle extends Entity {
   returning: boolean;
   /** Driving back to the station without sirens (set once the return route is planned). */
   silent: boolean;
+  /** Patrolling the city along a route (sirens off) until given another order or called to an incident. */
+  patrol: boolean;
+  patrolRoute: Vec[];
+  patrolIdx: number;
   /** True while heading for a hospital with patients on board. */
   toHospital: boolean;
   /** Emergency vehicle may drive against the lane direction (set after it got blocked). */
@@ -161,7 +167,8 @@ export type Task =
   | { type: 'secure'; incidentId: number; progress: number }
   | { type: 'clear'; incidentId: number; progress: number }
   | { type: 'disperse'; incidentId: number; progress: number }
-  | { type: 'defuse'; incidentId: number; progress: number };
+  | { type: 'defuse'; incidentId: number; progress: number }
+  | { type: 'cool'; buildingId: string; deploy: number };
 export interface Responder extends Entity {
   kind: 'responder';
   role: string;
@@ -215,6 +222,8 @@ export interface Building extends BuildingDef {
   spread: number;
   /** Fire resistance: extinguishing power is divided by this. */
   resistance: number;
+  /** 0..100: how wet the facade is from cooling; slows fire spread and growth, dries out over time. */
+  wet: number;
 }
 export type IncidentStatus = 'active' | 'resolved' | 'failed';
 export interface Incident {

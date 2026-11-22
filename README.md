@@ -9,7 +9,7 @@ Command fire engines, ambulances, police cars and tow trucks in a living city �
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-99%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-103%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 **English** · [Nederlands](README.nl.md)
@@ -35,12 +35,14 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 - 🤖 **Bomb squad** (inspired by the Los Angeles mod) – a *suspicious package* incident: secure the area with tape, cones, barriers and flares, send the crowd away and let the bomb-disposal crew roll out the robot.
 - 💥 **Consequences** – an unattended suspicious package explodes (damage, a new fire, injured bystanders, screen shake and a blast sound); a secured scene closes the surrounding road to civilian traffic, which re-routes around the barriers.
 - 🚨 **Clear vehicle status** – every vehicle says what it is doing (*Aanrijdend naar…*, *Ter plaatse bij…*, *Onderweg naar de kazerne*, *Rijdt naar het ziekenhuis*); sirens go off on the way back to the station, and fire crews walk up to the fire before they start spraying.
+- ❄️ **Cooling** (`K`) – hose down the buildings next to a fire so it cannot spread: wet facades are much harder to ignite and slow the fire, and dry out again after a while.
+- 🚓 **Patrols** (`P`, inspired by the Los Angeles mod) – patrol cars, motorcycles and ambulances drive a loop through the city without sirens and rush out on their own to the nearest new incident of their service.
 - ⏱️ **Severity matters** – treatment, arrest, securing, clearing and fire-fighting times grow with the severity, differ per incident type, and unattended incidents escalate and eventually fail.
 - 🚦 **Believable traffic** – right-hand lanes, U-turns, emergency vehicles that never overlap other vehicles or people, parking bays at every station, and crews that step out *beside* the vehicle.
 - 🔊 **Fully procedural audio** – Dutch-style two-tone sirens, crackling fire, water spray, traffic hum and UI effects, all synthesised with the Web Audio API (no sound files).
 - 🎯 **Game modes** – six missions, endless Freeplay (Easy / Normal / Hard, seeded for reproducible scenarios), save & load, local highscores.
 - 🧩 **Moddable** – vehicles, roles, incidents, missions and maps are validated JSON; an example content pack is included.
-- 🧪 **Well tested** – deterministic simulation with 99 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
+- 🧪 **Well tested** – deterministic simulation with 103 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
 - 🧊 **Experimental 3D view** – a procedural three.js city (buildings, vehicles, people, fire/smoke, traffic lights) with an RTS camera, next to the original 2D view; switch in Settings or the main menu. Lazily loaded, so it costs nothing if you never turn it on ([docs/3d.md](docs/3d.md)).
 
 The experimental 3D view (procedural three.js, no external assets):
@@ -82,8 +84,9 @@ The game UI is in Dutch; the code, comments and documentation are in English.
 | Select | click a unit, drag a box (`Shift` adds), or use the dispatch bar |
 | Order | right-click: drive / walk, or a targeted action on a fire, casualty, suspect, obstacle, crowd or hospital |
 | Get out / in / stop | `E` / `R` / `X`, or double right-click a vehicle to let everybody out |
-| Fire brigade | `B` = connect hoses and start fighting the nearest fire |
+| Fire brigade | `B` = connect hoses and start fighting the nearest fire, `K` = cool the threatened buildings next door |
 | Ambulance with a patient | `Z` = drive to the hospital (crew boards first) |
+| Patrol | `P` = patrol cars / motorcycles / ambulances drive a loop through the city |
 | Back to the station | `H` |
 | Pause, speed, sound | `Space`, `1` `2` `3`, `M` |
 

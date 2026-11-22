@@ -157,3 +157,5 @@ Map character `W` is water (not walkable or drivable).
 - Ability `defuse` needs the vehicle equipment `bomb_robot`; incident objective `device_defused` with an optional `defuseTime` (seconds, scaled by severity). See the `suspicious_package` incident and the `bomb_squad` vehicle / `bomb_tech` role in `src/data`.
 
 - An incident with the objective `device_defused` that runs out of time explodes: the building takes damage, a fire incident starts and the bystanders still standing around become casualties. A secured incident closes the road tiles within `CORDON_RADIUS` (3.2) to civilian cars.
+
+- Ability `cool` (needs `fire_hose`): the crew wets a building that is not burning. `wet` (0..100) slows fire growth and, above all, spread to that building; it dries at `WET_DECAY` per second. Vehicle flag `canPatrol: true` lets a vehicle drive the three built-in patrol routes (outer ring, inner ring, snake through the middle rows) without sirens; the nearest patrolling vehicle of a service that an incident `requires` rushes out by itself.

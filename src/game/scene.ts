@@ -136,7 +136,7 @@ export class GameScene extends Phaser.Scene {
     this.fx = this.add.graphics().setDepth(5000);
     this.signals = this.add.graphics().setDepth(900);
     this.input.mouse?.disableContextMenu();
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,R,ESC,F,ONE,TWO,THREE,X,H,B,Z') as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,R,ESC,F,ONE,TWO,THREE,X,H,B,Z,K,P') as Record<string, Phaser.Input.Keyboard.Key>;
     this.setupInput();
     this.makePool();
     this.cameras.main.setBackgroundColor('#1d2a1d');
@@ -202,6 +202,8 @@ export class GameScene extends Phaser.Scene {
   cmdReturn(): void {
     this.commands.cmdReturn();
   }
+  cmdCool(): void { this.commands.cmdCool(); }
+  cmdPatrol(): void { this.commands.cmdPatrol(); }
   cmdDeploy(): void {
     this.commands.cmdDeploy();
   }
@@ -288,6 +290,8 @@ export class GameScene extends Phaser.Scene {
     kd('H', () => this.cmdReturn());
     kd('Z', () => this.cmdHospital());
     kd('B', () => this.cmdDeploy());
+    kd('K', () => this.cmdCool());
+    kd('P', () => this.cmdPatrol());
     kd('ESC', () => { this.selected.clear(); this.inspect = null; });
     kd('ONE', () => this.setSpeed(1));
     kd('TWO', () => this.setSpeed(2));

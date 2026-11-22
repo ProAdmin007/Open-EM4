@@ -852,11 +852,12 @@ export class Three3DRenderer implements GameRenderer {
     for (const sb of snap.buildings) {
       const bo = this.buildingObjs.get(sb.id);
       if (!bo) continue;
-      const key = sb.destroyed ? 'd' : `${Math.round(sb.damage / 8)}:${sb.fire > 0 ? 1 : 0}`;
+      const key = sb.destroyed ? 'd' : `${Math.round(sb.damage / 8)}:${sb.fire > 0 ? 1 : 0}:${Math.round(sb.wet / 12)}`;
       if (key === bo.key) continue;
       bo.key = key;
       const char = sb.destroyed ? 0.9 : Math.min(0.8, sb.damage / 100 * 0.9 + (sb.fire > 0 ? 0.08 : 0));
-      bo.bodyMat.color.copy(bo.wall).lerp(CHAR, char);
+      const wetK = 1 - 0.22 * Math.min(1, sb.wet / 100); // wet facades look darker
+      bo.bodyMat.color.copy(bo.wall).lerp(CHAR, char).multiplyScalar(wetK);
       bo.roofMat.color.copy(bo.roofCol).lerp(CHAR, Math.min(0.95, char + 0.1));
       bo.roof.visible = !sb.destroyed;
       if (sb.destroyed) this.hideBuildingExtras(bo);
