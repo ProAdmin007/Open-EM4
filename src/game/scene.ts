@@ -162,7 +162,7 @@ export class GameScene extends Phaser.Scene {
     this.lightPhase = -1;
     for (const p of this.pool) p.img.setVisible(false).setActive(false);
     const st = [...this.world.buildings.values()].find(b => b.type === 'station');
-    if (st) this.cameras.main.centerOn((st.x + st.w / 2) * T, (st.y + st.h / 2) * T);
+    if (st) this.centerOn(st.x + st.w / 2, st.y + st.h / 2);
   }
 
   begin(opts: WorldOptions, save?: SaveGame): void {
@@ -171,7 +171,7 @@ export class GameScene extends Phaser.Scene {
     this.speed = 1;
     this.cameras.main.setZoom(1);
     const first = [...this.world!.vehicles.values()][0];
-    if (first) this.cameras.main.centerOn(first.x * T, first.y * T);
+    if (first) this.centerOn(first.x, first.y);
   }
 
   toMenu(): void {
@@ -179,7 +179,7 @@ export class GameScene extends Phaser.Scene {
     this.state = 'menu';
     this.speed = 1;
     this.cameras.main.setZoom(0.9);
-    this.cameras.main.centerOn(32 * T, 24 * T);
+    this.centerOn(51, 36);
   }
 
   setSpeed(s: number): void {
