@@ -4,7 +4,8 @@
 
 | Package | Version | License | Use |
 | --- | --- | --- | --- |
-| [Phaser](https://phaser.io) | 4.2.x | MIT | WebGL/Canvas rendering, input, camera |
+| [Phaser](https://phaser.io) | 4.2.x | MIT | WebGL/Canvas rendering, input, camera (2D view) |
+| [three.js](https://threejs.org) | 0.179.0 | MIT | WebGL rendering, camera, raycasting (optional 3D view, loaded lazily) |
 
 ## Development dependencies (not shipped)
 
@@ -18,6 +19,7 @@
 | @types/node | MIT |
 | Electron (only for the optional Windows exe; its binary is bundled in that build, with Chromium's own licenses in `LICENSES.chromium.html`) | MIT |
 | @electron/packager | BSD-2-Clause |
+| @types/three | MIT |
 
 Docker images (`node:22-alpine`, `nginx:1.27-alpine`) are used only for building and hosting; they are not part of the repository.
 
