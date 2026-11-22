@@ -446,6 +446,7 @@ export class World {
     for (const v of this.vehicles.values()) this.updateVehicle(v, dt);
     for (const r of this.responders.values()) this.updateResponder(r, dt);
     this.separateResponders(dt);
+    if (this.pendingSends.length) { const due = this.pendingSends.filter(p => p.at <= this.time); if (due.length) { this.pendingSends = this.pendingSends.filter(p => p.at > this.time); for (const p of due) this.sendToScene(p.defId, p.tx, p.ty); } }
     this.updateWater(dt);
     this.updateGrip(dt);
     this.updateHearses(dt);
@@ -529,8 +530,25 @@ export class World {
 
   /** Tiles currently occupied by parked (path-less) vehicles; they are obstacles for routing. */
   private idleTiles(except: Vehicle): Set<number> {
+    // tiles taken by a parked vehicle or promised to one that is on its way, including the neighbouring tiles of the same lane that its length covers
     const set = new Set<number>();
-    for (const o of this.vehicles.values()) if (o !== except && !o.path.length) set.add(key(Math.floor(o.x), Math.floor(o.y)));
+    const mine = this.vehicleDef(except).length;
+    for (const o of this.vehicles.values()) {
+      if (o === except) continue;
+      const parked = !o.path.length;
+      if (!parked && !o.dest) continue;
+      const px = parked ? o.x : o.dest!.x + 0.5, py = parked ? o.y : o.dest!.y + 0.5;
+      const tx = Math.floor(px), ty = Math.floor(py);
+      set.add(key(tx, ty));
+      if (parked && this.isParking(tx, ty)) continue;
+      const lane = this.laneAt(tx, ty);
+      if (!lane) continue;
+      const reach = (this.vehicleDef(o).length + mine) / 2 + 0.1;
+      for (let k = 1; k <= Math.ceil(reach); k++) for (const sgn of [-1, 1]) {
+        if (k > reach) continue;
+        set.add(key(tx + lane.x * k * sgn, ty + lane.y * k * sgn));
+      }
+    }
     return set;
   }
 
@@ -855,6 +873,21 @@ export class World {
     return out;
   }
 
+  /** `other` is in the way of `by`: when it is idle with everybody aboard it moves to a free tile 3-8 tiles away and parks there. */
+  private makeWay(otherId: number, by: Vehicle): void {
+    const o = this.vehicles.get(otherId);
+    if (!o || o.path.length || o.dest || !this.groundVehicle(o)) return;
+    if (o.crew.some(id => !this.responders.get(id)!.inVehicle) || o.patrol) return;
+    const here = this.isParking(Math.floor(o.x), Math.floor(o.y));
+    if (here) return; // parked in its own bay: not in anybody's way
+    const taken = new Set<number>(by.path.slice(0, 12).map(t => key(t.x, t.y)));
+    for (const c of this.candidateTiles(o.x, o.y, o, 40, 9)) {
+      const dd = Math.hypot(c.x + 0.5 - o.x, c.y + 0.5 - o.y);
+      if (dd < 3 || taken.has(key(c.x, c.y)) || !this.clearStopTile(c.x, c.y)) continue;
+      if (this.routeVehicle(o, c)) { o.silent = true; o.prio = 2; return; }
+    }
+  }
+
   private onBlocked(v: Vehicle, b: Blocker, dt: number): void {
     const before = v.blocked;
     v.blocked += dt;
@@ -867,6 +900,8 @@ export class World {
       }
     }
     const movingVeh = b.kind === 'veh' && !b.halted;
+    // an idle, fully crewed vehicle standing in the way makes room: it rolls on to a free spot a few tiles further (no siren) so the rest can pass
+    if (b.kind === 'veh' && b.halted && v.blocked > 2.2 && Math.floor(v.blocked / 2.2) !== Math.floor(before / 2.2)) this.makeWay(b.id ?? -1, v);
     // slow or stopped traffic ahead: overtake through the opposite lane when that is safe
     if (v.blocked > 0.7 && this.time > v.passUntil && (b.kind === 'civ' || (b.kind === 'veh' && b.halted))) {
       const np = this.overtakePath(v.x, v.y, v.path, v.id);
@@ -928,6 +963,8 @@ export class World {
     const near: Obb = { x: cx, y: cy, ux, uy, hl: len / 2 + 0.04, hw: hw + 0.04 };
     const far: Obb = { x: cx + ux * LOOK / 2, y: cy + uy * LOOK / 2, ux, uy, hl: len / 2 + LOOK / 2, hw: hw + 0.04 };
     const check = (o: { id: number; x: number; y: number; px: number; py: number; angle: number }, lo: number, ho: number, po: number, kind: Blocker['kind'], civ?: Civilian): Blocker | null => {
+      const rr = len / 2 + LOOK + 0.2 + lo / 2 + ho; // cheap rejection before any trigonometry
+      if (Math.abs(o.x - cx) > rr || Math.abs(o.y - cy) > rr) return null;
       const hx = Math.cos(o.angle), hy = Math.sin(o.angle);
       const ob: Obb = { x: o.x, y: o.y, ux: hx, uy: hy, hl: lo / 2, hw: ho };
       if (!obbOverlap(far, ob)) return null;
@@ -951,8 +988,9 @@ export class World {
     }
     const lookP: Obb = { x: cx + ux * 0.12, y: cy + uy * 0.12, ux, uy, hl: len / 2 + 0.17, hw: hw + 0.04 };
     // people on the pavement are not in the way of traffic; only people on the road or in a parking lot block
+    const reachP = len / 2 + 0.7;
     const person = (o: { x: number; y: number }, responder?: Responder): Blocker | null =>
-      !this.isRoad(Math.floor(o.x), Math.floor(o.y)) && !this.isParking(Math.floor(o.x), Math.floor(o.y)) ? null : obbOverlap(lookP, { x: o.x, y: o.y, ux: 1, uy: 0, hl: 0.26, hw: 0.26 }) ? { kind: 'person', x: o.x, y: o.y, halted: true, responder } : null;
+      Math.abs(o.x - cx) > reachP || Math.abs(o.y - cy) > reachP ? null : !this.isRoad(Math.floor(o.x), Math.floor(o.y)) && !this.isParking(Math.floor(o.x), Math.floor(o.y)) ? null : obbOverlap(lookP, { x: o.x, y: o.y, ux: 1, uy: 0, hl: 0.26, hw: 0.26 }) ? { kind: 'person', x: o.x, y: o.y, halted: true, responder } : null;
     for (const o of this.responders.values()) { if (!o.inVehicle) { const r = person(o, o); if (r) return r; } }
     for (const o of this.victims.values()) { if (o.transport === 'scene' || o.transport === 'dead') { const r = person(o); if (r) return r; } }
     for (const o of this.suspects.values()) { const r = person(o); if (r) return r; }
@@ -1382,7 +1420,7 @@ export class World {
       const inc = b.incidentId ? this.incidents.get(b.incidentId) : null;
       const sev = inc ? inc.severity : 1;
       b.fire = Math.min(100, b.fire + b.growth * (0.8 + 0.2 * sev) * (1 - 0.5 * b.wet / 100) * dt);
-      b.damage += (b.fire / 100) * 2.2 * b.flammability * dt;
+      b.damage += (b.fire / 100) * 0.85 * b.flammability * dt; // an unattended house takes minutes to burn down, not seconds
       if (b.damage >= 100) { b.damage = 100; b.destroyed = true; continue; }
       if (b.fire < 35) continue;
       for (const nb of this.buildings.values()) {
@@ -1479,7 +1517,18 @@ export class World {
     level = Math.max(0, Math.min(4, Math.round(level)));
     if (level === this.grip) return false;
     const old = this.grip;
-    if (level < old) { this.grip = level; this.emit({ type: 'info', message: level ? `Afgeschaald naar ${World.GRIP_INFO[level]}` : 'Afgeschaald: GRIP-structuur opgeheven' }); return true; }
+    if (level < old) {
+      this.grip = level;
+      // the units that came with the levels we drop are released: whoever is idle and not working on a casualty drives back to the station
+      const release: number[] = [];
+      for (let l = old; l > level; l--) for (const defId of World.GRIP_UNITS[l]) {
+        const v = [...this.vehicles.values()].find(x => x.defId === defId && !release.includes(x.id) && !x.patrol && !x.returning && x.patients.length === 0 && !x.toHospital && Math.hypot(x.x - (x.home.x + 0.5), x.y - (x.home.y + 0.5)) > 3 && x.crew.every(id => { const r = this.responders.get(id)!; return r.inVehicle || !r.task; }));
+        if (v) release.push(v.id);
+      }
+      if (release.length) this.orderReturn(release);
+      this.emit({ type: 'info', message: (level ? `Afgeschaald naar ${World.GRIP_INFO[level]}` : 'Afgeschaald: GRIP-structuur opgeheven') + (release.length ? ` – ${release.length} eenheden keren terug naar de kazerne` : '') });
+      return true;
+    }
     const main = this.mainIncident();
     if (!main) { this.emit({ type: 'warn', message: 'Opschalen kan alleen bij een lopend incident' }); return false; }
     const cost = 300 * (level - old);
@@ -1489,8 +1538,13 @@ export class World {
     this.gripIdle = 0;
     const b = main.buildingId ? this.buildings.get(main.buildingId) : null;
     const tx = b ? b.door.x + 0.5 : main.x, ty = b ? b.door.y + 0.5 : main.y;
-    let sent = 0;
-    for (let l = old + 1; l <= level; l++) for (const defId of World.GRIP_UNITS[l]) if (this.sendToScene(defId, tx, ty)) sent++;
+    let sent = 0, k = 0;
+    // the units leave one after the other (every ~2 s) so they do not all arrive and jam the scene at the same moment
+    for (let l = old + 1; l <= level; l++) for (const defId of World.GRIP_UNITS[l]) {
+      if (k === 0) { if (this.sendToScene(defId, tx, ty)) sent++; }
+      else { this.pendingSends.push({ at: this.time + k * 2, defId, tx, ty }); sent++; }
+      k++;
+    }
     this.emit({ type: 'info', message: `Opgeschaald naar ${World.GRIP_INFO[level]} – ${sent} eenheden onderweg`, speech: `Opschaling. ${World.GRIP_INFO[level]}. ${sent} extra eenheden zijn onderweg naar ${main.address || 'de plaats van het incident'}.` });
     return true;
   }
@@ -1507,6 +1561,7 @@ export class World {
     return this.driveNear(v, tx, ty);
   }
   private junctionTimer = new Map<number, number>();
+  private pendingSends: { at: number; defId: string; tx: number; ty: number }[] = [];
 
   /** How many responders (chosen by the player) are assisting next to this casualty: they speed up treatment (max 2). */
   helpers(v: { id: number; x: number; y: number }): number {

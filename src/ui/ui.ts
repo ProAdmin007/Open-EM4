@@ -229,7 +229,7 @@ export class UI {
       const cost = w.reinforcementCost(d.id);
       return `<button class="veh reinf" data-reinf="${esc(d.id)}" ${w.budget >= cost ? '' : 'disabled'} title="Versterking bestellen">➕ ${esc(d.name)}<small>€${cost.toLocaleString('nl-NL')}</small></button>`;
     }).join('');
-    const gripBtns = [0, 1, 2, 3, 4].map(n => `<button data-grip="${n}" class="${w.grip === n ? 'primary' : ''}" title="${esc(World.GRIP_INFO[n])}">${n === 0 ? 'Geen' : 'GRIP ' + n}</button>`).join('');
+    const gripBtns = [0, 1, 2, 3, 4].map(n => `<button data-grip="${n}" class="${w.grip === n ? 'primary' : ''}" title="${esc(World.GRIP_INFO[n])}">${n === 0 ? 'Geen' : 'GRIP ' + n}</button>`).join('') + (w.grip > 0 ? `<button data-grip="${w.grip - 1}" title="Een niveau afschalen: de eenheden van dit niveau die niets meer te doen hebben keren terug naar de kazerne">⬇ Afschalen</button>` : '');
     const gripBox = `<div class="grip" style="grid-column:1/-1"><div class="reinf-title">🏛 Opschalen (GRIP)</div><div class="actions">${gripBtns}</div><div class="help">${esc(World.GRIP_INFO[w.grip])}${w.grip ? '' : ' – opschalen stuurt automatisch bijbehorende voertuigen (OvD, CoPI, LGH, extra eenheden) naar het hoofdincident.'}</div></div>`;
     this.setHtml('vehicle-list', gripBox + html + (reinf ? `<div class="reinf-title">Versterking bestellen (middelen: €${Math.round(w.budget).toLocaleString('nl-NL')})</div>` + reinf : ''));
   }

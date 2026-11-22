@@ -255,6 +255,7 @@ describe('vehicles turn around freely and do not get stuck', () => {
           else if (w.time - job.t > 300) { failed++; busy.delete(id); w.orderReturn([id]); }
         }
       }
+      trips -= [...busy.values()].length; // trips still under way when the simulation ends do not count
     }
     expect(trips).toBeGreaterThan(20);
     expect(failed).toBe(0);

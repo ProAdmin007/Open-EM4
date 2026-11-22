@@ -4,7 +4,7 @@ import { World, SIM_DT } from '../src/sim/world';
 
 const content = loadBuiltinContent();
 const w = World.create(content, { seed: 7, difficulty: 'hard', freeplay: true, traffic: true });
-const ticks = 30 * 60 * 30; // 30 simulated minutes
+const ticks = 30 * 60 * Number(process.env.BENCH_MIN ?? 30); // 30 simulated minutes
 const t0 = performance.now();
 let worst = 0;
 for (let i = 0; i < ticks && !w.over; i++) {

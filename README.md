@@ -9,7 +9,7 @@ Command fire engines, ambulances, police cars and tow trucks in a living city �
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-142%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-148%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 **English** · [Nederlands](README.nl.md)
@@ -43,6 +43,7 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 - 🤝 **You choose who helps** – select any firefighter, officer or technician and right-click (or press *Helpen*) a casualty: they assist the paramedic, which speeds up treatment (up to two helpers) and walk alongside the trolley. Selected units get a pulsing ring, a light column, an arrow and a name label in 3D.
 - 🚦 **Livelier traffic** – cars accelerate and brake smoothly, queue for red lights, use brake lights and indicators, there are vans and cyclists keeping to the right edge of the lane. Buildings always keep a pavement strip from the road.
 - 🌧 **Living world** – drifting clouds, rain showers (traffic slows down), flocks of birds; crashes with blinking hazard lights, sparks, deployed airbags and sometimes an overturned lorry; demonstrations with picket signs and banners; parked vehicles pull over to the kerb; light bars with extra strobes, visible drivers, fluorescent vests.
+- 🚥 **Flowing traffic, role-specific outfits, GRIP scale-down** – traffic lights only on the big crossings (with a clearance interval and no blocking of the junction), priority rules elsewhere, cars follow each other at the speed of the car in front; emergency vehicles brake for corners, prio 1 is fast with siren and beacons, prio 2 calmer with beacons only; an idle vehicle in the way rolls on to make room; GRIP units leave one after the other and are released again when you scale down; every role has its own outfit (bunker gear, hazmat suit, riot gear, bomb suit, doctor overalls, …); unattended buildings take minutes to burn down; the collision checks are about three times faster.
 - 🔄 **U-turns anywhere** – every vehicle, civilian or emergency, can turn around on the street; routes are the shortest ones, a vehicle that is blocked plans around the obstruction (or turns back), and stopped vehicles leave junctions again, so traffic keeps flowing.
 - 🔦 **Reconnaissance** – at a fire it is unknown whether anybody is still inside until a crew has *verkend* (scouted) the building; only then can you rescue the people inside.
 - ⚰️ **Undertaker** – when somebody dies a hearse from the funeral home is sent, collects the body and drives it home; the call only closes after that. **Salvage** – a tow truck lifts the wreck onto its flatbed (accidents now need one). **Slide-in loading** – the trolley goes into the ambulance in a couple of seconds, and nobody is left behind any more.

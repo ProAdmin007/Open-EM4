@@ -342,7 +342,7 @@ describe('control room, random calls, ambulance return', () => {
     const w = World.create(content, { seed: 5, difficulty: 'hard', freeplay: true, traffic: false });
     w.reputation = 1e9;
     const seen: string[] = [];
-    for (let i = 0; i < 30 * 1500; i++) { w.tick(); for (const e of w.drainEvents()) if (e.type === 'incident_started') seen.push(w.incidents.get(e.incidentId)?.defId ?? ''); }
+    for (let i = 0; i < 30 * 1500; i++) { w.tick(); if (i % 150 === 0) for (const b of w.buildings.values()) b.fire = 0; /* nobody lets a fire spread unchecked: only count the generator's calls */ for (const e of w.drainEvents()) if (e.type === 'incident_started') seen.push(w.incidents.get(e.incidentId)?.defId ?? ''); }
     expect(seen.length).toBeGreaterThan(12);
     let repeats = 0;
     for (let i = 1; i < seen.length; i++) if (seen[i] === seen[i - 1]) repeats++;
@@ -593,13 +593,14 @@ describe('P2000-style calls, GRIP and the associated vehicles', () => {
     expect(w.setGrip(2)).toBe(true);
     expect(w.grip).toBe(2);
     expect(w.budget).toBe(budget - 600);
-    const moving = [...w.vehicles.values()].filter(v => v.path.length > 0).map(v => v.defId);
+    run(w, 30); // the units leave one after the other
+    const moving = [...w.vehicles.values()].filter(v => v.path.length > 0 || Math.hypot(v.x - (v.home.x + 0.5), v.y - (v.home.y + 0.5)) > 1).map(v => v.defId);
     for (const need of ['ovd_car', 'copi_unit', 'lgh_car', 'hazmat_unit']) expect(moving).toContain(need);
     expect(moving.filter(d => d === 'ambulance').length).toBeGreaterThanOrEqual(1);
     expect(w.setGrip(1)).toBe(true); // scale down
     expect(w.grip).toBe(1);
     // done: the structure dissolves by itself
-    w.incidents.delete(inc.id); // the call has been handled
+    void inc; w.incidents.clear(); for (const b of w.buildings.values()) b.fire = 0; // everything has been handled
     run(w, 60, () => w.grip === 0);
     expect(w.grip).toBe(0);
   });
