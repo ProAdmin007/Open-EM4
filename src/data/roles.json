@@ -1,9 +1,86 @@
 [
-  { "id": "firefighter", "name": "Brandweerman", "category": "fire", "abilities": ["extinguish", "rescue"], "speed": 2.6, "color": "#ffb300", "power": 9 },
-  { "id": "fire_officer", "name": "Bevelvoerder", "category": "fire", "abilities": ["extinguish", "coordinate"], "speed": 2.6, "color": "#ffe082", "power": 4 },
-  { "id": "rescue_specialist", "name": "Specialist technische hulpverlening", "category": "fire", "abilities": ["rescue", "clear", "extinguish"], "speed": 2.5, "color": "#ff8f00", "power": 5 },
-  { "id": "paramedic", "name": "Ambulanceverpleegkundige", "category": "ambulance", "abilities": ["treat", "carry"], "speed": 2.8, "color": "#26c6da", "power": 1 },
-  { "id": "doctor", "name": "Arts (MMT)", "category": "ambulance", "abilities": ["treat"], "speed": 2.8, "color": "#80deea", "power": 2 },
-  { "id": "officer", "name": "Agent", "category": "police", "abilities": ["arrest", "secure"], "speed": 3.0, "color": "#3f6ee8", "power": 1 },
-  { "id": "technician", "name": "Berger", "category": "tech", "abilities": ["clear"], "speed": 2.6, "color": "#8bc34a", "power": 1 }
+  {
+    "id": "firefighter",
+    "name": "Brandweerman",
+    "category": "fire",
+    "abilities": [
+      "extinguish",
+      "rescue"
+    ],
+    "speed": 2.6,
+    "color": "#ffb300",
+    "power": 9
+  },
+  {
+    "id": "fire_officer",
+    "name": "Bevelvoerder",
+    "category": "fire",
+    "abilities": [
+      "extinguish",
+      "coordinate"
+    ],
+    "speed": 2.6,
+    "color": "#ffe082",
+    "power": 4
+  },
+  {
+    "id": "rescue_specialist",
+    "name": "Specialist technische hulpverlening",
+    "category": "fire",
+    "abilities": [
+      "rescue",
+      "clear",
+      "extinguish"
+    ],
+    "speed": 2.5,
+    "color": "#ff8f00",
+    "power": 5
+  },
+  {
+    "id": "paramedic",
+    "name": "Ambulanceverpleegkundige",
+    "category": "ambulance",
+    "abilities": [
+      "treat",
+      "carry"
+    ],
+    "speed": 2.8,
+    "color": "#26c6da",
+    "power": 1
+  },
+  {
+    "id": "doctor",
+    "name": "Arts (MMT)",
+    "category": "ambulance",
+    "abilities": [
+      "treat"
+    ],
+    "speed": 2.8,
+    "color": "#80deea",
+    "power": 2
+  },
+  {
+    "id": "officer",
+    "name": "Agent",
+    "category": "police",
+    "abilities": [
+      "arrest",
+      "secure",
+      "disperse"
+    ],
+    "speed": 3.0,
+    "color": "#3f6ee8",
+    "power": 1
+  },
+  {
+    "id": "technician",
+    "name": "Berger",
+    "category": "tech",
+    "abilities": [
+      "clear"
+    ],
+    "speed": 2.6,
+    "color": "#8bc34a",
+    "power": 1
+  }
 ]

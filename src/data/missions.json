@@ -1,0 +1,166 @@
+[
+  {
+    "id": "first_shift",
+    "name": "Eerste dienst",
+    "level": 1,
+    "allowedFailures": 0,
+    "description": "Een woningbrand. Stuur de tankautospuit, rol slangen uit en blus. Een rustige kennismaking.",
+    "script": [
+      {
+        "at": 3,
+        "def": "house_fire",
+        "severity": 1
+      }
+    ]
+  },
+  {
+    "id": "rush_hour",
+    "name": "Spitsuur",
+    "level": 1,
+    "allowedFailures": 1,
+    "description": "Een ongeluk, een geblokkeerde weg en een medisch noodgeval vlak na elkaar. Verdeel je eenheden.",
+    "script": [
+      {
+        "at": 3,
+        "def": "car_accident",
+        "severity": 1
+      },
+      {
+        "at": 25,
+        "def": "road_blockage",
+        "severity": 1
+      },
+      {
+        "at": 45,
+        "def": "medical_emergency",
+        "severity": 1
+      }
+    ]
+  },
+  {
+    "id": "arsonist",
+    "name": "Brandstichter",
+    "level": 2,
+    "allowedFailures": 1,
+    "description": "Een verdachte loopt rond en er breken branden uit. Politie en brandweer moeten samenwerken.",
+    "script": [
+      {
+        "at": 3,
+        "def": "crime",
+        "severity": 1
+      },
+      {
+        "at": 25,
+        "def": "house_fire",
+        "severity": 1
+      },
+      {
+        "at": 50,
+        "def": "house_fire",
+        "severity": 2
+      }
+    ]
+  },
+  {
+    "id": "industrial_area",
+    "name": "Industriegebied",
+    "level": 2,
+    "allowedFailures": 1,
+    "description": "Een grote industriebrand die kan overslaan, terwijl er elders hulp nodig is.",
+    "script": [
+      {
+        "at": 3,
+        "def": "industrial_fire",
+        "severity": 2
+      },
+      {
+        "at": 40,
+        "def": "medical_emergency",
+        "severity": 1
+      },
+      {
+        "at": 65,
+        "def": "crime",
+        "severity": 1
+      }
+    ]
+  },
+  {
+    "id": "long_night",
+    "name": "Lange nacht",
+    "level": 2,
+    "allowedFailures": 2,
+    "description": "Zes meldingen verspreid over drie minuten. Houd het overzicht en bestel tijdig versterking.",
+    "script": [
+      {
+        "at": 3,
+        "def": "house_fire",
+        "severity": 1
+      },
+      {
+        "at": 30,
+        "def": "car_accident",
+        "severity": 2
+      },
+      {
+        "at": 60,
+        "def": "crime",
+        "severity": 1
+      },
+      {
+        "at": 90,
+        "def": "medical_emergency",
+        "severity": 2
+      },
+      {
+        "at": 120,
+        "def": "road_blockage",
+        "severity": 1
+      },
+      {
+        "at": 150,
+        "def": "house_fire",
+        "severity": 2
+      }
+    ]
+  },
+  {
+    "id": "disaster",
+    "name": "Grote ramp",
+    "level": 3,
+    "allowedFailures": 2,
+    "description": "Alles tegelijk: industriebrand, zwaar ongeluk, brand, misdrijf, medische nood en een blokkade.",
+    "script": [
+      {
+        "at": 3,
+        "def": "industrial_fire",
+        "severity": 3
+      },
+      {
+        "at": 12,
+        "def": "car_accident",
+        "severity": 2
+      },
+      {
+        "at": 22,
+        "def": "house_fire",
+        "severity": 2
+      },
+      {
+        "at": 32,
+        "def": "crime",
+        "severity": 2
+      },
+      {
+        "at": 48,
+        "def": "medical_emergency",
+        "severity": 2
+      },
+      {
+        "at": 62,
+        "def": "road_blockage",
+        "severity": 2
+      }
+    ]
+  }
+]

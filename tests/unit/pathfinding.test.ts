@@ -19,13 +19,13 @@ describe('A* pathfinding', () => {
     const blocked = (x: number, y: number) => !(x === 1 && y === 0) && !(x === 0 && y === 1);
     expect(findPath(3, 3, { x: 0, y: 0 }, { x: 1, y: 1 }, blocked, { diagonal: true })).toBeNull();
   });
-  it('vehicles only get routes over road tiles and never through buildings', () => {
+  it('vehicles only get routes over road and parking tiles and never through buildings', () => {
     const w = newWorld();
     const v = [...w.vehicles.values()][0];
     const dest = w.nearestRoad(50, 40)!;
     expect(w.routeVehicle(v, dest)).toBe(true);
     for (const t of v.path) {
-      expect(w.isRoad(t.x, t.y)).toBe(true);
+      expect(w.isRoad(t.x, t.y) || w.isParking(t.x, t.y)).toBe(true);
       expect(w.isBuilding(t.x, t.y)).toBe(false);
     }
   });

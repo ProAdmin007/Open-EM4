@@ -8,6 +8,8 @@ export interface PathOptions {
   diagonal?: boolean;
   /** Safety valve against huge searches. */
   maxNodes?: number;
+  /** Optional directed-edge filter (e.g. one-way lanes): return false to forbid the step a -> b. */
+  edge?: (ax: number, ay: number, bx: number, by: number) => boolean;
 }
 
 class MinHeap {
@@ -105,6 +107,7 @@ export function findPath(
       const nx = cx + dx, ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= width || ny >= height || !passable(nx, ny)) continue;
       if (dx !== 0 && dy !== 0 && (!passable(cx + dx, cy) || !passable(cx, cy + dy))) continue;
+      if (opts.edge && !opts.edge(cx, cy, nx, ny)) continue;
       const ni = ny * width + nx;
       if (closed[ni]) continue;
       const ng = g[cur] + (dx !== 0 && dy !== 0 ? 1.4142 : 1);

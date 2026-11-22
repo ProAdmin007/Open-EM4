@@ -1,10 +1,42 @@
 {
   "name": "openrescue-rts",
   "version": "0.1.0",
-  "description": "OpenRescue RTS - open source emergency response browser game",
+  "description": "OpenRescue RTS - free, open-source emergency-services real-time strategy game for the browser (fire brigade, ambulance, police, technical rescue). Emergency 4 inspired. TypeScript + Phaser 4.",
+  "keywords": [
+    "game",
+    "browser-game",
+    "html5-game",
+    "rts",
+    "real-time-strategy",
+    "strategy-game",
+    "simulation",
+    "emergency-simulation",
+    "emergency-4",
+    "firefighter",
+    "ambulance",
+    "police",
+    "phaser",
+    "phaser4",
+    "typescript",
+    "vite",
+    "webgl",
+    "pathfinding",
+    "open-source",
+    "hulpdiensten"
+  ],
+  "homepage": "https://github.com/ProAdmin007/Open-EM4#readme",
+  "bugs": {
+    "url": "https://github.com/ProAdmin007/Open-EM4/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ProAdmin007/Open-EM4.git"
+  },
+  "author": "ProAdmin007",
   "license": "MIT",
   "type": "module",
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -28,6 +60,5 @@
     "vite": "^8.3.8",
     "vite-node": "^6.0.0",
     "vitest": "^5.1.1"
-  },
-  "main": "electron/main.cjs"
+  }
 }

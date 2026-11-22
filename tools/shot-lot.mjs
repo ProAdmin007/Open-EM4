@@ -1,0 +1,11 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch({ channel: 'chrome', args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+await page.goto('http://localhost:4173/');
+await page.getByRole('button', { name: /Freeplay/ }).click();
+await page.getByRole('button', { name: /Start Freeplay/ }).click();
+await page.waitForTimeout(1200);
+await page.evaluate(() => { const or = window.__openrescue; or.scene.centerOn(16, 14); or.scene.cameras.main.setZoom(1.4); const v = [...or.world.vehicles.values()].filter(x => x.category === 'fire'); or.world.orderDismount([v[0].id]); or.world.orderMove([v[1].id, v[2].id], 40, 30); or.scene.select([v[1].id]); });
+await page.waitForTimeout(2500);
+await page.screenshot({ path: 'docs/screenshot-lot.png' });
+await browser.close();

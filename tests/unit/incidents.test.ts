@@ -88,11 +88,17 @@ describe('incident resolution', () => {
     expect(victim.transport).toBe('inAmbulance');
     w.orderBoard([amb.id]);
     run(w, 20, () => medics.every(id => w.responders.get(id)!.inVehicle));
-    const hospital = [...w.buildings.values()].find(b => b.type === 'hospital')!;
-    driveTo(w, amb.id, hospital.door.x + 0.5, hospital.door.y + 0.5);
-    run(w, 2);
+    expect(w.orderToHospital([amb.id])).toBe(1);
+    run(w, 240, () => victim.transport === 'atHospital');
+    expect(victim.transport).toBe('atHospital');
+    run(w, 1);
+    expect(w.incidents.has(inc.id)).toBe(true); // bystanders are still in the way
+    expect(inc.bystanders.length).toBeGreaterThan(0);
+    w.orderAbility(cops, 'disperse', { kind: 'incident', id: inc.id });
+    run(w, 20, () => !w.incidents.has(inc.id));
     expect(w.incidents.has(inc.id)).toBe(false);
     expect(w.solved).toBe(1);
+    expect(w.bystanders.size).toBe(0);
   });
   it('police can arrest suspects to close a crime incident', () => {
     const w = newWorld(11);

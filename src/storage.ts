@@ -45,3 +45,20 @@ export interface StoredMod {
 }
 export const loadMods = (): StoredMod[] => read<StoredMod[]>(K_MODS) ?? [];
 export const saveMods = (m: StoredMod[]): boolean => write(K_MODS, m);
+
+export interface ScoreEntry {
+  score: number;
+  solved: number;
+  time: number;
+  difficulty: string;
+  seed: string;
+  date: string;
+}
+const K_SCORES = 'openrescue.scores';
+export const loadScores = (): ScoreEntry[] => read<ScoreEntry[]>(K_SCORES) ?? [];
+/** Adds a score, keeps the best 8 and returns the new list. */
+export function addScore(e: ScoreEntry): ScoreEntry[] {
+  const all = [...loadScores(), e].sort((a, b) => b.score - a.score).slice(0, 8);
+  write(K_SCORES, all);
+  return all;
+}

@@ -7,7 +7,17 @@ import type { World } from '../sim/world';
  */
 export type Sfx = 'alert' | 'escalate' | 'resolved' | 'failed' | 'click' | 'order' | 'dismount' | 'death' | 'pickup' | 'warn';
 
-interface Siren { osc: OscillatorNode; amp: GainNode; pan: StereoPannerNode }
+interface Siren { osc: OscillatorNode; osc2: OscillatorNode; amp: GainNode; pan: StereoPannerNode }
+
+/**
+ * Dutch emergency vehicles use the classic two-tone "tatütata" (a rising/falling fourth). Exact pitches are approximations
+ * chosen by ear/musical interval (A4-D5; fire engines a tone lower), not measured from real vehicles.
+ */
+const NL_TWO_TONE: Record<'ambulance' | 'police' | 'fire', { lo: number; hi: number; period: number }> = {
+  ambulance: { lo: 440, hi: 587, period: 0.62 },
+  police: { lo: 440, hi: 587, period: 0.52 },
+  fire: { lo: 392, hi: 523, period: 0.72 },
+};
 interface Layer { gain: GainNode; level: number }
 
 const CATS: Category[] = ['fire', 'ambulance', 'police', 'tech'];
@@ -52,18 +62,28 @@ export class AudioEngine {
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
 
     for (const c of CATS) {
+      // horn-like timbre: a sawtooth plus a slightly detuned square, low-passed
       const osc = ctx.createOscillator();
-      osc.type = c === 'police' ? 'sawtooth' : 'square';
-      osc.frequency.value = 700;
+      osc.type = 'sawtooth';
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'square';
+      osc2.detune.value = 7;
+      const g2 = ctx.createGain();
+      g2.gain.value = 0.35;
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.value = 2400;
+      lp.frequency.value = 1900;
+      lp.Q.value = 0.9;
       const amp = ctx.createGain();
       amp.gain.value = 0;
       const pan = ctx.createStereoPanner();
-      osc.connect(lp).connect(amp).connect(pan).connect(this.master);
+      osc.connect(lp);
+      osc2.connect(g2).connect(lp);
+      lp.connect(amp).connect(pan).connect(this.master);
+      osc.frequency.value = osc2.frequency.value = 440;
       osc.start();
-      this.sirens[c] = { osc, amp, pan };
+      osc2.start();
+      this.sirens[c] = { osc, osc2, amp, pan };
     }
     const loop = (filter: BiquadFilterType, freq: number, q = 0.7): Layer => {
       const src = ctx.createBufferSource();
@@ -125,14 +145,16 @@ export class AudioEngine {
       const s = this.sirens[c];
       const lvl = sirenLevel[c] ?? 0;
       let f = 700, pulse = 1;
-      switch (c) {
-        case 'fire': f = Math.floor(t / 0.55) % 2 ? 880 : 660; break;
-        case 'ambulance': f = Math.floor(t / 0.42) % 2 ? 960 : 770; break;
-        case 'police': f = 650 + 520 * (0.5 + 0.5 * Math.sin((2 * Math.PI * t) / 1.7)); break;
-        case 'tech': f = 1100; pulse = Math.floor(t / 0.35) % 2; break;
+      if (c === 'tech') { f = 1100; pulse = Math.floor(t / 0.35) % 2; } // amber warning: slow beeps
+      else {
+        const nl = NL_TWO_TONE[c];
+        f = Math.floor(t / nl.period) % 2 ? nl.hi : nl.lo;
+        // police occasionally add a fast "yelp" when approaching junctions
+        if (c === 'police' && t % 11 > 9) f = 620 + 680 * (0.5 + 0.5 * Math.sin(2 * Math.PI * 4.5 * t));
       }
-      s.osc.frequency.setTargetAtTime(f, now, 0.012);
-      s.amp.gain.setTargetAtTime(lvl * 0.11 * pulse, now, 0.04);
+      s.osc.frequency.setTargetAtTime(f, now, 0.01);
+      s.osc2.frequency.setTargetAtTime(f, now, 0.01);
+      s.amp.gain.setTargetAtTime(lvl * 0.1 * pulse, now, 0.04);
       s.pan.pan.setTargetAtTime(sirenPan[c] ?? 0, now, 0.1);
       this.lastLevels.sirens[c] = lvl;
     }
@@ -201,7 +223,7 @@ export class AudioEngine {
     switch (e.type) {
       case 'incident_started': this.play('alert'); break;
       case 'incident_escalated': this.play('escalate'); break;
-      case 'incident_resolved': this.play('resolved'); break;
+      case 'incident_resolved': case 'mission_complete': this.play('resolved'); break;
       case 'incident_failed': case 'game_over': this.play('failed'); break;
       case 'warn': this.play(/overleden/.test(e.message) ? 'death' : 'warn'); break;
       case 'info': this.play('pickup'); break;

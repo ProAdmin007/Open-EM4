@@ -1,0 +1,13 @@
+{
+  "name": "OpenRescue RTS",
+  "short_name": "OpenRescue",
+  "description": "Gratis, open source hulpdienstenspel in je browser: brandweer, ambulance, politie en techniek.",
+  "lang": "nl",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#11141a",
+  "theme_color": "#11141a",
+  "categories": ["games"],
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

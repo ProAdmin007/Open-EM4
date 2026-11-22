@@ -5,6 +5,8 @@ src/
   sim/            pure TypeScript, no Phaser/DOM -> deterministic, headless-testable, server-ready
     rng.ts          seeded mulberry32 (state is serialisable)
     pathfinding.ts  binary-heap A* (4/8 directions, goal tile or predicate)
+    space.ts        units and coordinate conventions (tile <-> metres), real-world sizes, model ids
+    snapshot.ts     renderer-agnostic, interpolated per-frame view of the world (for 3D / replays)
     types.ts        data definitions (JSON shapes) + runtime entities
     content.ts      validators + mod merging (Dutch error messages)
     world.ts        World: terrain, entities, fixed-step tick, orders, fire, victims,
@@ -58,3 +60,27 @@ Because `World` has no rendering dependencies and all mutations are orders + `ti
 
 `src/game/audio.ts` synthesises everything with the Web Audio API (oscillators and filtered noise), so no sound files exist. The `AudioContext` is created on the first pointer/key event (autoplay policy).
 Each frame the scene calls `audio.update(world, cameraCentre, playing, paused)`: it computes the loudest moving emergency vehicle per service (distance attenuation + stereo pan), total fire intensity near the camera and active water spray, and sets the gain of persistent voices (4 sirens with service-specific patterns, fire crackle, spray, traffic hum). Nothing is allocated per frame. One-shot effects are triggered from game events (`incident_*`, `info`, `warn`) and from UI actions (orders, dismount, clicks). Volume and mute live in `Settings` (localStorage) and `audio.debug()` exposes levels for tests.
+
+## Reinforcements, bystanders, highscores
+
+- `World.callReinforcement(defId)` spends budget (`cost` in the vehicle definition) to create a crewed vehicle on a free road tile near the matching station (max 8 per service). The UI shows it under the dispatch tabs.
+- `Bystander` entities are spawned by incidents with a `bystanders` block. A police `disperse` task (3 s on scene) makes them walk away and be removed; the `bystanders_dispersed` objective is only true when none are left.
+- Highscores (`storage.ts`, localStorage) keep the best 8 results and are written when a game ends (game over or "Spel beëindigen").
+
+## Traffic, parking and collisions
+
+- **Parking:** station maps contain `P` tiles with parking bays. Vehicles are created in their bay facing the exit (`angle = -π/2`); `home` is the bay tile. Inside a lot only straight (north-south) moves are allowed, so a lot is a set of single-file columns.
+- **Lanes:** every non-intersection road tile has a lane direction (`World.lane`, derived from the map): the road is two tiles wide, one lane per direction. `laneEdgeOk` is passed to A* as an edge filter, so routes obey the lane direction; entering/leaving lots is allowed perpendicular. Civilians use `isCivDrivable` (no lots).
+- **No overlap:** moving vehicles and cars call `findBlocker` before each step. It uses oriented rectangles (separating-axis test): the vehicle's own footprint may never overlap anything (near box), and a short look-ahead box keeps following distance and makes lower-priority crossing traffic wait (emergency > civilian > lower id). Halted things are obstacles. Persons (crew on foot, victims, suspects, bystanders) are blocking too.
+- **Gate:** at the lot exit a vehicle only pulls out when the merge window on the road is free; vehicles leaving next to each other go in id order, so nobody stops with a nose in the lane.
+- **Deadlocks:** a halted civilian car that blocks an emergency vehicle is moved to a quiet road tile (`respawnCivilian`); a vehicle blocked by a parked vehicle re-routes around it; after 12 s a stuck vehicle stops and warns instead of driving through anything. The `tests/unit/traffic.test.ts` stress test (hard freeplay, 15 vehicles + 26 cars, 150 s) asserts zero overlaps.
+- **People:** `vehicleBlockedTiles` marks tiles under/next to vehicle footprints; walking responders route around them. `exitPositions` places crew beside the vehicle when they dismount.
+- **Hospital / station orders:** `orderToHospital`, `orderReturn` (crew boards first, then the vehicle drives).
+- **Missions:** `MissionDef` scripts incidents at given times; `World.won` / `mission_complete` end the game in success.
+
+## City, incidents and severity
+
+- `tools/genmap.mjs` generates the 102×72 city from 10×7 blocks: downtown, mid ring, outskirts, an industrial east, stations with parking lots, two hospitals, a mall, a school campus and parks with ponds. It refuses to place buildings on roads or lots.
+- Incident definitions are pure data (26 built in). Per-incident flavour (`descriptions`), per-kind treatment/arrest/clear parameters (`treatTime`, `arrestTime`, `mass`, `resistance`) and the shared `sevFactor` make the time needed depend on both kind and severity.
+- With several stations per service, reinforcements go to the first station that still has a free bay; routes and hospital deliveries use the nearest hospital.
+- 3D preparation is described in [3d.md](3d.md).
