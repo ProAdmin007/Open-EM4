@@ -39,6 +39,10 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 - 🧪 **Well tested** – deterministic simulation with 86 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
 - 🧊 **Experimental 3D view** – a procedural three.js city (buildings, vehicles, people, fire/smoke, traffic lights) with an RTS camera, next to the original 2D view; switch in Settings or the main menu. Lazily loaded, so it costs nothing if you never turn it on ([docs/3d.md](docs/3d.md)).
 
+The experimental 3D view (procedural three.js, no external assets):
+
+<p align="center"><img src="docs/screenshot-3d-fire.png" width="49%" alt="3D view: a fire engine at a burning house"> <img src="docs/screenshot-3d-city.png" width="49%" alt="3D view: the city from above"></p>
+
 ## Play it
 
 **Requirements:** [Node.js](https://nodejs.org) 20+ and a modern browser with WebGL (developed and tested with Chrome).

@@ -39,6 +39,10 @@ Het spel is geïnspireerd op de gameplay van *Emergency 4* (2006), maar is een *
 - 🧪 **Goed getest** – een deterministische simulatie met 86 unit-tests en 16 browsertests (Playwright), waaronder het complete scenario "rij naar een brand, stap uit, blus, melding verdwijnt" in zowel de 2D- als de 3D-weergave.
 - 🧊 **Experimentele 3D-weergave** – een procedurele three.js-stad (gebouwen, voertuigen, mensen, vuur/rook, verkeerslichten) met een RTS-camera, naast de originele 2D-weergave; omschakelen via Instellingen of het hoofdmenu. Wordt pas geladen zodra je hem aanzet, dus kost niets als je hem nooit gebruikt ([docs/3d.md](docs/3d.md)).
 
+De experimentele 3D-weergave (procedureel, three.js, geen externe assets):
+
+<p align="center"><img src="docs/screenshot-3d-fire.png" width="49%" alt="3D-weergave: een tankautospuit bij een brandende woning"> <img src="docs/screenshot-3d-city.png" width="49%" alt="3D-weergave: de stad van bovenaf"></p>
+
 ## Spelen
 
 **Vereist:** [Node.js](https://nodejs.org) 20+ en een moderne browser met WebGL (ontwikkeld en getest met Chrome).

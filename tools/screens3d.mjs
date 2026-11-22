@@ -1,0 +1,34 @@
+// Takes the 3D README screenshots. Usage: npm run build && npm run preview, then node tools/screens3d.mjs
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch({ channel: process.env.PW_CHANNEL ?? 'chrome', args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+for (let i = 0; i < 8; i++) { // the first software-GL context after a browser start is sometimes lost
+  await page.goto('http://localhost:4173/?e2e');
+  await page.waitForFunction(() => !!window.__openrescue?.scene, undefined, { timeout: 15000 }).catch(() => {});
+  const a = await page.evaluate(() => window.__openrescue?.game?.loop?.frame ?? -1);
+  await page.waitForTimeout(1200);
+  const b = await page.evaluate(() => window.__openrescue?.game?.loop?.frame ?? -1);
+  if (a >= 0 && b > a + 3) break;
+}
+await page.getByRole('button', { name: /Freeplay/ }).click();
+await page.getByRole('button', { name: /Start Freeplay/ }).click();
+await page.waitForFunction(() => window.__openrescue?.scene?.state === 'playing');
+await page.evaluate(() => window.__openrescue.scene.setViewMode('3d'));
+await page.waitForFunction(() => !!window.__openrescue.scene.renderer3d);
+await page.evaluate(() => { window.__openrescue.scene.zoomBy(0.4); window.__openrescue.scene.centerOn(40, 30); });
+await page.waitForTimeout(5000);
+await page.screenshot({ path: 'docs/screenshot-3d-city.png' });
+await page.evaluate(() => {
+  const or = window.__openrescue; const w = or.world;
+  const inc = w.spawnIncident('house_fire', { severity: 2 });
+  const b = w.buildings.get(inc.buildingId);
+  const v = [...w.vehicles.values()].find(x => x.defId === 'fire_engine');
+  or.scene.select([v.id]);
+  w.contextOrder([v.id], b.x + b.w / 2, b.y + b.h / 2);
+  or.scene.centerOn(b.x + b.w / 2, b.y + b.h / 2 + 2);
+  or.scene.zoomBy(0.6);
+});
+await page.locator('[data-act="speed3"]').click().catch(() => {});
+await page.waitForTimeout(12000);
+await page.screenshot({ path: 'docs/screenshot-3d-fire.png' });
+await browser.close();
