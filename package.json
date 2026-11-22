@@ -49,12 +49,14 @@
     "package:win": "npm run build && electron-packager . OpenRescue --platform=win32 --arch=x64 --out=dist-app --overwrite --ignore=\"^/(tests|tools|docs|legacy|src|test-results|release|dist-app|[.]claude|[.]github|node_modules|package-lock[.]json)\""
   },
   "dependencies": {
-    "phaser": "^4.2.1"
+    "phaser": "^4.2.1",
+    "three": "0.179.0"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
     "@playwright/test": "^1.65.1",
     "@types/node": "^26.6.6",
+    "@types/three": "0.179.0",
     "electron": "^45.4.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
