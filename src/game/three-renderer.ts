@@ -142,7 +142,8 @@ export class Three3DRenderer implements GameRenderer {
   private target = new THREE.Vector3(0, 0, 0);
   private distance = 42;
   private yaw = Math.PI * 0.78;
-  private readonly pitch = 0.95;
+  private pitch = 0.95;
+  private ctrlDown = false;
   private world: World | null = null;
   private commands: Commands;
   private groundMesh: THREE.Group | null = null;
@@ -171,7 +172,7 @@ export class Three3DRenderer implements GameRenderer {
   private trafficBulbs: { pos: THREE.Vector3; ew: boolean; mesh: THREE.Mesh }[] = [];
   private dragBox: THREE.Mesh;
   private keys = new Set<string>();
-  private pointer = { downTile: { x: 0, y: 0 }, downScreen: { x: 0, y: 0 }, dragging: false, shift: false, rotating: false, lastX: 0 };
+  private pointer = { downTile: { x: 0, y: 0 }, downScreen: { x: 0, y: 0 }, dragging: false, shift: false, rotating: false, lastX: 0, lastY: 0 };
   // fire / smoke / water particle pools, burning-building lights, props, hoses
   private flames = new ParticlePool(1100, THREE.AdditiveBlending, 0.8, 0.5, 'flame');
   private halo = new ParticlePool(160, THREE.AdditiveBlending, 0, 0.2);
@@ -387,6 +388,15 @@ export class Three3DRenderer implements GameRenderer {
     if (this.keys.has('s')) { this.target.addScaledVector(fwd, sp); moved = true; }
     if (this.keys.has('a')) { this.target.addScaledVector(right, -sp); moved = true; }
     if (this.keys.has('d')) { this.target.addScaledVector(right, sp); moved = true; }
+    // arrow keys pan the camera; with Ctrl held they turn and tilt it instead
+    const L = this.keys.has('arrowleft'), Rr = this.keys.has('arrowright'), U = this.keys.has('arrowup'), D = this.keys.has('arrowdown');
+    if (this.ctrlDown) {
+      if (L) { this.yaw += 1.6 * dt; moved = true; } if (Rr) { this.yaw -= 1.6 * dt; moved = true; }
+      if (U) { this.pitch = Math.min(1.4, this.pitch + 0.9 * dt); moved = true; } if (D) { this.pitch = Math.max(0.3, this.pitch - 0.9 * dt); moved = true; }
+    } else {
+      if (U) { this.target.addScaledVector(fwd, -sp); moved = true; } if (D) { this.target.addScaledVector(fwd, sp); moved = true; }
+      if (L) { this.target.addScaledVector(right, -sp); moved = true; } if (Rr) { this.target.addScaledVector(right, sp); moved = true; }
+    }
     if (moved || this.pointer.rotating) this.updateCamera();
   }
 
@@ -574,7 +584,10 @@ export class Three3DRenderer implements GameRenderer {
       m.emissiveIntensity = on ? b.on : lights ? 0.15 : b.off * 0.3;
     }
   }
+  private lastVehicles = new Map<number, SnapVehicle>();
   private syncVehicles(list: SnapVehicle[]): void {
+    this.lastVehicles.clear();
+    for (const v of list) this.lastVehicles.set(v.id, v);
     this.track(this.vehicles, list, v => this.makeVehicle(v), (obj, v) => {
       obj.position.set(v.position.x, 0, v.position.z);
       obj.rotation.y = v.yaw;
@@ -598,6 +611,13 @@ export class Three3DRenderer implements GameRenderer {
         door.userData.t = (door.userData.t ?? 0) + (target - (door.userData.t ?? 0)) * Math.min(1, this.lastDt * 4);
         door.rotation.y = (nm === 'rdoorR' ? 1 : -1) * 1.75 * (door.userData.t as number);
       }
+      // a tow truck carries the wreck it lifted on its flatbed
+      const cargo = obj.getObjectByName('cargo');
+      if (v.cargo > 0 && !cargo) {
+        const w2 = buildWreck(v.id);
+        w2.name = 'cargo'; w2.scale.setScalar(0.78); w2.position.set(-v.size.length * 0.2, 1.1, 0); w2.rotation.set(0, 0, 0);
+        obj.add(w2);
+      } else if (v.cargo <= 0 && cargo) { obj.remove(cargo); this.disposeObj(cargo); }
       const robot = obj.getObjectByName('robot');
       if (robot) robot.visible = !this.anyDefusing;
     });
@@ -660,15 +680,27 @@ export class Three3DRenderer implements GameRenderer {
       const lying = p.kind === 'victim' && !sitting;
       obj.visible = true;
       let px = p.position.x, pz = p.position.z, yawY = lying ? 0 : -p.heading;
+      let liftY = 0;
       if (carrier) { // the casualty lies on the trolley the paramedic pushes ahead
         px += Math.cos(carrier.heading) * 1.25; pz += Math.sin(carrier.heading) * 1.25; yawY = -carrier.heading;
+        const ld = info?.loading;
+        const lv = ld ? this.lastVehicles.get(ld.vehicleId) : undefined;
+        if (ld && lv) { // slide the trolley into the rear of the vehicle
+          const t = ld.t * ld.t * (3 - 2 * ld.t);
+          const rx = lv.position.x - Math.cos(lv.heading) * (lv.size.length * 0.5 + 0.3), rz = lv.position.z - Math.sin(lv.heading) * (lv.size.length * 0.5 + 0.3);
+          const ix = lv.position.x - Math.cos(lv.heading) * lv.size.length * 0.15, iz = lv.position.z - Math.sin(lv.heading) * lv.size.length * 0.15;
+          const stage = t < 0.5 ? t * 2 : 1; // first to the doors, then in
+          px = px + (rx - px) * stage; pz = pz + (rz - pz) * stage;
+          if (t >= 0.5) { const u = (t - 0.5) * 2; px = rx + (ix - rx) * u; pz = rz + (iz - rz) * u; }
+          yawY = -lv.heading; liftY = 0.18 * stage + 0.2 * (t >= 0.5 ? 1 : 0);
+        }
       }
       obj.position.set(px, 0, pz);
       obj.rotation.y = yawY;
       obj.rotation.z = lying ? Math.PI / 2 : 0;
       const onBed = !!(info && (carrier || (info.treated && p.state === 'scene')));
       const gy = groundHeight(this.world!, this.groundKinds, p.position.x, p.position.z);
-      obj.position.y = gy + (lying ? (onBed ? 0.78 : 0.2) : 0);
+      obj.position.y = gy + (lying ? (onBed ? 0.78 : 0.2) : 0) + liftY;
       const rig = obj.userData.rig as THREE.Group;
       const parts = obj.userData.parts as { legs: THREE.Mesh[]; torso: THREE.Mesh; head: THREE.Mesh; skin: THREE.Material };
       if (info && parts) parts.head.material = info.health < 45 ? this.paleSkin : parts.skin;
@@ -721,7 +753,7 @@ export class Three3DRenderer implements GameRenderer {
           this.victimProps.set(p.id, vp);
         }
         vp.frame = this.frame;
-        vp.obj.position.set(px, 0, pz);
+        vp.obj.position.set(px, liftY, pz);
         vp.obj.rotation.y = carrier ? yawY : 0;
       }
       if (p.state === 'treat') { // medical bag next to the kneeling paramedic
@@ -830,6 +862,17 @@ export class Three3DRenderer implements GameRenderer {
         fx.pack.visible = !inc.defused;
       }
       if (fx.beacon) (fx.beacon.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(this.time * 10) > 0 ? 2 : 0.1;
+      if (inc.clearing) { // the wreck is hoisted onto the flatbed: an arc from the road to the truck bed
+        const tv = this.lastVehicles.get(inc.clearing.vehicleId);
+        if (tv) {
+          const t = Math.min(1, inc.clearing.t), e = t * t * (3 - 2 * t);
+          const bedX = tv.position.x - Math.cos(tv.heading) * tv.size.length * 0.2, bedZ = tv.position.z - Math.sin(tv.heading) * tv.size.length * 0.2;
+          const x0 = p0.x + 3.2, z0 = p0.z + 1.2;
+          fx.props.position.set(x0 + (bedX - x0) * e, Math.sin(Math.PI * e) * 1.6 + e * 1.1, z0 + (bedZ - z0) * e);
+          fx.props.rotation.y = e * (-tv.heading);
+          fx.props.scale.setScalar(1 - 0.22 * e);
+        }
+      }
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 3 + inc.id);
       (fx.ring.material as THREE.MeshBasicMaterial).opacity = 0.3 + pulse * 0.4;
       fx.ring.scale.setScalar(1 + pulse * 0.08);
@@ -1179,14 +1222,20 @@ export class Three3DRenderer implements GameRenderer {
 
   // ---------- input ----------
   private bindInput(): void {
-    window.addEventListener('keydown', e => { if ('wasd'.includes(e.key.toLowerCase())) this.keys.add(e.key.toLowerCase()); });
-    window.addEventListener('keyup', e => { this.keys.delete(e.key.toLowerCase()); });
+    window.addEventListener('keydown', e => {
+      const k = e.key.toLowerCase();
+      if (k === 'control') this.ctrlDown = true;
+      if ('wasd'.includes(k) && k.length === 1 && !e.ctrlKey) this.keys.add(k);
+      if (k.startsWith('arrow')) { this.keys.add(k); if (e.target === document.body || e.target === this.canvas) e.preventDefault(); }
+    });
+    window.addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (k === 'control') this.ctrlDown = false; this.keys.delete(k); });
+    window.addEventListener('blur', () => { this.ctrlDown = false; this.keys.clear(); });
     this.canvas.addEventListener('contextmenu', e => e.preventDefault());
     this.canvas.addEventListener('wheel', e => { e.preventDefault(); this.zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12); }, { passive: false });
     this.canvas.addEventListener('pointerdown', e => {
       this.canvas.focus();
       if (this.host.state !== 'playing' || !this.world) return;
-      if (e.button === 1) { this.pointer.rotating = true; this.pointer.lastX = e.clientX; this.canvas.setPointerCapture(e.pointerId); return; }
+      if (e.button === 1 || (e.button === 0 && e.ctrlKey)) { this.pointer.rotating = true; this.pointer.lastX = e.clientX; this.pointer.lastY = e.clientY; this.canvas.setPointerCapture(e.pointerId); return; } // middle button, or Ctrl + drag: turn the view
       const t = this.screenToTile(e.offsetX, e.offsetY);
       if (!t) return;
       if (e.button === 2) { this.commands.rightClick(t.x, t.y); return; }
@@ -1199,7 +1248,11 @@ export class Three3DRenderer implements GameRenderer {
       }
     });
     this.canvas.addEventListener('pointermove', e => {
-      if (this.pointer.rotating) { this.yaw -= (e.clientX - this.pointer.lastX) * 0.006; this.pointer.lastX = e.clientX; this.updateCamera(); return; }
+      if (this.pointer.rotating) {
+        this.yaw -= (e.clientX - this.pointer.lastX) * 0.006; this.pointer.lastX = e.clientX;
+        this.pitch = Math.max(0.3, Math.min(1.4, this.pitch + (e.clientY - this.pointer.lastY) * 0.004)); this.pointer.lastY = e.clientY;
+        this.updateCamera(); return;
+      }
       if (!this.world || this.host.state !== 'playing') return;
       if ((e.buttons & 1) === 0) return;
       if (!this.pointer.dragging && Math.hypot(e.offsetX - this.pointer.downScreen.x, e.offsetY - this.pointer.downScreen.y) > 6) this.pointer.dragging = true;

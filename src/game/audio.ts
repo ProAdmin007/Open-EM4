@@ -28,6 +28,13 @@ export class AudioEngine {
   volume = 0.6;
   muted = false;
   private master!: GainNode;
+  /** channel groups (each with its own volume in the settings): sirens, fire and water, traffic ambience, alerts and effects, heartbeat */
+  private g = {} as Record<'sirens' | 'fire' | 'ambient' | 'effects' | 'heart', GainNode>;
+  /** user mix 0..1 per channel; `voice` scales the control-room speech, `voiceRate` its speed */
+  mix: Record<string, number> = { sirens: 1, fire: 1, ambient: 1, effects: 1, voice: 1, heartbeat: 1 };
+  voiceRate = 1.08;
+  voiceName = '';
+  private nextBeat = 0;
   private sirens = {} as Record<Category, Siren>;
   private fire!: Layer;
   private spray!: Layer;
@@ -56,6 +63,8 @@ export class AudioEngine {
     this.master.gain.value = this.muted ? 0 : this.volume;
     const comp = ctx.createDynamicsCompressor();
     this.master.connect(comp).connect(ctx.destination);
+    for (const k of ['sirens', 'fire', 'ambient', 'effects', 'heart'] as const) { this.g[k] = ctx.createGain(); this.g[k].connect(this.master); }
+    this.applyMix();
     // 2 s of white noise, looped by the noise-based layers
     this.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = this.noise.getChannelData(0);
@@ -79,13 +88,13 @@ export class AudioEngine {
       const pan = ctx.createStereoPanner();
       osc.connect(lp);
       osc2.connect(g2).connect(lp);
-      lp.connect(amp).connect(pan).connect(this.master);
+      lp.connect(amp).connect(pan).connect(this.g.sirens);
       osc.frequency.value = osc2.frequency.value = 440;
       osc.start();
       osc2.start();
       this.sirens[c] = { osc, osc2, amp, pan };
     }
-    const loop = (filter: BiquadFilterType, freq: number, q = 0.7): Layer => {
+    const loop = (filter: BiquadFilterType, freq: number, q = 0.7, dest: GainNode = this.g.fire): Layer => {
       const src = ctx.createBufferSource();
       src.buffer = this.noise;
       src.loop = true;
@@ -95,13 +104,50 @@ export class AudioEngine {
       f.Q.value = q;
       const gain = ctx.createGain();
       gain.gain.value = 0;
-      src.connect(f).connect(gain).connect(this.master);
+      src.connect(f).connect(gain).connect(dest);
       src.start();
       return { gain, level: 0 };
     };
     this.fire = loop('highpass', 1400);
     this.spray = loop('bandpass', 3500, 0.5);
-    this.traffic = loop('lowpass', 260);
+    this.traffic = loop('lowpass', 260, 0.7, this.g.ambient);
+  }
+
+  /** Per-channel volumes (0..1) from the settings. */
+  setMix(m: Partial<Record<string, number>>): void {
+    for (const [k, v] of Object.entries(m)) if (typeof v === 'number') this.mix[k] = Math.max(0, Math.min(1.5, v));
+    this.applyMix();
+  }
+  private applyMix(): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    this.g.sirens.gain.setTargetAtTime(this.mix.sirens, now, 0.05);
+    this.g.fire.gain.setTargetAtTime(this.mix.fire, now, 0.05);
+    this.g.ambient.gain.setTargetAtTime(this.mix.ambient, now, 0.05);
+    this.g.effects.gain.setTargetAtTime(this.mix.effects, now, 0.05);
+    this.g.heart.gain.setTargetAtTime(this.mix.heartbeat, now, 0.05);
+  }
+
+  /** The patient monitor while a paramedic is stabilising somebody: a heartbeat thump and a monitor beep at the patient's pulse. */
+  private heartbeat(active: boolean, health: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !active) return;
+    const bpm = health < 15 ? 38 : 58 + (100 - health) * 0.75; // weak and slow when nearly gone, racing when hurt
+    const now = ctx.currentTime;
+    if (now < this.nextBeat) return;
+    this.nextBeat = now + 60 / bpm;
+    const vol = 0.5 + 0.5 * (health / 100);
+    const thump = (delay: number, f: number, v: number) => { // "lub" and "dub"
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(f, now + delay); o.frequency.exponentialRampToValueAtTime(f * 0.55, now + delay + 0.14);
+      g.gain.setValueAtTime(0.0001, now + delay); g.gain.exponentialRampToValueAtTime(v * vol, now + delay + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.16);
+      o.connect(g).connect(this.g.heart); o.start(now + delay); o.stop(now + delay + 0.2);
+    };
+    thump(0, 70, 0.7); thump(0.17, 56, 0.45);
+    const beep = ctx.createOscillator(), bg = ctx.createGain(); // ECG monitor beep
+    beep.type = 'sine'; beep.frequency.value = 1050;
+    bg.gain.setValueAtTime(0.0001, now + 0.02); bg.gain.exponentialRampToValueAtTime(0.09 * vol, now + 0.03); bg.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+    beep.connect(bg).connect(this.g.heart); beep.start(now + 0.02); beep.stop(now + 0.2);
   }
 
   setVolume(v: number): void {
@@ -125,7 +171,7 @@ export class AudioEngine {
     const t = world?.time ?? now;
     const sirenLevel: Record<string, number> = {};
     const sirenPan: Record<string, number> = {};
-    let fireLevel = 0, sprayLevel = 0;
+    let fireLevel = 0, sprayLevel = 0, hb = false, hbHealth = 101;
     if (world && playing && !paused) {
       for (const v of world.vehicles.values()) {
         if (!v.lights) continue;
@@ -139,6 +185,10 @@ export class AudioEngine {
       for (const r of world.responders.values()) {
         const task = r.task;
         if (task?.type === 'extinguish' && task.deploy >= 2.5) sprayLevel = Math.max(sprayLevel, atten(Math.hypot(r.x - listener.x, r.y - listener.y)));
+        if (task?.type === 'treat' && !r.inVehicle) { // the patient monitor of whoever is being stabilised
+          const v = world.victims.get(task.victimId);
+          if (v && v.transport === 'scene' && Math.hypot(r.x - v.x, r.y - v.y) < 2 && Math.hypot(v.x - listener.x, v.y - listener.y) < 30 && v.health < hbHealth) { hbHealth = v.health; hb = true; }
+        }
       }
     }
     for (const c of CATS) {
@@ -162,6 +212,7 @@ export class AudioEngine {
     this.fire.gain.gain.setTargetAtTime(crackle, now, 0.05);
     this.spray.gain.gain.setTargetAtTime(sprayLevel * 0.12, now, 0.1);
     this.traffic.gain.gain.setTargetAtTime(world && !paused ? 0.045 : 0.0, now, 0.4);
+    this.heartbeat(hb, hbHealth);
     this.lastLevels.fire = Math.min(1, fireLevel);
     this.lastLevels.spray = sprayLevel;
   }
@@ -183,7 +234,7 @@ export class AudioEngine {
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(g).connect(this.master);
+    o.connect(g).connect(this.g.effects);
     o.start(t0);
     o.stop(t0 + dur + 0.05);
   }
@@ -199,7 +250,7 @@ export class AudioEngine {
     const g = ctx.createGain();
     g.gain.setValueAtTime(vol, t0);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    s.connect(f).connect(g).connect(this.master);
+    s.connect(f).connect(g).connect(this.g.effects);
     s.start(t0, Math.random());
     s.stop(t0 + dur + 0.05);
   }
@@ -213,14 +264,23 @@ export class AudioEngine {
     try {
       this.burst(0.12, 0.18, 2500, 'bandpass'); this.tone(1900, 0.05, 'square', 0.05, 0.1);
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'nl-NL'; u.rate = 1.08; u.pitch = 0.85; u.volume = Math.min(1, this.volume * 1.4);
-      const nl = speechSynthesis.getVoices().find(v => v.lang.toLowerCase().startsWith('nl'));
+      u.lang = 'nl-NL'; u.rate = this.voiceRate; u.pitch = 0.85; u.volume = Math.min(1, this.volume * 1.4 * (this.mix.voice ?? 1));
+      const voices = speechSynthesis.getVoices();
+      const nl = (this.voiceName ? voices.find(v => v.name === this.voiceName) : null) ?? voices.find(v => v.lang.toLowerCase().startsWith('nl'));
       if (nl) u.voice = nl;
       this.speaking++;
       u.onend = u.onerror = () => { this.speaking = Math.max(0, this.speaking - 1); };
       setTimeout(() => speechSynthesis.speak(u), 350);
     } catch { /* speech not available */ }
   }
+
+  /** For the settings screen: a few beats of the patient monitor. */
+  testHeartbeat(): void {
+    for (let i = 0; i < 5; i++) setTimeout(() => { this.nextBeat = 0; this.heartbeat(true, 55); }, i * 800);
+  }
+
+  /** The monitor goes flat when somebody dies. */
+  private flatline(): void { this.tone(1000, 1.6, 'sine', 0.16); }
 
   play(name: Sfx): void {
     switch (name) {
@@ -245,8 +305,8 @@ export class AudioEngine {
       case 'incident_resolved': case 'mission_complete': this.play('resolved'); break;
       case 'incident_failed': case 'game_over': this.play('failed'); break;
       case 'explosion': this.play('explosion'); break;
-      case 'warn': this.play(/overleden/.test(e.message) ? 'death' : 'warn'); break;
-      case 'info': this.play('pickup'); break;
+      case 'warn': this.play(/overleden/.test(e.message) ? 'death' : 'warn'); if (/overleden/.test(e.message)) this.flatline(); break;
+      case 'info': this.play('pickup'); if (e.speech) this.speak(e.speech); break;
     }
   }
 }

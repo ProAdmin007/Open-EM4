@@ -78,6 +78,11 @@ export class Commands {
     const ids = [...this.host.selected].map(id => (w.vehicles.has(id) ? id : w.responders.get(id)?.vehicleId ?? id));
     if (w.orderPatrol(ids)) this.host.audio?.play('order');
   }
+  cmdBackup(defId: string): void {
+    const w = this.host.world!;
+    const ids = [...this.host.selected].map(id => (w.vehicles.has(id) ? id : w.responders.get(id)?.vehicleId ?? id));
+    for (const id of new Set(ids)) if (w.callBackup(id, defId)) { this.host.audio?.play('order'); break; }
+  }
   cmdHospital(): void {
     if (this.host.world!.orderToHospital([...this.host.selected])) this.host.audio?.play('order');
   }

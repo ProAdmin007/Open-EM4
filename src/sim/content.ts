@@ -1,7 +1,7 @@
 import type { Content, IncidentDef, MapDef, MissionDef, RoleDef, VehicleDef } from './types';
 
 const CATEGORIES = ['fire', 'ambulance', 'police', 'tech'];
-const ABILITIES = ['extinguish', 'rescue', 'treat', 'carry', 'arrest', 'secure', 'clear', 'coordinate', 'disperse', 'defuse', 'cool', 'assist'];
+const ABILITIES = ['extinguish', 'rescue', 'treat', 'carry', 'arrest', 'secure', 'clear', 'coordinate', 'disperse', 'defuse', 'cool', 'assist', 'recon', 'collect'];
 const OBJECTIVES = ['fire_out', 'victims_safe', 'suspects_arrested', 'area_secured', 'obstacle_cleared', 'bystanders_dispersed', 'device_defused'];
 const BUILDING_TYPES = ['residential', 'apartment', 'commercial', 'industrial', 'office', 'warehouse', 'school', 'shopping', 'church', 'station', 'hospital'];
 

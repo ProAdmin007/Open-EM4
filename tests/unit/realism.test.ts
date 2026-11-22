@@ -434,3 +434,113 @@ describe('player-chosen assistants and realistic traffic', () => {
     expect(moving).toBeGreaterThan(500);
   }, 60000);
 });
+
+describe('LA-style gameplay: spreading crews, reconnaissance, boarding, undertaker, salvage', () => {
+  it('pressing treat or arrest sends each colleague to a different person', () => {
+    const w = newWorld(9);
+    const inc = w.spawnIncident('truck_collision', { severity: 2 })!;
+    const victims = inc.victims.map(id => w.victims.get(id)!);
+    expect(victims.length).toBeGreaterThanOrEqual(2);
+    const amb = [...w.vehicles.values()].find(v => v.defId === 'ambulance')!;
+    const medics = w.orderDismount([amb.id]);
+    for (const m of medics) { const r = w.responders.get(m)!; r.x = r.px = victims[0].x; r.y = r.py = victims[0].y + 0.8; r.inVehicle = false; }
+    w.orderAbility(medics, 'treat'); // no explicit target: spread over the casualties
+    const targets = medics.map(m => (w.responders.get(m)!.task as { victimId: number }).victimId);
+    expect(new Set(targets).size).toBe(Math.min(medics.length, victims.length));
+    const inc2 = w.spawnIncident('fight', { severity: 3 }) ?? w.spawnIncident('crime', { severity: 3 })!;
+    const car = [...w.vehicles.values()].find(v => v.defId === 'police_van')!;
+    const cops = w.orderDismount([car.id]);
+    if (inc2.suspects.length >= 2 && cops.length >= 2) {
+      w.orderAbility(cops, 'arrest');
+      const sus = cops.map(c => (w.responders.get(c)!.task as { suspectId?: number } | null)?.suspectId).filter(x => x !== undefined);
+      expect(new Set(sus).size).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('after a reconnaissance the fire crew knows who is still inside; rescue needs it', () => {
+    const w = newWorld(5);
+    const inc = w.spawnIncident('house_fire', { severity: 1 })!;
+    expect(inc.scouted).toBe(false);
+    const eng = [...w.vehicles.values()].find(v => v.defId === 'fire_engine')!;
+    const crew = w.orderDismount([eng.id]);
+    const f = crew[1];
+    // nobody can be rescued before it is known they are inside
+    expect(w.orderAbility([f], 'rescue')).toBe(0);
+    const b = w.buildings.get(inc.buildingId!)!;
+    const r = w.responders.get(f)!; r.x = r.px = b.door.x + 0.5; r.y = r.py = b.door.y + 1.2;
+    expect(w.orderAbility([f], 'recon')).toBe(1);
+    run(w, 20, () => inc.scouted);
+    expect(inc.scouted).toBe(true);
+    const ev = w.drainEvents().find(e => /Verkenning/.test(e.message));
+    expect(ev).toBeTruthy();
+    const trapped = inc.victims.filter(id => w.victims.get(id)?.transport === 'trapped').length;
+    expect(ev!.message).toContain(trapped ? 'binnen!' : 'niemand meer binnen');
+    if (trapped) expect(w.orderAbility([f], 'rescue')).toBe(1);
+  });
+
+  it('a paramedic is never left behind: boarding works even when there is no walking route', () => {
+    const w = newWorld(8);
+    const amb = [...w.vehicles.values()].find(v => v.defId === 'ambulance')!;
+    const ids = w.orderDismount([amb.id]);
+    const r = w.responders.get(ids[0])!;
+    r.x = r.px = amb.x + 6; r.y = r.py = amb.y + 6; r.path = [];
+    w['walkTo'] = () => false; // boxed in: no route
+    w.orderBoard([amb.id]);
+    run(w, 5);
+    expect(ids.every(id => w.responders.get(id)!.inVehicle)).toBe(true);
+    w.orderToHospital([amb.id]); // (no patient: just must not crash)
+  });
+
+  it('loading is a slide-in of a couple of seconds, not instantaneous', () => {
+    const w = newWorld(8);
+    const inc = w.spawnIncident('car_accident', { severity: 1 })!;
+    const victim = [...w.victims.values()].find(x => x.incidentId === inc.id)!;
+    victim.treated = true;
+    const amb = [...w.vehicles.values()].find(v => v.defId === 'ambulance')!;
+    const ids = w.orderDismount([amb.id]);
+    const m = w.responders.get(ids[0])!;
+    m.x = m.px = victim.x + 0.5; m.y = m.py = victim.y; amb.x = amb.px = victim.x + 1.5; amb.y = amb.py = victim.y + 1;
+    w.orderAbility([ids[0]], 'carry', { kind: 'victim', id: victim.id });
+    run(w, 10, () => victim.loadT > 0.1);
+    expect(victim.transport).toBe('carried');
+    expect(victim.loadT).toBeGreaterThan(0);
+    expect(victim.loadT).toBeLessThan(1);
+    run(w, 6, () => victim.transport === 'inAmbulance');
+    expect(victim.transport).toBe('inAmbulance');
+    expect(amb.patients).toContain(victim.id);
+  });
+
+  it('the undertaker collects the dead and the incident only closes afterwards', () => {
+    const w = newWorld(8);
+    const inc = w.spawnIncident('car_accident', { severity: 1 })!;
+    const victim = [...w.victims.values()].find(x => x.incidentId === inc.id)!;
+    for (const id of inc.victims) if (id !== victim.id) w.victims.delete(id);
+    inc.victims = [victim.id];
+    victim.health = 0.01; victim.treated = false;
+    run(w, 5);
+    expect(victim.transport).toBe('dead');
+    run(w, 200, () => victim.transport === 'collected');
+    expect(victim.transport).toBe('collected');
+    const hearse = [...w.vehicles.values()].find(v => v.defId === 'hearse')!;
+    expect(hearse.patients).toContain(victim.id);
+    run(w, 300, () => !w.victims.has(victim.id));
+    expect(w.victims.has(victim.id)).toBe(false); // handed over at the funeral home
+  });
+});
+
+describe('backup calls (LA-mod style)', () => {
+  it('the commander calls the nearest free vehicle of a type; only commanders and officers may', () => {
+    const w = newWorld(5);
+    const cmd = [...w.vehicles.values()].find(v => v.defId === 'command_vehicle')!;
+    const before = w.budget;
+    const amb = w.callBackup(cmd.id, 'ambulance')!;
+    expect(amb).toBeTruthy();
+    expect(w.budget).toBe(before); // a free vehicle: no cost
+    expect(amb.path.length).toBeGreaterThan(0);
+    run(w, 1);
+    expect(amb.lights).toBe(true);
+    const eng = [...w.vehicles.values()].find(v => v.defId === 'fire_engine')!;
+    expect(w.callBackup(eng.id, 'ambulance')).toBeNull(); // an engine crew cannot call backup
+    expect(w.callBackup(cmd.id, 'hearse')).toBeNull(); // not in its list
+  });
+});

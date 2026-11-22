@@ -86,7 +86,15 @@
       }
     ],
     "patientCapacity": 0,
-    "cost": 600
+    "cost": 600,
+    "callable": [
+      "fire_engine",
+      "aerial_ladder",
+      "rescue_vehicle",
+      "ambulance",
+      "patrol_car",
+      "tow_truck"
+    ]
   },
   {
     "id": "ambulance",
@@ -129,7 +137,11 @@
     ],
     "patientCapacity": 0,
     "cost": 500,
-    "canPatrol": true
+    "canPatrol": true,
+    "callable": [
+      "ambulance",
+      "fire_engine"
+    ]
   },
   {
     "id": "mmt_car",
@@ -176,7 +188,12 @@
     ],
     "patientCapacity": 0,
     "cost": 500,
-    "canPatrol": true
+    "canPatrol": true,
+    "callable": [
+      "ambulance",
+      "patrol_car",
+      "tow_truck"
+    ]
   },
   {
     "id": "police_van",
@@ -310,5 +327,25 @@
     ],
     "patientCapacity": 0,
     "cost": 1100
+  },
+  {
+    "id": "hearse",
+    "name": "Lijkwagen",
+    "category": "tech",
+    "maxSpeed": 50,
+    "capacity": 2,
+    "color": "#263238",
+    "length": 1.9,
+    "equipment": [
+      "body_bag"
+    ],
+    "crew": [
+      {
+        "role": "undertaker",
+        "count": 2
+      }
+    ],
+    "patientCapacity": 2,
+    "cost": 600
   }
 ]

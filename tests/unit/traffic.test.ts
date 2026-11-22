@@ -269,3 +269,29 @@ describe('vehicles turn around freely and do not get stuck', () => {
     expect(car.stuck).toBeLessThan(6);
   });
 });
+
+describe('overtaking', () => {
+  it('a vehicle passes a stopped one through the opposite lane and rejoins its own', () => {
+    const w = newWorld(3);
+    const r = straightRoad(w, 'h', 18);
+    const amb = [...w.vehicles.values()].find(v => v.defId === 'ambulance')!;
+    const blocker = [...w.vehicles.values()].find(v => v.defId === 'patrol_car')!;
+    const put = (v: typeof amb, x: number, y: number, ang: number) => { v.x = v.px = x; v.y = v.py = y; v.angle = ang; v.path = []; v.dest = null; };
+    // the south row is eastbound; the north row (y) westbound
+    put(blocker, r.x + 8.5, r.y + 1.5, 0);
+    put(amb, r.x + 2.5, r.y + 1.5, 0);
+    w.orderMove([amb.id], r.x + 15.5, r.y + 1.5);
+    let usedOpposite = false;
+    const boxes = (a: typeof amb, b: typeof amb) => Math.hypot(a.x - b.x, a.y - b.y);
+    let minGap = 99;
+    for (let i = 0; i < 30 * 40 && amb.path.length; i++) {
+      w.tick();
+      if (Math.floor(amb.y) === r.y && amb.x > r.x + 6) usedOpposite = true;
+      if (Math.abs(amb.x - blocker.x) < 2) minGap = Math.min(minGap, boxes(amb, blocker));
+    }
+    expect(usedOpposite).toBe(true);
+    expect(amb.x).toBeGreaterThan(r.x + 12);
+    expect(Math.floor(amb.y)).toBe(r.y + 1); // back in its own lane
+    expect(minGap).toBeGreaterThan(0.9); // never through the other vehicle
+  });
+});

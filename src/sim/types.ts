@@ -1,7 +1,7 @@
 import type { Vec } from './pathfinding';
 
 export type Category = 'fire' | 'ambulance' | 'police' | 'tech';
-export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate' | 'disperse' | 'defuse' | 'cool' | 'assist';
+export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate' | 'disperse' | 'defuse' | 'cool' | 'assist' | 'recon' | 'collect';
 export type Objective = 'fire_out' | 'victims_safe' | 'suspects_arrested' | 'area_secured' | 'obstacle_cleared' | 'bystanders_dispersed' | 'device_defused';
 export type BuildingType = 'residential' | 'apartment' | 'commercial' | 'industrial' | 'office' | 'warehouse' | 'school' | 'shopping' | 'church' | 'station' | 'hospital';
 
@@ -32,6 +32,8 @@ export interface VehicleDef {
   /** Price (in budget) to call this vehicle as reinforcement. Default 500. */
   cost?: number;
   firePowerBonus?: number;
+  /** Vehicle types this vehicle's crew can call as backup (Los Angeles mod style): the nearest free one drives to the caller. */
+  callable?: string[];
   /** May drive patrol routes on its own (patrol cars, motorcycles, ambulances). */
   canPatrol?: boolean;
   /** Water tank in litres (fire vehicles); refilled at hydrants. */
@@ -131,6 +133,10 @@ export interface Vehicle extends Entity {
   returning: boolean;
   /** Driving back to the station without sirens (set once the return route is planned). */
   silent: boolean;
+  /** wrecks loaded on the flatbed (tow trucks), unloaded at the depot */
+  cargo: number;
+  /** until this time the vehicle is overtaking through the opposite lane */
+  passUntil: number;
   /** Patrolling the city along a route (sirens off) until given another order or called to an incident. */
   patrol: boolean;
   patrolRoute: Vec[];
@@ -158,7 +164,7 @@ export interface Vehicle extends Entity {
 }
 export type Task =
   | { type: 'move' }
-  | { type: 'board'; vehicleId: number }
+  | { type: 'board'; vehicleId: number; wait?: number }
   | { type: 'extinguish'; buildingId: string; deploy: number }
   | { type: 'rescue'; victimId: number; progress: number }
   | { type: 'treat'; victimId: number; progress: number }
@@ -169,7 +175,9 @@ export type Task =
   | { type: 'disperse'; incidentId: number; progress: number }
   | { type: 'defuse'; incidentId: number; progress: number }
   | { type: 'cool'; buildingId: string; deploy: number }
-  | { type: 'assist'; victimId: number; idle: number };
+  | { type: 'assist'; victimId: number; idle: number }
+  | { type: 'recon'; incidentId: number; progress: number }
+  | { type: 'collect'; victimId: number; progress: number };
 export interface Responder extends Entity {
   kind: 'responder';
   role: string;
@@ -182,7 +190,7 @@ export interface Responder extends Entity {
   name: string;
   carrying: number | null;
 }
-export type Transport = 'trapped' | 'scene' | 'carried' | 'inAmbulance' | 'atHospital' | 'dead';
+export type Transport = 'trapped' | 'scene' | 'carried' | 'inAmbulance' | 'atHospital' | 'dead' | 'collected';
 export interface Victim extends Entity {
   kind: 'victim';
   incidentId: number;
@@ -196,6 +204,10 @@ export interface Victim extends Entity {
   /** Seconds of treatment needed; depends on the condition and the incident severity. */
   treatTime: number;
   condition: string;
+  /** 0..1 while the casualty is slid into the ambulance (the stretcher goes in over a couple of seconds) */
+  loadT: number;
+  /** the hearse that was sent for this body (when dead) */
+  hearse: number | null;
 }
 export interface Suspect extends Entity {
   kind: 'suspect';
@@ -249,6 +261,8 @@ export interface Incident {
   defused: boolean;
   /** Street address (or street + 'ter hoogte van') for the dispatch message. */
   address: string;
+  /** The scene has been checked by a reconnaissance: only then it is known whether people are still inside. */
+  scouted: boolean;
 }
 export interface Civilian extends Entity {
   kind: 'civilian';
@@ -271,6 +285,7 @@ export interface Civilian extends Entity {
   /** a tile to avoid when planning (what blocked this car) until this time */
   avoidTile: number;
   avoidUntil: number;
+  passUntil: number;
 }
 export interface Pedestrian extends Entity {
   kind: 'pedestrian';
@@ -282,6 +297,6 @@ export interface Pedestrian extends Entity {
 
 export type GameEvent =
   | { type: 'incident_started' | 'incident_escalated' | 'incident_resolved' | 'incident_failed'; incidentId: number; message: string; /** what the control room says over the radio */ speech?: string }
-  | { type: 'info' | 'warn'; message: string }
+  | { type: 'info' | 'warn'; message: string; speech?: string }
   | { type: 'explosion'; x: number; y: number; message: string }
   | { type: 'game_over' | 'mission_complete'; message: string };

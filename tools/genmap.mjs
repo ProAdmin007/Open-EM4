@@ -120,6 +120,7 @@ const stationDefs = [
   ['Ambulancepost Zuid', 'ambulance_post_2', 'ambulance', 5, 3, ['ambulance', 'rapid_responder'], null],
   ['Politiepost Noord', 'police_station_2', 'police', 5, 3, ['patrol_car', 'police_motorcycle'], null],
   ['Technische dienst', 'tech_depot', 'tech', 5, 4, ['tow_truck', 'service_van', 'crane_truck'], null],
+  ['Uitvaartcentrum', 'funeral_home', 'tech', 5, 3, ['hearse'], null],
 ];
 for (const [name, id, cat, w, h, fleet, prefer] of stationDefs) { const s = take(prefer); station(s.x, s.y, name, id, cat, w, h, fleet); }
 

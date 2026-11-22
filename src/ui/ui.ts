@@ -8,9 +8,9 @@ import { mergeContent, type ModPack } from '../sim/content';
 
 const CAT_LABEL: Record<Category, string> = { fire: '🚒 Brandweer', ambulance: '🚑 Ambulance', police: '🚓 Politie', tech: '🔧 Techniek' };
 const ABILITY_LABEL: Partial<Record<Ability, string>> = {
-  extinguish: '💧 Blussen', rescue: '🆘 Redden', treat: '🩺 Behandelen', carry: '🛏 Inladen', arrest: '🔗 Arresteren', secure: '🚧 Afzetten', clear: '🏗 Bergen', disperse: '📣 Wegsturen', defuse: '🤖 Ontmijnen', cool: '❄️ Koelen', assist: '🤝 Helpen',
+  extinguish: '💧 Blussen', rescue: '🆘 Redden', treat: '🩺 Behandelen', carry: '🛏 Inladen', arrest: '🔗 Arresteren', secure: '🚧 Afzetten', clear: '🏗 Bergen', disperse: '📣 Wegsturen', defuse: '🤖 Ontmijnen', cool: '❄️ Koelen', assist: '🤝 Helpen', recon: '🔦 Verkennen', collect: '⚰️ Ophalen',
 };
-const ABILITY_ORDER: Ability[] = ['extinguish', 'cool', 'rescue', 'treat', 'assist', 'carry', 'arrest', 'secure', 'disperse', 'defuse', 'clear'];
+const ABILITY_ORDER: Ability[] = ['recon', 'extinguish', 'cool', 'rescue', 'treat', 'assist', 'carry', 'collect', 'arrest', 'secure', 'disperse', 'defuse', 'clear'];
 const TASK_LABEL = (t: Task | null): string => {
   if (!t) return 'Wacht op opdracht';
   switch (t.type) {
@@ -27,9 +27,11 @@ const TASK_LABEL = (t: Task | null): string => {
     case 'clear': return 'Ruimt obstakel';
     case 'disperse': return 'Stuurt omstanders weg';
     case 'defuse': return 'Ontmijnt verdacht object';
+    case 'recon': return 'Verkent het pand (zijn er nog mensen binnen?)';
+    case 'collect': return 'Neemt een overledene mee';
   }
 };
-const TRANSPORT_LABEL: Record<string, string> = { trapped: 'Opgesloten in pand', scene: 'Ter plaatse', carried: 'Wordt gedragen', inAmbulance: 'In ambulance', atHospital: 'In ziekenhuis', dead: 'Overleden' };
+const TRANSPORT_LABEL: Record<string, string> = { trapped: 'Opgesloten in pand', scene: 'Ter plaatse', carried: 'Wordt gedragen', inAmbulance: 'In ambulance', atHospital: 'In ziekenhuis', dead: 'Overleden', collected: 'Opgehaald door de uitvaartdienst' };
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -67,6 +69,9 @@ export class UI {
     a.setVolume(this.settings.volume);
     a.setMuted(this.settings.muted);
     a.voiceOn = this.settings.voice !== false;
+    a.setMix(this.settings.mix);
+    a.voiceRate = this.settings.voiceRate;
+    a.voiceName = this.settings.voiceName;
     this.el('btn-mute').textContent = this.settings.muted ? '🔇' : '🔊';
   }
 
@@ -84,7 +89,7 @@ export class UI {
   private bind(): void {
     // pointerdown is used instead of click so periodic re-rendering cannot swallow a click
     document.addEventListener('pointerdown', ev => {
-      const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-act],[data-vid],[data-iid],[data-tab],[data-ability],[data-reinf]');
+      const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-act],[data-vid],[data-iid],[data-tab],[data-ability],[data-reinf],[data-backup]');
       if (!target || ev.button !== 0) return;
       this.scene.audio?.play('click');
       const s = this.scene, w = s.world;
@@ -104,6 +109,7 @@ export class UI {
         if (i) s.centerOn(i.x, i.y);
       } else if (d.tab) this.tab = d.tab as Category;
       else if (d.ability) s.cmdAbility(d.ability as Ability);
+      else if (d.backup) s.cmdBackup(d.backup);
       else if (d.act) this.act(d.act);
       this.refresh();
     });
@@ -187,7 +193,12 @@ export class UI {
       const bits: string[] = [];
       const b = i.buildingId ? w.buildings.get(i.buildingId) : null;
       if (b && def.fire) bits.push(`🔥 ${Math.round(b.fire)}%`);
-      if (i.victims.length) bits.push(`🩹 ${i.victims.filter(id => { const v = w.victims.get(id); return v && v.transport !== 'atHospital' && v.transport !== 'dead'; }).length}/${i.victims.length}`);
+      const trappedKind = def.victims?.location === 'trapped';
+      if (trappedKind && !i.scouted) bits.push('❓ mensen binnen onbekend – verkennen!');
+      else if (trappedKind && !i.victims.some(id => w.victims.get(id)?.transport === 'trapped')) bits.push('✔ niemand binnen');
+      else if (i.victims.length) bits.push(`🩹 ${i.victims.filter(id => { const v = w.victims.get(id); return v && v.transport !== 'atHospital' && v.transport !== 'dead' && v.transport !== 'collected'; }).length}/${i.victims.length}`);
+      const bodies = i.victims.filter(id => w.victims.get(id)?.transport === 'dead').length;
+      if (bodies) bits.push(`⚰ ${bodies} op te halen`);
       if (i.suspects.length) bits.push(`🕵 ${i.suspects.filter(id => !w.suspects.get(id)?.arrested).length} verdacht`);
       const crowd = i.bystanders.filter(id => w.bystanders.get(id)?.leaving === false).length;
       if (crowd) bits.push(`👥 ${crowd} omstanders`);
@@ -251,7 +262,8 @@ export class UI {
           (def.tank ? `<div class="row">💧 Water: ${Math.round(v.water)} / ${def.tank} L${v.hydrant ? ' · aangesloten op brandkraan' : ''}</div><div class="meter"><i class="${v.water / def.tank < 0.25 && !v.hydrant ? 'low' : ''}" style="width:${Math.round((v.water / def.tank) * 100)}%"></i></div>` : '') +
           `<div class="actions"><button data-act="dismount">⬇ Uitstappen (E)</button><button data-act="board">⬆ Instappen (R)</button><button data-act="crew" ${out ? '' : 'disabled'}>👥 Bemanning</button><button data-act="stop">⏹ Stop (X)</button></div>` +
           `<div class="actions">${def.equipment.includes('fire_hose') ? '<button data-act="deploy" class="primary" title="Bemanning stapt uit, rolt slangen uit en begint direct te blussen">🧯 Slangen aansluiten & blussen (B)</button><button data-act="cool" title="Bemanning koelt de panden naast de brand, zodat het vuur niet overslaat">❄️ Koelen (K)</button>' : ''}${def.canPatrol ? `<button data-act="patrol" class="${v.patrol ? 'primary' : ''}" title="Rijdt zonder sirene een ronde door de stad en rukt automatisch uit bij een melding">🚓 Patrouilleren (P)</button>` : ''}${def.patientCapacity > 0 ? `<button data-act="hospital" class="${v.patients.length ? 'primary' : ''}" ${v.patients.length ? '' : 'disabled'} title="Rijdt met de patiënt naar het dichtstbijzijnde ziekenhuis">🏥 Naar ziekenhuis (Z)</button>` : ''}<button data-act="return">🏠 Terug naar kazerne (H)</button></div>` +
-          `<div class="row">Rechtermuisknop op de kaart = rijden, dubbel rechtsklikken op het voertuig = iedereen uitstappen. Op een ziekenhuis = patiënt afleveren.</div>`;
+          (def.callable?.length ? `<div class="actions"><span class="help">📞 Versterking inroepen:</span>${def.callable.map(c => `<button data-backup="${esc(c)}" title="Het dichtstbijzijnde vrije voertuig rijdt naar jou toe">${esc(w.content.vehicles[c]?.name ?? c)}</button>`).join('')}</div>` : '') +
+          `<div class="row">Rechtermuisknop op de kaart = rijden, dubbel rechtsklikken op het voertuig = iedereen uitstappen. Op een ziekenhuis = patiënt afleveren. <b>Ctrl + slepen</b> draait de camera.</div>`;
       } else if (rs.length && !vs.length) {
         const first = rs[0];
         const hasPatient = rs.some(r => (w.vehicles.get(r.vehicleId)?.patients.length ?? 0) > 0);
@@ -359,7 +371,13 @@ export class UI {
           <label>Randscrollen met de muis<input id="s-edge" type="checkbox" ${this.settings.edgeScroll ? 'checked' : ''}></label>
           <label>Hints tonen<input id="s-hints" type="checkbox" ${this.settings.hints ? 'checked' : ''}></label>
           <label>Geluid uit<input id="s-muted" type="checkbox" ${this.settings.muted ? 'checked' : ''}></label>
-          <label>Volume<input id="s-vol" type="range" min="0" max="100" value="${Math.round(this.settings.volume * 100)}"></label>
+          <label>Volume (alles)<input id="s-vol" type="range" min="0" max="100" value="${Math.round(this.settings.volume * 100)}"></label>
+          <details class="snd" open><summary><b>Geluidsopties</b></summary>
+            ${([['sirens', '🚨 Sirenes'], ['fire', '🔥 Brand en water'], ['ambient', '🚗 Verkeer / omgeving'], ['effects', '🔔 Meldingen en effecten'], ['voice', '📻 Meldkamer-stem'], ['heartbeat', '💓 Hartslag bij stabiliseren']] as [string, string][]).map(([k, label]) => `<label>${label}<input class="s-mix" data-mix="${k}" type="range" min="0" max="150" value="${Math.round((this.settings.mix[k] ?? 1) * 100)}"></label>`).join('')}
+            <label>Stem van de meldkamer<select id="s-voicename"><option value="">Automatisch (Nederlands)</option>${(typeof speechSynthesis !== 'undefined' ? speechSynthesis.getVoices() : []).map(v => `<option value="${esc(v.name)}" ${v.name === this.settings.voiceName ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select></label>
+            <label>Spreeksnelheid<input id="s-voicerate" type="range" min="70" max="150" value="${Math.round(this.settings.voiceRate * 100)}"></label>
+            <div class="row"><button id="s-test-siren">▶ Test sirene</button><button id="s-test-voice">▶ Test meldkamer</button><button id="s-test-beat">▶ Test hartslag</button></div>
+          </details>
           <label>Standaard spelsnelheid<select id="s-speed">${[1, 2, 4].map(n => `<option value="${n}" ${this.settings.defaultSpeed === n ? 'selected' : ''}>${n}×</option>`).join('')}</select></label>
           <label>Weergave<select id="s-view"><option value="2d" ${this.settings.viewMode === '2d' ? 'selected' : ''}>2D</option><option value="3d" ${this.settings.viewMode === '3d' ? 'selected' : ''}>3D</option></select></label>
           <label>Meldkamer spreekt meldingen in<input id="s-voice" type="checkbox" ${this.settings.voice !== false ? 'checked' : ''}></label>
@@ -378,6 +396,9 @@ export class UI {
           this.settings.defaultSpeed = Number((sc.querySelector('#s-speed') as HTMLSelectElement).value) as 1 | 2 | 4;
           this.settings.muted = (sc.querySelector('#s-muted') as HTMLInputElement).checked;
           this.settings.voice = (sc.querySelector('#s-voice') as HTMLInputElement).checked;
+          sc.querySelectorAll<HTMLInputElement>('.s-mix').forEach(el => { this.settings.mix[el.dataset.mix!] = Number(el.value) / 100; });
+          this.settings.voiceName = (sc.querySelector('#s-voicename') as HTMLSelectElement).value;
+          this.settings.voiceRate = Number((sc.querySelector('#s-voicerate') as HTMLInputElement).value) / 100;
           this.settings.volume = Number((sc.querySelector('#s-vol') as HTMLInputElement).value) / 100;
           const view = (sc.querySelector('#s-view') as HTMLSelectElement).value as '2d' | '3d';
           if (view !== this.settings.viewMode) { this.settings.viewMode = view; void this.scene.setViewMode(this.settings.viewMode); }
@@ -390,6 +411,10 @@ export class UI {
           saveSettings(this.settings);
         };
         sc.querySelector('#s-vol')?.addEventListener('input', () => { apply(); this.scene.audio?.play('click'); });
+        sc.querySelectorAll('.s-mix,#s-voicename,#s-voicerate').forEach(el => el.addEventListener('input', apply));
+        on('s-test-siren', () => { apply(); this.scene.audio?.unlock(); this.scene.audio?.play('alert'); });
+        on('s-test-voice', () => { apply(); this.scene.audio?.unlock(); this.scene.audio?.speak('Meldkamer. Woningbrand. Buren melden veel rook uit een huis. Adres: Dorpsstraat 12. Prioriteit 1, spoed.'); });
+        on('s-test-beat', () => { apply(); this.scene.audio?.unlock(); this.scene.audio?.testHeartbeat(); });
         sc.querySelector('#s-muted')?.addEventListener('change', apply);
         on('s-back', () => { apply(); this.showScreen(extra === 'pause' ? 'pause' : 'main'); });
         on('s-clear', () => { saveMods([]); this.showScreen('settings', { msg: 'Mods verwijderd. Herlaad de pagina om de standaardcontent terug te krijgen.' }); });

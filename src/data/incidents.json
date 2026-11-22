@@ -138,12 +138,12 @@
     "id": "car_accident", "name": "Auto-ongeluk met slachtoffer", "category": "ambulance", "weight": 3, "icon": "💥",
     "descriptions": ["Frontale aanrijding op een kruising.", "Auto geslipt en tegen een lantaarnpaal gereden.", "Kop-staartbotsing, bestuurder bekneld geraakt."],
     "spawn": { "on": "road" },
-    "severity": { "min": 1, "max": 3 }, "requires": ["ambulance", "police"],
+    "severity": { "min": 1, "max": 3 }, "requires": ["ambulance", "police", "tech"],
     "victims": { "min": 1, "max": 2, "location": "scene", "health": [35, 75], "decay": 0.3, "treatTime": 7, "condition": "Letsel na aanrijding" },
     "obstacle": { "tiles": 1, "mass": 1 },
     "bystanders": { "min": 2, "max": 4 },
-    "objectives": ["victims_safe", "area_secured", "bystanders_dispersed"],
-    "escalation": { "everySec": 80 }, "failAfterSec": 280,
+    "objectives": ["victims_safe", "area_secured", "bystanders_dispersed", "obstacle_cleared"],
+    "escalation": { "everySec": 80 }, "failAfterSec": 330,
     "reward": { "score": 220, "budget": 500 }
   },
   {

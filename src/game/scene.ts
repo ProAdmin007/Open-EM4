@@ -203,6 +203,7 @@ export class GameScene extends Phaser.Scene {
     this.commands.cmdReturn();
   }
   cmdCool(): void { this.commands.cmdCool(); }
+  cmdBackup(defId: string): void { this.commands.cmdBackup(defId); }
   cmdPatrol(): void { this.commands.cmdPatrol(); }
   cmdDeploy(): void {
     this.commands.cmdDeploy();

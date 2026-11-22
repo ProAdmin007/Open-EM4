@@ -111,6 +111,7 @@ const SPECS: Record<string, Spec> = {
   'vehicle/police_van': { shape: 'van', body: 0x233f7a, stripe: 0xf3f4f6, stripe2: 0xff8c1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
   'vehicle/police_motorcycle': { shape: 'bike', body: 0xf3f4f6, stripe: 0x1f4fb3, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
   'vehicle/bomb_squad': { shape: 'truck', body: 0x37474f, cab: 0x37474f, stripe: 0xff7a1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 3, extras: bombSquadExtras },
+  'vehicle/hearse': { shape: 'van', body: 0x20262b, stripe: 0xb8bcc4, accent: 0x20262b, accent2: 0x20262b, wheels: 2, extras: hearseExtras },
   'vehicle/tow_truck': { shape: 'truck', body: 0xf0b41a, cab: 0xf0b41a, stripe: 0x222222, accent: 0xffa000, accent2: 0xffa000, wheels: 3, extras: towExtras },
   'vehicle/service_van': { shape: 'van', body: 0x4d7a2a, stripe: 0xf0d02a, accent: 0xffa000, accent2: 0xffa000, wheels: 2, extras: rackExtras },
   'vehicle/crane_truck': { shape: 'truck', body: 0xe5a91a, cab: 0xe5a91a, stripe: 0x222222, accent: 0xffa000, accent2: 0xffa000, wheels: 3, extras: craneExtras },
@@ -274,6 +275,13 @@ function ambulanceExtras(g: THREE.Group, L: number, W: number, H: number): void 
     g.add(pivot);
   }
   box(g, 0.1, 0.5, W * 0.6, lambert(0x2c3138), -L / 2 - 0.02, 0.5, 0); // rear step
+}
+function hearseExtras(g: THREE.Group, L: number, W: number, H: number): void {
+  const chrome = lambert(0xcfd3d8);
+  box(g, L * 0.42, H * 0.34, W + 0.03, glassMat(), -L * 0.22, H * 0.55, 0); // long rear windows
+  for (const s of [-1, 1]) for (let i = 0; i < 3; i++) box(g, 0.05, 0.05, 0.05, chrome, -L * 0.1 - i * 0.7, H * 0.78, s * (W / 2 + 0.03));
+  box(g, 0.08, 0.5, W * 0.7, chrome, -L / 2 - 0.02, H * 0.45, 0); // rear trim
+  box(g, 0.9, 0.06, 0.5, lambert(0xe8e0d0), -L * 0.25, H * 0.35, 0); // a wreath-coloured sill
 }
 function towExtras(g: THREE.Group, L: number, W: number, H: number): void {
   const dark = lambert(0x2b2b2b);

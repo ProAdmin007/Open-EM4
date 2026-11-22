@@ -26,6 +26,8 @@ export interface SnapVehicle {
   tank: number;
   hydrant: boolean;
   aerial: { x: number; y: number } | null;
+  /** wrecks on the flatbed */
+  cargo: number;
   /** rear doors open (crew is loading a patient) */
   open: boolean;
 }
@@ -40,7 +42,7 @@ export interface SnapPerson {
   /** only for people that are visible in the world (not inside a vehicle, building or hospital) */
   state: string;
   /** victims: condition for the renderer (pale skin, blood, blanket, stretcher) */
-  info?: { health: number; treated: boolean; incidentKind: string; /** the paramedic carrying this casualty (tile position and heading) */ carrier?: { x: number; y: number; heading: number } };
+  info?: { health: number; treated: boolean; incidentKind: string; /** the paramedic carrying this casualty (tile position and heading) */ carrier?: { x: number; y: number; heading: number }; /** being slid into a vehicle: progress 0..1 and the vehicle */ loading?: { t: number; vehicleId: number } };
   /** a firefighter whose hose is connected: the vehicle the hose comes from, and (once deployed) the point being sprayed */
   hose?: { fromX: number; fromY: number; spray?: { x: number; y: number; buildingId: string } };
 }
@@ -81,6 +83,8 @@ export interface SnapIncident {
   secured: boolean;
   defusing: boolean;
   defused: boolean;
+  /** a wreck is being lifted onto this tow truck: progress 0..1 */
+  clearing?: { t: number; vehicleId: number };
 }
 export interface RenderSnapshot {
   time: number;
@@ -124,7 +128,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
     snap.vehicles.push({
       id: v.id, model: modelId('vehicle', v.defId, def.model), category: v.category, x, y, position: tileToWorld3D(x, y), heading: v.angle, yaw: headingToYaw(v.angle),
       size: vehicleDimensions(def), lights: v.lights, moving: v.path.length > 0,
-      water: v.water, tank: def.tank ?? 0, hydrant: v.hydrant, aerial: aerial.get(v.id) ?? null, open: loading.has(v.id),
+      water: v.water, tank: def.tank ?? 0, hydrant: v.hydrant, aerial: aerial.get(v.id) ?? null, cargo: v.cargo, open: loading.has(v.id),
     });
   }
   for (const r of world.responders.values()) {
@@ -144,7 +148,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
   for (const v of world.victims.values()) {
     if (v.transport !== 'scene' && v.transport !== 'carried' && v.transport !== 'dead') continue;
     const x = ix(v), y = iy(v);
-    snap.people.push({ id: v.id, kind: 'victim', model: modelId('person', v.transport === 'dead' ? 'victim_dead' : 'victim'), x, y, position: tileToWorld3D(x, y), heading: 0, state: v.transport, info: { health: v.health, treated: v.treated, incidentKind: world.incidents.get(v.incidentId)?.defId ?? '', carrier: v.transport === 'carried' && v.carriedBy !== null && world.responders.get(v.carriedBy) ? { x: ix(world.responders.get(v.carriedBy)!), y: iy(world.responders.get(v.carriedBy)!), heading: world.responders.get(v.carriedBy)!.angle } : undefined } });
+    snap.people.push({ id: v.id, kind: 'victim', model: modelId('person', v.transport === 'dead' ? 'victim_dead' : 'victim'), x, y, position: tileToWorld3D(x, y), heading: 0, state: v.transport, info: { health: v.health, treated: v.treated, incidentKind: world.incidents.get(v.incidentId)?.defId ?? '', carrier: v.transport === 'carried' && v.carriedBy !== null && world.responders.get(v.carriedBy) ? { x: ix(world.responders.get(v.carriedBy)!), y: iy(world.responders.get(v.carriedBy)!), heading: world.responders.get(v.carriedBy)!.angle } : undefined, loading: v.loadT > 0 && v.carriedBy !== null && world.responders.get(v.carriedBy) ? { t: v.loadT, vehicleId: world.responders.get(v.carriedBy)!.vehicleId } : undefined } });
   }
   for (const s of world.suspects.values()) snap.people.push({ id: s.id, kind: 'suspect', model: modelId('person', 'suspect'), x: s.x, y: s.y, position: tileToWorld3D(s.x, s.y), heading: 0, state: s.arrested ? 'arrested' : 'free' });
   for (const b of world.bystanders.values()) {
@@ -166,7 +170,12 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
       roof: b.roof ?? 'flat', fire: b.fire, wet: b.wet, damage: b.damage, destroyed: b.destroyed,
     });
   }
-  for (const i of world.incidents.values()) snap.incidents.push({ id: i.id, kind: i.defId, severity: i.severity, x: i.x, y: i.y, secured: i.secured, defusing: defusing.has(i.id), defused: i.defused });
+  const clearing = new Map<number, { t: number; vehicleId: number }>();
+  for (const r of world.responders.values()) if (r.task?.type === 'clear' && !r.inVehicle) {
+    const veh = world.vehicles.get(r.vehicleId);
+    if (veh && world.vehicleDef(veh).id === 'tow_truck') clearing.set(r.task.incidentId, { t: Math.min(1, r.task.progress), vehicleId: veh.id });
+  }
+  for (const i of world.incidents.values()) snap.incidents.push({ id: i.id, kind: i.defId, severity: i.severity, x: i.x, y: i.y, secured: i.secured, defusing: defusing.has(i.id), defused: i.defused, clearing: clearing.get(i.id) });
   for (const i of world.incidents.values()) for (const o of i.obstacle) snap.obstacles.push({ x: o.x, y: o.y, kind: i.defId });
   return snap;
 }

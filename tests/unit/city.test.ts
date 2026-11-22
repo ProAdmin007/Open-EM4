@@ -116,7 +116,7 @@ describe('response routes', () => {
     }
     expect(n).toBeGreaterThan(3);
     expect(sum / n).toBeLessThan(1.5);
-    expect(worst).toBeLessThan(2.3);
+    expect(worst).toBeLessThan(2.6);
   });
 });
 

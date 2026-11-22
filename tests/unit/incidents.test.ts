@@ -95,8 +95,15 @@ describe('incident resolution', () => {
     expect(w.incidents.has(inc.id)).toBe(true); // bystanders are still in the way
     expect(inc.bystanders.length).toBeGreaterThan(0);
     w.orderAbility(cops, 'disperse', { kind: 'incident', id: inc.id });
-    run(w, 20, () => !w.incidents.has(inc.id));
+    run(w, 20, () => inc.bystanders.every(id => w.bystanders.get(id)?.leaving !== false));
+    expect(w.incidents.has(inc.id)).toBe(true); // the wreck still has to be towed away
+    const { v: tow, crew: berging } = crewOf(w, 'tow_truck');
+    driveTo(w, tow.id, inc.x, inc.y);
+    w.orderDismount([tow.id]);
+    w.orderAbility(berging, 'clear', { kind: 'incident', id: inc.id });
+    run(w, 120, () => !w.incidents.has(inc.id));
     expect(w.incidents.has(inc.id)).toBe(false);
+    expect(tow.cargo).toBe(1); // the wreck went on the flatbed
     expect(w.solved).toBe(1);
     expect(w.bystanders.size).toBe(0);
   });
