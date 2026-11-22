@@ -9,7 +9,7 @@ Command fire engines, ambulances, police cars and tow trucks in a living city �
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-136%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-142%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 **English** · [Nederlands](README.nl.md)
@@ -50,6 +50,7 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 - 🎥 **Camera** – hold **Ctrl** and drag (or Ctrl + arrow keys) to turn and tilt the view.
 - 📟 **P2000 calls** – 50+ call types written after the Dutch P2000 pager messages (*A1/A2* for ambulance, *Prio 1/2* for fire and police): automatic fire alarms, gas leaks, lift rescues, chimney and container fires, breathing problems, seizures, overdoses, domestic violence, knife threats, floods, animals on the road, oil spills… and big ones: high-rise fires, explosions, collapses, chemical leaks, bus crashes and riots.
 - 🏛 **GRIP escalation** – scale up to GRIP 1–4 (CoPI, ROT, municipal and regional policy teams): each level sends the associated units — Officer of the Day, CoPI command post, LGH, hazmat unit, water tanker, riot van, extra engines and ambulances — and extends the command range; the structure dissolves when the incidents are handled. Five new scenario missions: high-rise fire, storm night, chemical incident, city riot, collapse.
+- 🚦 **Prio 1 / prio 2, recommended units, realistic driving** – send vehicles with lights and sirens (prio 1) or as normal traffic that stops for red lights (prio 2); every call lists the units the control room recommends (shown on the P2000 line, one button sends them); vehicles and people accelerate from a standstill, siren vehicles pull out around slow cars instead of trailing them, and a vehicle that cannot get closer stops nearby and is available. Accidents have named casualties (age, condition), some trapped in the wreck and needing the rescue vehicle's hydraulic tools; the ambulance panel shows who is on board; responders wear fluorescent vests; new demonstration call.
 - ⏱️ **Severity matters** – treatment, arrest, securing, clearing and fire-fighting times grow with the severity, differ per incident type, and unattended incidents escalate and eventually fail.
 - 🚦 **Believable traffic** – right-hand lanes, U-turns, emergency vehicles that never overlap other vehicles or people, parking bays at every station, and crews that step out *beside* the vehicle.
 - 🔊 **Fully procedural audio** – Dutch-style two-tone sirens, crackling fire, water spray, traffic hum and UI effects, all synthesised with the Web Audio API (no sound files).

@@ -139,7 +139,7 @@
     "descriptions": ["Frontale aanrijding op een kruising.", "Auto geslipt en tegen een lantaarnpaal gereden.", "Kop-staartbotsing, bestuurder bekneld geraakt."],
     "spawn": { "on": "road" },
     "severity": { "min": 1, "max": 3 }, "requires": ["ambulance", "police", "tech"],
-    "victims": { "min": 1, "max": 2, "location": "scene", "health": [35, 75], "decay": 0.3, "treatTime": 7, "condition": "Letsel na aanrijding" },
+    "victims": { "min": 1, "max": 2, "pinnedChance": 0.6, "location": "scene", "health": [35, 75], "decay": 0.3, "treatTime": 7, "condition": "Letsel na aanrijding" },
     "obstacle": { "tiles": 1, "mass": 1 },
     "bystanders": { "min": 2, "max": 4 },
     "objectives": ["victims_safe", "area_secured", "bystanders_dispersed", "obstacle_cleared"],
@@ -174,7 +174,7 @@
     "descriptions": ["Vrachtwagen en personenauto botsen, de weg is afgesloten.", "Vrachtwagen over de kop geslagen, gewonden in de auto."],
     "spawn": { "on": "road" },
     "severity": { "min": 2, "max": 3 }, "requires": ["ambulance", "police", "tech"],
-    "victims": { "min": 2, "max": 3, "location": "scene", "health": [30, 70], "decay": 0.33, "treatTime": 8, "condition": "Zwaar letsel" },
+    "victims": { "min": 2, "max": 3, "pinnedChance": 0.8, "location": "scene", "health": [30, 70], "decay": 0.33, "treatTime": 8, "condition": "Zwaar letsel" },
     "obstacle": { "tiles": 2, "mass": 1.8 },
     "bystanders": { "min": 2, "max": 5 },
     "objectives": ["victims_safe", "area_secured", "bystanders_dispersed", "obstacle_cleared"],
@@ -335,5 +335,6 @@
   {"id": "riot", "name": "Ordeverstoring", "category": "police", "weight": 0.6, "icon": "🚨", "descriptions": ["Een groep van tientallen jongeren gooit met stenen na een voetbalwedstrijd.", "Rellen in de binnenstad, vuurwerk en vernielingen."], "spawn": {"on": "road"}, "severity": {"min": 2, "max": 3}, "requires": ["police", "ambulance"], "suspects": {"min": 3, "max": 5, "arrestTime": 3}, "victims": {"min": 1, "max": 3, "location": "scene", "health": [50, 85], "decay": 0.15, "treatTime": 5, "condition": "Gewond bij rellen"}, "bystanders": {"min": 10, "max": 16}, "objectives": ["suspects_arrested", "bystanders_dispersed", "area_secured", "victims_safe"], "escalation": {"everySec": 50}, "failAfterSec": 380, "reward": {"score": 800, "budget": 1600}},
   {"id": "flooding", "name": "Wateroverlast", "category": "tech", "weight": 1.5, "icon": "🌧️", "descriptions": ["Na een wolkbreuk staat de weg blank, een rioolput is verstopt.", "Hoge waterstand: de onderdoorgang is onbegaanbaar."], "spawn": {"on": "road"}, "severity": {"min": 1, "max": 2}, "requires": ["tech"], "obstacle": {"tiles": 2, "mass": 1.2}, "objectives": ["obstacle_cleared"], "escalation": {"everySec": 110}, "failAfterSec": 260, "reward": {"score": 150, "budget": 320}},
   {"id": "animal_on_road", "name": "Dier op de weg", "category": "tech", "weight": 1.5, "icon": "🐄", "descriptions": ["Een los gelopen koe staat midden op de weg.", "Paard ontsnapt uit een weiland en loopt over de rijbaan."], "spawn": {"on": "road"}, "severity": {"min": 1, "max": 1}, "requires": ["tech", "police"], "obstacle": {"tiles": 1, "mass": 0.9}, "objectives": ["obstacle_cleared", "area_secured"], "escalation": {"everySec": 120}, "failAfterSec": 240, "reward": {"score": 120, "budget": 260}},
-  {"id": "oil_spill", "name": "Olie op de weg", "category": "tech", "weight": 1.3, "icon": "🛢️", "descriptions": ["Vrachtwagen lekt dieselolie, de weg is spiegelglad.", "Hydrauliekolie over de rijbaan na een defecte hoogwerker."], "spawn": {"on": "road"}, "severity": {"min": 1, "max": 2}, "requires": ["tech", "fire"], "obstacle": {"tiles": 2, "mass": 1.1}, "objectives": ["obstacle_cleared"], "escalation": {"everySec": 110}, "failAfterSec": 260, "reward": {"score": 150, "budget": 330}}
+  {"id": "oil_spill", "name": "Olie op de weg", "category": "tech", "weight": 1.3, "icon": "🛢️", "descriptions": ["Vrachtwagen lekt dieselolie, de weg is spiegelglad.", "Hydrauliekolie over de rijbaan na een defecte hoogwerker."], "spawn": {"on": "road"}, "severity": {"min": 1, "max": 2}, "requires": ["tech", "fire"], "obstacle": {"tiles": 2, "mass": 1.1}, "objectives": ["obstacle_cleared"], "escalation": {"everySec": 110}, "failAfterSec": 260, "reward": {"score": 150, "budget": 330}},
+  {"id": "demonstration", "name": "Demonstratie", "category": "police", "weight": 1, "icon": "📣", "descriptions": ["Een groep demonstranten bezet het plein voor het gemeentehuis met spandoeken.", "Betoging tegen een bouwplan loopt uit de hand, de stemming wordt grimmig.", "Demonstratie van tientallen mensen blokkeert de ingang; er zijn spandoeken en trommels."], "spawn": {"on": "building", "buildingTypes": ["shopping", "commercial", "church", "office", "school"]}, "severity": {"min": 1, "max": 2}, "requires": ["police"], "suspects": {"min": 0, "max": 3, "arrestTime": 3}, "bystanders": {"min": 12, "max": 20}, "objectives": ["area_secured", "bystanders_dispersed"], "escalation": {"everySec": 55}, "failAfterSec": 320, "reward": {"score": 520, "budget": 1000}}
 ]

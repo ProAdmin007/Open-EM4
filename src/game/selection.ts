@@ -35,6 +35,8 @@ export function pickUnit(w: World, x: number, y: number): number | null {
 
 export class Commands {
   private lastRight = { id: -1, t: 0 };
+  /** dispatch priority for new orders: 1 = lights and sirens, 2 = normal driving */
+  prio: 1 | 2 = 1;
 
   constructor(private host: SelectionHost) {}
 
@@ -123,7 +125,13 @@ export class Commands {
       if (this.host.selected.size === 1 && this.host.selected.has(veh)) return;
     } else this.lastRight = { id: -1, t: 0 };
     if (this.host.selected.size) this.host.audio?.play('order');
-    w.contextOrder([...this.host.selected], tx, ty);
+    w.contextOrder([...this.host.selected], tx, ty, this.prio);
+  }
+
+  /** Send the recommended units of a call. */
+  cmdDispatch(incidentId: number): void {
+    const w = this.host.world;
+    if (w && w.dispatchRecommended(incidentId)) this.host.audio?.play('order');
   }
 
   /** Left-click on empty ground / an inspectable entity (victim, suspect, building, incident). */

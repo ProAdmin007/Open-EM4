@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { RenderSnapshot, SnapCar, SnapPerson, SnapVehicle } from '../sim/snapshot';
-import type { Category } from '../sim/types';
 import type { GameRenderer } from './renderer';
 import { TILE_METERS, tileToWorld3D, world3DToTile } from '../sim/space';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
@@ -20,7 +19,6 @@ import { Environment, buildStreetFurniture, buildVegetation, decorateBuilding, w
  * (selection.ts) so orders behave exactly like the 2D view; only the RTS camera and ray-picking are new.
  */
 
-const CAT_COLOR: Record<Category, number> = { fire: 0xb23b2e, ambulance: 0xf1efe6, police: 0x1f3d7a, tech: 0x5a7a30 };
 const BUILDING_COLORS: Record<string, { wall: number; roof: number }> = {
   station: { wall: 0x8e2b2b, roof: 0xc0392b },
   residential: { wall: 0xb08968, roof: 0x9c4a3a },
@@ -76,10 +74,10 @@ export function projectTileToNDC(camera: THREE.Camera, tx: number, ty: number): 
 }
 
 function roleColor(model: string): number {
-  if (/fire|rescue/.test(model)) return CAT_COLOR.fire;
-  if (/paramedic|doctor/.test(model)) return CAT_COLOR.ambulance;
-  if (/officer/.test(model)) return CAT_COLOR.police;
-  if (/tech/.test(model)) return CAT_COLOR.tech;
+  if (/fire|rescue/.test(model)) return 0xd8a020; // bunker gear
+  if (/paramedic|doctor/.test(model)) return 0x1f6fd0;
+  if (/officer/.test(model)) return 0x1a2f6a;
+  if (/tech/.test(model)) return 0x2a2a2a;
   return 0x9aa0a6;
 }
 function pedColor(model: string): number {
@@ -674,8 +672,14 @@ export class Three3DRenderer implements GameRenderer {
       mk(sharedHelmet(), hm, 0, 1.25, 0);
       if (isFire) { mk(sharedRounded(0.12, 0.03, 0.36, 0.01), hm, -0.12, 1.2, 0); mk(sharedRounded(0.05, 0.12, 0.2, 0.02), lambert(0x15151a), 0.15, 1.2, 0); } // neck guard + visor
       if (isPolice) { mk(sharedRounded(0.16, 0.025, 0.3, 0.01), lambert(0x111522), 0.14, 1.26, 0); } // cap peak
-      mk(sharedRounded(0.32, 0.07, 0.48, 0.02), lambert(0xe8e04a), 0, 0.64, 0); // reflective band
-      mk(sharedRounded(0.32, 0.05, 0.48, 0.02), lambert(0xe8e04a), 0, 0.92, 0);
+      // conspicuous clothing: a fluorescent vest over the uniform (police, paramedics, technical service), glowing retroreflective bands on everybody
+      const hiVis = new THREE.MeshLambertMaterial({ color: isMed ? 0xd4f000 : isPolice ? 0xd8e600 : 0xff6a00, emissive: isMed ? 0x5a6400 : isPolice ? 0x505800 : 0x6a2200 });
+      if (!isFire) mk(sharedRounded(0.335, 0.5, 0.49, 0.09), hiVis, 0, 0.78, 0);
+      const refl = new THREE.MeshLambertMaterial({ color: 0xf4f6f8, emissive: 0x8a9096 });
+      mk(sharedRounded(0.345, 0.06, 0.5, 0.02), refl, 0, 0.64, 0); // reflective band
+      mk(sharedRounded(0.345, 0.05, 0.5, 0.02), refl, 0, 0.92, 0);
+      if (isFire) mk(sharedRounded(0.345, 0.045, 0.5, 0.02), new THREE.MeshLambertMaterial({ color: 0xffe14a, emissive: 0x6a5600 }), 0, 0.72, 0);
+      mk(sharedRounded(0.07, 0.07, 0.07, 0.02), refl, -0.01, 0.78, 0.26); mk(sharedRounded(0.07, 0.07, 0.07, 0.02), refl, -0.01, 0.78, -0.26);
       if (isFire) { mk(sharedCapsule(0.09, 0.3), lambert(0xc9ced4), -0.26, 0.82, 0); } // air cylinder
       if (isMed) mk(sharedRounded(0.32, 0.08, 0.48, 0.02), lambert(0xff7a1a), 0, 0.8, 0);
     } else {

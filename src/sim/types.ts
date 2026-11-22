@@ -52,7 +52,7 @@ export interface IncidentDef {
   severity: { min: number; max: number };
   requires: Category[];
   fire?: { start: number; growth: number; spread: number; resistance?: number };
-  victims?: { min: number; max: number; location: 'trapped' | 'scene'; health: [number, number]; decay: number; treatTime?: number; condition?: string };
+  victims?: { min: number; max: number; pinnedChance?: number; location: 'trapped' | 'scene'; health: [number, number]; decay: number; treatTime?: number; condition?: string };
   suspects?: { min: number; max: number; arrestTime?: number };
   bystanders?: { min: number; max: number };
   obstacle?: { tiles: number; mass?: number };
@@ -137,6 +137,10 @@ export interface Vehicle extends Entity {
   cargo: number;
   /** until this time the vehicle is overtaking through the opposite lane */
   passUntil: number;
+  /** dispatch priority: 1 = lights and sirens, 2 = normal traffic (obeys red lights, no lights) */
+  prio: 1 | 2;
+  /** current speed in tiles/s: vehicles accelerate from a standstill */
+  speedNow: number;
   /** Patrolling the city along a route (sirens off) until given another order or called to an incident. */
   patrol: boolean;
   patrolRoute: Vec[];
@@ -208,6 +212,10 @@ export interface Victim extends Entity {
   loadT: number;
   /** the hearse that was sent for this body (when dead) */
   hearse: number | null;
+  /** trapped in the wreck: has to be cut free with rescue tools before the stretcher can take them */
+  pinned: boolean;
+  name: string;
+  age: number;
 }
 export interface Suspect extends Entity {
   kind: 'suspect';
@@ -265,6 +273,10 @@ export interface Incident {
   scouted: boolean;
   /** P2000-style pager line, e.g. 'A1 Rendam Eikenlaan 56 Hartstilstand' */
   pager: string;
+  /** vehicle types the control room recommends for this call */
+  units: string[];
+  /** the vehicle types already sent (by the dispatch button or GRIP) */
+  dispatched: boolean;
 }
 export interface Civilian extends Entity {
   kind: 'civilian';

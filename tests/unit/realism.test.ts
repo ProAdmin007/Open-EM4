@@ -404,6 +404,7 @@ describe('player-chosen assistants and realistic traffic', () => {
     const w = newWorld(9);
     const inc = w.spawnIncident('car_accident', { severity: 1 })!;
     const victim = [...w.victims.values()].find(x => x.incidentId === inc.id)!;
+    victim.pinned = false;
     const eng = [...w.vehicles.values()].find(v => v.defId === 'fire_engine')!;
     const amb = [...w.vehicles.values()].find(v => v.defId === 'ambulance')!;
     const f = w.orderDismount([eng.id])[1], m = w.orderDismount([amb.id])[0];
@@ -562,7 +563,7 @@ describe('P2000-style calls, GRIP and the associated vehicles', () => {
   it('every call has a P2000 pager line with the right priority code', () => {
     const w = newWorld(5);
     const cardiac = w.spawnIncident('cardiac_arrest', { severity: 3 })!;
-    expect(cardiac.pager).toMatch(/^A1 Rendam .+ \d+ Hartstilstand$/);
+    expect(cardiac.pager).toMatch(/^A1 Rendam .+ \d+ Hartstilstand( [A-Za-z]+)*$/);
     const smoke = w.spawnIncident('chimney_fire', { severity: 1 })!;
     expect(smoke.pager).toMatch(/^Prio 2 BRW Rendam /);
     const fire = w.spawnIncident('house_fire', { severity: 3 })!;

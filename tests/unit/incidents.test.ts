@@ -72,6 +72,7 @@ describe('incident resolution', () => {
     for (const id of inc.victims.slice(1)) w.victims.delete(id);
     inc.victims = inc.victims.slice(0, 1);
     const victim = w.victims.get(inc.victims[0])!;
+    victim.pinned = false; // (trapped victims are covered by their own test)
     const { v: amb, crew: medics } = crewOf(w, 'ambulance');
     const { v: car, crew: cops } = crewOf(w, 'patrol_car');
     driveTo(w, amb.id, victim.x, victim.y);

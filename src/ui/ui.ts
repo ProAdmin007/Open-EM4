@@ -89,7 +89,7 @@ export class UI {
   private bind(): void {
     // pointerdown is used instead of click so periodic re-rendering cannot swallow a click
     document.addEventListener('pointerdown', ev => {
-      const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-act],[data-vid],[data-iid],[data-tab],[data-ability],[data-reinf],[data-backup],[data-grip]');
+      const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-act],[data-vid],[data-iid],[data-tab],[data-ability],[data-reinf],[data-backup],[data-grip],[data-dispatch]');
       if (!target || ev.button !== 0) return;
       this.scene.audio?.play('click');
       const s = this.scene, w = s.world;
@@ -110,6 +110,7 @@ export class UI {
       } else if (d.tab) this.tab = d.tab as Category;
       else if (d.ability) s.cmdAbility(d.ability as Ability);
       else if (d.backup) s.cmdBackup(d.backup);
+      else if (d.dispatch) s.cmdDispatch(Number(d.dispatch));
       else if (d.grip) { w.setGrip(Number(d.grip)); s.audio?.play('order'); }
       else if (d.act) this.act(d.act);
       this.refresh();
@@ -146,6 +147,7 @@ export class UI {
       case 'cool': s.cmdCool(); break;
       case 'patrol': s.cmdPatrol(); break;
       case 'crew': s.selectCrew(); break;
+      case 'prio': s.prio = s.prio === 1 ? 2 : 1; break;
     }
   }
 
@@ -208,7 +210,7 @@ export class UI {
       if (def.objectives.includes('obstacle_cleared')) bits.push(i.cleared ? '✔ geruimd' : '○ ruimen');
       if (i.address) bits.unshift(`📍 ${esc(i.address)}`);
       return `<div class="inc s${i.severity}" data-iid="${i.id}"><div class="t"><span>${esc(def.icon ?? '')} ${esc(i.name)}</span><span>ernst ${i.severity}</span></div>` +
-        `${i.description ? `<div class="d">${esc(i.description)}</div>` : ''}<div class="d">${bits.join(' · ')} · nog ${Math.ceil(left)}s</div><div class="meter"><i class="${frac < 0.3 ? 'low' : ''}" style="width:${(frac * 100).toFixed(0)}%"></i></div></div>`;
+        `${i.description ? `<div class="d">${esc(i.description)}</div>` : ''}<div class="d">${bits.join(' · ')} · nog ${Math.ceil(left)}s</div><div class="meter"><i class="${frac < 0.3 ? 'low' : ''}" style="width:${(frac * 100).toFixed(0)}%"></i></div>${i.units?.length ? `<div class="d"><button data-dispatch="${i.id}" class="${i.dispatched ? '' : 'primary'}" title="Stuurt de dichtstbijzijnde vrije voertuigen: ${esc(i.units.map(u => w.content.vehicles[u]?.name ?? u).join(', '))}">🚨 Uitrukken: ${esc(i.units.map(u => w.content.vehicles[u]?.name ?? u).join(', '))}</button></div>` : ''}</div>`;
     }).join('');
     this.setHtml('incident-list', html || '<div class="empty">Geen actieve meldingen. Even rust…</div>');
   }
@@ -240,7 +242,7 @@ export class UI {
       const t = s.inspect;
       if (t.kind === 'victim') {
         const v = w.victims.get(t.id);
-        if (v) html = `<div class="name">🩹 ${esc(v.condition)}</div><div class="row">Gezondheid: <span class="hp"><i class="${v.health < 35 ? 'low' : ''}" style="width:${v.health}%"></i></span> ${Math.round(v.health)}%</div><div class="row">Bewustzijn: ${v.conscious ? 'bij kennis' : 'bewusteloos'} · Behandeling: ${v.treated ? 'gestabiliseerd' : 'onbehandeld'}</div><div class="row">Status: ${TRANSPORT_LABEL[v.transport]}</div><div class="row">Rechtermuisknop met ambulancepersoneel = behandelen, daarna nogmaals = inladen.</div>`;
+        if (v) html = `<div class="name">🩹 ${esc(v.name)} (${v.age} jr) – ${esc(v.condition)}</div>${v.pinned ? '<div class="row">⚠ <b>Bekneld in het voertuig</b> – bevrijden met de hulpverleningswagen (hydraulisch gereedschap) voordat de brancard erbij kan.</div>' : ''}<div class="row">Gezondheid: <span class="hp"><i class="${v.health < 35 ? 'low' : ''}" style="width:${v.health}%"></i></span> ${Math.round(v.health)}%</div><div class="row">Bewustzijn: ${v.conscious ? 'bij kennis' : 'bewusteloos'} · Behandeling: ${v.treated ? 'gestabiliseerd' : 'onbehandeld'}</div><div class="row">Status: ${TRANSPORT_LABEL[v.transport]}</div><div class="row">Rechtermuisknop met ambulancepersoneel = behandelen, daarna nogmaals = inladen.</div>`;
       } else if (t.kind === 'suspect') {
         const x = w.suspects.get(t.id);
         if (x) html = `<div class="name">🕵 Verdachte</div><div class="row">${x.arrested ? 'Gearresteerd' : 'Op vrije voeten — stuur een agent met rechtermuisknop'}</div>`;
@@ -263,7 +265,8 @@ export class UI {
         html = `<div class="name">${esc(v.name)}</div><div class="row">${esc(w.vehicleStatus(v))}${v.state === 'moving' ? ' (max ' + Math.round(def.maxSpeed) + ' km/h)' : ''}${v.lights ? ' · 🚨 sirene aan' : ''} · Bemanning: ${v.crew.length - out}/${v.crew.length} aan boord${v.patients.length ? ' · patiënt aan boord' : ''}</div>` +
           `<div class="row">Uitrusting: ${def.equipment.map(e => esc(e.replace(/_/g, ' '))).join(', ') || '—'}</div>` +
           (def.tank ? `<div class="row">💧 Water: ${Math.round(v.water)} / ${def.tank} L${v.hydrant ? ' · aangesloten op brandkraan' : ''}</div><div class="meter"><i class="${v.water / def.tank < 0.25 && !v.hydrant ? 'low' : ''}" style="width:${Math.round((v.water / def.tank) * 100)}%"></i></div>` : '') +
-          `<div class="actions"><button data-act="dismount">⬇ Uitstappen (E)</button><button data-act="board">⬆ Instappen (R)</button><button data-act="crew" ${out ? '' : 'disabled'}>👥 Bemanning</button><button data-act="stop">⏹ Stop (X)</button></div>` +
+          `<div class="actions"><button data-act="dismount">⬇ Uitstappen (E)</button><button data-act="board">⬆ Instappen (R)</button><button data-act="crew" ${out ? '' : 'disabled'}>👥 Bemanning</button><button data-act="stop">⏹ Stop (X)</button><button data-act="prio" class="${this.scene.prio === 1 ? 'primary' : ''}" title="Prio 1: met sirene en voorrang. Prio 2: gewoon verkeer, geen sirene, stopt voor rood">${this.scene.prio === 1 ? '🚨 Prio 1' : '🚗 Prio 2'}</button></div>` +
+          (v.patients.length ? `<div class="row">🛏 Aan boord: ${v.patients.map(pid => { const pv = w.victims.get(pid); return pv ? esc(pv.name) + ' (' + pv.age + ' jr, ' + Math.round(pv.health) + '% · ' + esc(pv.condition) + ')' : ''; }).join('; ')}</div>` : '') +
           `<div class="actions">${def.equipment.includes('fire_hose') ? '<button data-act="deploy" class="primary" title="Bemanning stapt uit, rolt slangen uit en begint direct te blussen">🧯 Slangen aansluiten & blussen (B)</button><button data-act="cool" title="Bemanning koelt de panden naast de brand, zodat het vuur niet overslaat">❄️ Koelen (K)</button>' : ''}${def.canPatrol ? `<button data-act="patrol" class="${v.patrol ? 'primary' : ''}" title="Rijdt zonder sirene een ronde door de stad en rukt automatisch uit bij een melding">🚓 Patrouilleren (P)</button>` : ''}${def.patientCapacity > 0 ? `<button data-act="hospital" class="${v.patients.length ? 'primary' : ''}" ${v.patients.length ? '' : 'disabled'} title="Rijdt met de patiënt naar het dichtstbijzijnde ziekenhuis">🏥 Naar ziekenhuis (Z)</button>` : ''}<button data-act="return">🏠 Terug naar kazerne (H)</button></div>` +
           (def.callable?.length ? `<div class="actions"><span class="help">📞 Versterking inroepen:</span>${def.callable.map(c => `<button data-backup="${esc(c)}" title="Het dichtstbijzijnde vrije voertuig rijdt naar jou toe">${esc(w.content.vehicles[c]?.name ?? c)}</button>`).join('')}</div>` : '') +
           `<div class="row">Rechtermuisknop op de kaart = rijden, dubbel rechtsklikken op het voertuig = iedereen uitstappen. Op een ziekenhuis = patiënt afleveren. <b>Ctrl + slepen</b> draait de camera.</div>`;

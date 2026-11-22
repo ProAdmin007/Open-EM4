@@ -146,8 +146,14 @@ describe('people never overlap vehicles', () => {
     const p = w.responders.get(ids[0])!;
     p.x = amb.x; p.y = amb.y - 1.6; p.px = p.x; p.py = p.y; // person directly in the exit lane
     w.orderMove([amb.id], 45, 30);
-    run(w, 4);
-    expect(amb.y).toBeGreaterThan(p.y + 0.4); // still south of the person, never on or past them
+    let minDist = 99, startedMoving = false;
+    for (let i = 0; i < 30 * 6; i++) {
+      w.tick();
+      minDist = Math.min(minDist, Math.hypot(amb.x - p.x, amb.y - p.y));
+      if (i < 30 && amb.y < p.y + 0.4) startedMoving = true;
+    }
+    expect(startedMoving).toBe(false); // it waited for the person in its lane
+    expect(minDist).toBeGreaterThan(0.7); // never on top of the person
   });
 });
 
