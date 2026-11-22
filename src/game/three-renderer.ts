@@ -7,7 +7,9 @@ import { TILE_METERS, tileToWorld3D, world3DToTile } from '../sim/space';
 import { Commands, type SelectionHost } from './selection';
 import { buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
 import { ParticlePool, setSegment } from './three-fx';
-import { Environment, bakeGround, buildStreetFurniture, buildVegetation, decorateBuilding, windowSlots } from './three-world';
+import { bakeGroundChunks, buildGroundMeshes, groundHeight } from './three-ground';
+import { planarRoofUVs, roofTexture, scaleBoxUVs, wallTexture } from './three-textures';
+import { Environment, buildStreetFurniture, buildVegetation, decorateBuilding, windowSlots } from './three-world';
 
 /**
  * First 3D view for OpenRescue (docs/3d.md). Everything is procedural (no external assets, MIT three.js): a baked
@@ -133,7 +135,8 @@ export class Three3DRenderer implements GameRenderer {
   private readonly pitch = 0.95;
   private world: World | null = null;
   private commands: Commands;
-  private groundMesh: THREE.Mesh | null = null;
+  private groundMesh: THREE.Group | null = null;
+  private groundKinds: Uint8Array | null = null;
   private outerGround: THREE.Mesh | null = null;
   private buildingsGroup = new THREE.Group();
   private furnitureGroup = new THREE.Group();
@@ -373,28 +376,17 @@ export class Three3DRenderer implements GameRenderer {
   // ---------- static scenery ----------
   private buildGround(world: World): void {
     if (this.groundMesh) { this.scene.remove(this.groundMesh); this.disposeObj(this.groundMesh); this.groundMesh = null; }
-    const w = world.w, h = world.h;
-    const canvas = bakeGround(world);
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 8;
-    tex.generateMipmaps = true;
-    const W = w * TILE_METERS, H = h * TILE_METERS;
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, W, 0, 0, W, 0, H, 0, 0, H], 3));
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
-    geo.setIndex([0, 2, 1, 0, 3, 2]); // counter-clockwise seen from above, otherwise the ground is back-face culled
-    const mat = new THREE.MeshLambertMaterial({ map: tex });
-    this.groundMesh = new THREE.Mesh(geo, mat);
-    this.groundMesh.receiveShadow = true;
+    const baked = bakeGroundChunks(world);
+    this.groundKinds = baked.kinds;
+    this.groundMesh = buildGroundMeshes(world, baked, this.renderer.capabilities.getMaxAnisotropy());
+    this.scene.add(this.groundMesh);
+    const W = world.w * TILE_METERS, H = world.h * TILE_METERS;
     if (!this.outerGround) {
       this.outerGround = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshLambertMaterial({ color: 0x3a5f36 }));
       this.outerGround.rotation.x = -Math.PI / 2;
       this.outerGround.position.set(W / 2, -0.08, H / 2);
       this.scene.add(this.outerGround);
     }
-    this.scene.add(this.groundMesh);
   }
 
   private buildBuildings(world: World): void {
@@ -409,14 +401,20 @@ export class Three3DRenderer implements GameRenderer {
       const heightMeters = (b.floors ?? Math.max(1, Math.round(b.height / 10))) * 3.2;
       const colors = BUILDING_COLORS[b.type] ?? { wall: 0x888888, roof: 0xaaaaaa };
       const group = new THREE.Group();
-      const bodyMat = new THREE.MeshLambertMaterial({ color: colors.wall });
-      const roofMat = new THREE.MeshLambertMaterial({ color: colors.roof });
-      const body = new THREE.Mesh(new THREE.BoxGeometry(w, heightMeters, d), bodyMat);
+      const bodyMat = new THREE.MeshLambertMaterial({ color: colors.wall, map: wallTexture(b.type) });
+      const pitchedRoof = (b.roof ?? 'flat') !== 'flat';
+      const roofMat = new THREE.MeshLambertMaterial({ color: colors.roof, map: roofTexture(pitchedRoof ? 'pitched' : 'flat') });
+      const bodyGeo = new THREE.BoxGeometry(w, heightMeters, d);
+      scaleBoxUVs(bodyGeo, w, heightMeters, d);
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
       body.position.y = heightMeters / 2;
       body.castShadow = true; body.receiveShadow = true;
       group.add(body);
       const roof = buildRoof(b.roof ?? 'flat', w, d);
       (roof as THREE.Mesh).material = roofMat;
+      const rg = (roof as THREE.Mesh).geometry;
+      if (rg instanceof THREE.BoxGeometry) scaleBoxUVs(rg, rg.parameters.width, rg.parameters.height, rg.parameters.depth);
+      else if (b.roof === 'gable') planarRoofUVs(rg, 1.6);
       roof.position.y = heightMeters;
       (roof as THREE.Mesh).castShadow = true;
       group.add(roof);
@@ -596,7 +594,8 @@ export class Three3DRenderer implements GameRenderer {
       obj.rotation.y = lying ? 0 : -p.heading;
       obj.rotation.z = lying ? Math.PI / 2 : 0;
       const onBed = !!(info && info.treated && p.state === 'scene');
-      obj.position.y = lying ? (onBed ? 0.78 : 0.2) : 0;
+      const gy = groundHeight(this.world!, this.groundKinds, p.position.x, p.position.z);
+      obj.position.y = gy + (lying ? (onBed ? 0.78 : 0.2) : 0);
       const rig = obj.userData.rig as THREE.Group;
       const parts = obj.userData.parts as { legs: THREE.Mesh[]; torso: THREE.Mesh; head: THREE.Mesh; skin: THREE.Material };
       if (info && parts) parts.head.material = info.health < 45 ? this.paleSkin : parts.skin;
@@ -1051,6 +1050,8 @@ export class Three3DRenderer implements GameRenderer {
     obj.traverse((o: THREE.Object3D) => {
       const mesh = o as THREE.Mesh;
       if (mesh.geometry && !mesh.geometry.userData.shared) mesh.geometry.dispose();
+      const mp = (mesh.material as THREE.MeshLambertMaterial | undefined)?.map;
+      if (mp && !mp.userData.shared) mp.dispose();
       const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
       if (Array.isArray(mat)) mat.forEach(m => { if (!m.userData.shared) m.dispose(); }); else if (mat && !mat.userData.shared) mat.dispose();
     });

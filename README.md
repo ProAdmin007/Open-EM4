@@ -44,7 +44,7 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 
 The experimental 3D view (procedural three.js, no external assets):
 
-<p align="center"><img src="docs/screenshot-3d-city.png" width="32%" alt="3D view: the city from above, by day"> <img src="docs/screenshot-3d-fire.png" width="32%" alt="3D view: a fire crew at a burning house"> <img src="docs/screenshot-3d-night.png" width="32%" alt="3D view: the city at night"></p>
+<p align="center"><img src="docs/screenshot-3d-street.png" width="32%" alt="3D view: the city from above, by day"> <img src="docs/screenshot-3d-fire.png" width="32%" alt="3D view: a fire crew at a burning house"> <img src="docs/screenshot-3d-night.png" width="32%" alt="3D view: the city at night"></p>
 
 <p align="center"><img src="docs/screenshot-3d-aerial.png" width="49%" alt="3D view: the aerial ladder at a high-rise fire"> <img src="docs/screenshot-3d-bomb.png" width="49%" alt="3D view: the bomb squad at a suspicious package"></p>
 

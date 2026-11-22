@@ -15,7 +15,7 @@ await page.getByRole('button', { name: /Start Freeplay/ }).click();
 await page.waitForFunction(() => window.__openrescue?.scene?.state === 'playing');
 await page.evaluate(() => window.__openrescue.scene.setViewMode('3d'));
 await page.waitForFunction(() => !!window.__openrescue.scene.renderer3d);
-await page.evaluate(() => { window.__openrescue.scene.zoomBy(0.4); window.__openrescue.scene.centerOn(40, 30); });
+await page.evaluate(() => { window.__openrescue.scene.renderer3d.distance = 62; window.__openrescue.scene.centerOn(50, 22); });
 await page.waitForTimeout(5000);
 await page.screenshot({ path: 'docs/screenshot-3d-city.png' });
 await page.evaluate(() => {
