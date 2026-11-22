@@ -55,7 +55,7 @@ await page.evaluate(() => {
   w.orderAbility(ids, 'treat', { kind: 'victim', id: v.id });
 });
 await speed(1);
-await page.waitForFunction(() => { const w = window.__openrescue.world, v = w.victims.get(window.__m.victimId); return v && [...w.responders.values()].some(r => r.task?.type === 'treat' && Math.hypot(r.x - v.x, r.y - v.y) < 1.5); }, undefined, { timeout: 90000 });
+await page.waitForFunction(() => { const w = window.__openrescue.world, v = w.victims.get(window.__m.victimId); return v && [...w.responders.values()].some(r => r.task?.type === 'treat' && Math.hypot(r.x - v.x, r.y - v.y) < 1.5); }, undefined, { timeout: 90000, polling: 40 });
 await page.waitForTimeout(1200);
 await page.screenshot({ path: 'docs/screenshot-3d-medical.png' });
 await browser.close();

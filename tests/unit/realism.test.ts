@@ -264,3 +264,36 @@ describe('cooling buildings and police patrols (LA-mod inspired)', () => {
     expect(w.orderPatrol([engine.id])).toBe(0);
   });
 });
+
+describe('parked vehicles line up with the road', () => {
+  const aligned = (a: number) => { const m = Math.abs(((a % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2)); return Math.min(m, Math.PI / 2 - m) < 0.05; };
+  it('vehicles arriving anywhere stop along the lane, centred and out of junctions', () => {
+    const w = World.create(content, { seed: 31, difficulty: 'normal', freeplay: false, traffic: false });
+    const vs = [...w.vehicles.values()].slice(0, 6);
+    const targets = [[40.5, 10.5], [50.5, 21.5], [30.5, 41.5], [61.5, 30.5], [20.5, 60.5], [80.5, 50.5]];
+    vs.forEach((v, i) => w.orderMove([v.id], targets[i][0], targets[i][1]));
+    run(w, 300, () => vs.every(v => !v.path.length));
+    run(w, 3);
+    for (const v of vs) {
+      const tx = Math.floor(v.x), ty = Math.floor(v.y);
+      if (!w.isRoad(tx, ty)) continue;
+      expect(aligned(v.angle)).toBe(true);
+      expect(Math.abs(v.x - (tx + 0.5))).toBeLessThan(0.05);
+      expect(Math.abs(v.y - (ty + 0.5))).toBeLessThan(0.05);
+      expect(w.isIntersection(tx, ty)).toBe(false);
+    }
+  });
+
+  it('a vehicle halted halfway a manoeuvre straightens up and centres itself', () => {
+    const w = World.create(content, { seed: 32, difficulty: 'normal', freeplay: false, traffic: false });
+    const v = [...w.vehicles.values()][0];
+    w.orderMove([v.id], 40.5, 10.5);
+    run(w, 6);
+    v.angle += 0.9; // pretend it was caught halfway a turn
+    v.x += 0.3; v.y += 0.25;
+    w.orderStop([v.id]);
+    run(w, 3);
+    const tx = Math.floor(v.x), ty = Math.floor(v.y);
+    if (w.isRoad(tx, ty)) { expect(aligned(v.angle)).toBe(true); expect(Math.abs(v.x - (tx + 0.5))).toBeLessThan(0.06); expect(Math.abs(v.y - (ty + 0.5))).toBeLessThan(0.06); }
+  });
+});

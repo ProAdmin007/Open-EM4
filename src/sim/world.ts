@@ -482,10 +482,39 @@ export class World {
     for (let j = y0 - maxR; j <= y0 + maxR; j++) {
       for (let i = x0 - maxR; i <= x0 + maxR; i++) {
         if (!this.isDrivable(i, j) || idle.has(key(i, j))) continue;
-        out.push({ t: { x: i, y: j }, d: Math.hypot(i + 0.5 - x, j + 0.5 - y) });
+        out.push({ t: { x: i, y: j }, d: Math.hypot(i + 0.5 - x, j + 0.5 - y) + (this.clearStopTile(i, j) ? 0 : 6) });
       }
     }
     return out.sort((a, b) => a.d - b.d).slice(0, count).map(o => o.t);
+  }
+
+  /** A good place to stop: not in a junction and not on a zebra crossing next to one. */
+  private clearStopTile(x: number, y: number): boolean {
+    if (!this.isRoad(x, y)) return true;
+    return !this.isIntersection(x, y) && !this.isIntersection(x - 1, y) && !this.isIntersection(x + 1, y) && !this.isIntersection(x, y - 1) && !this.isIntersection(x, y + 1);
+  }
+
+  /**
+   * A stopped vehicle on the road lines up with its lane (never across the road) and settles in the middle of its
+   * lane tile; this also happens after a stop order halfway a turn or a U-turn.
+   */
+  private settleVehicle(v: Vehicle, dt: number): void {
+    const tx = Math.floor(v.x), ty = Math.floor(v.y);
+    if (!this.isRoad(tx, ty)) return;
+    const lane = this.laneAt(tx, ty);
+    let axis: number;
+    if (lane) axis = Math.atan2(lane.y, lane.x);
+    else axis = this.isRoad(tx - 1, ty) || this.isRoad(tx + 1, ty) ? 0 : Math.PI / 2;
+    const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+    const d1 = wrap(axis - v.angle), d2 = wrap(axis + Math.PI - v.angle);
+    const diff = Math.abs(d1) <= Math.abs(d2) ? d1 : d2;
+    if (Math.abs(diff) > 1e-3) v.angle += Math.max(-4 * dt, Math.min(4 * dt, diff));
+    // glide to the middle of the lane
+    const cx = tx + 0.5, cy = ty + 0.5, dx = cx - v.x, dy = cy - v.y, dd = Math.hypot(dx, dy);
+    if (dd > 1e-3 && Math.abs(diff) < 0.6) {
+      const st = Math.min(dd, 1.6 * dt);
+      v.x += (dx / dd) * st; v.y += (dy / dd) * st;
+    }
   }
 
   /** Drive to the best reachable tile near a point. */
@@ -541,6 +570,7 @@ export class World {
       v.lights = !v.silent;
       this.driveVehicle(v, dt);
     }
+    if (!v.path.length && v.state === 'idle') this.settleVehicle(v, dt);
     for (const rid of v.crew) {
       const r = this.responders.get(rid);
       if (r?.inVehicle) { r.x = v.x; r.y = v.y; r.px = v.px; r.py = v.py; }

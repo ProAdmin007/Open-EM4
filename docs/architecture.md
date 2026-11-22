@@ -90,3 +90,7 @@ Each frame the scene calls `audio.update(world, cameraCentre, playing, paused)`:
 - Incident definitions are pure data (26 built in). Per-incident flavour (`descriptions`), per-kind treatment/arrest/clear parameters (`treatTime`, `arrestTime`, `mass`, `resistance`) and the shared `sevFactor` make the time needed depend on both kind and severity.
 - With several stations per service, reinforcements go to the first station that still has a free bay; routes and hospital deliveries use the nearest hospital.
 - 3D preparation is described in [3d.md](3d.md).
+
+## Parking on the road
+
+A stopped vehicle never stands across the road: `settleVehicle` (simulation) turns it onto the axis of its lane and glides it to the middle of the lane tile, also after a stop order halfway a turn or U-turn, and `clearStopTile` makes destinations prefer tiles that are not in a junction or on the zebra crossing next to one.
