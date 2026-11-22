@@ -204,6 +204,24 @@ export class AudioEngine {
     s.stop(t0 + dur + 0.05);
   }
 
+  /** The control room reads the call out over the radio (Dutch speech synthesis), after a short squelch. */
+  voiceOn = true;
+  private speaking = 0;
+  speak(text: string): void {
+    if (!this.voiceOn || this.muted || typeof speechSynthesis === 'undefined' || typeof SpeechSynthesisUtterance === 'undefined') return;
+    if (this.speaking >= 3) speechSynthesis.cancel(); // never build up a long queue
+    try {
+      this.burst(0.12, 0.18, 2500, 'bandpass'); this.tone(1900, 0.05, 'square', 0.05, 0.1);
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'nl-NL'; u.rate = 1.08; u.pitch = 0.85; u.volume = Math.min(1, this.volume * 1.4);
+      const nl = speechSynthesis.getVoices().find(v => v.lang.toLowerCase().startsWith('nl'));
+      if (nl) u.voice = nl;
+      this.speaking++;
+      u.onend = u.onerror = () => { this.speaking = Math.max(0, this.speaking - 1); };
+      setTimeout(() => speechSynthesis.speak(u), 350);
+    } catch { /* speech not available */ }
+  }
+
   play(name: Sfx): void {
     switch (name) {
       case 'alert': this.tone(880, 0.16, 'sine', 0.22); this.tone(660, 0.16, 'sine', 0.22, 0.18); this.tone(880, 0.16, 'sine', 0.22, 0.38); this.tone(660, 0.22, 'sine', 0.22, 0.56); break;
@@ -222,7 +240,7 @@ export class AudioEngine {
 
   onGameEvent(e: GameEvent): void {
     switch (e.type) {
-      case 'incident_started': this.play('alert'); break;
+      case 'incident_started': this.play('alert'); if (e.speech) this.speak(e.speech); break;
       case 'incident_escalated': this.play('escalate'); break;
       case 'incident_resolved': case 'mission_complete': this.play('resolved'); break;
       case 'incident_failed': case 'game_over': this.play('failed'); break;

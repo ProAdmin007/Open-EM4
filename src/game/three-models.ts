@@ -177,6 +177,26 @@ export function buildStretcher(blanket: number | null): THREE.Group {
   if (blanket !== null) box(g, 1.1, 0.13, 0.64, lambert(blanket), 0.4, 0.77, 0);
   return g;
 }
+/** IV drip stand with a bag of fluid. */
+export function buildDripStand(): THREE.Group {
+  const g = new THREE.Group();
+  const metal = lambert(0xb8bec4);
+  box(g, 0.04, 1.7, 0.04, metal, 0, 0.85, 0);
+  box(g, 0.5, 0.04, 0.04, metal, 0, 1.7, 0);
+  box(g, 0.08, 0.04, 0.5, metal, 0, 0.04, 0);
+  box(g, 0.5, 0.04, 0.08, metal, 0, 0.04, 0);
+  rbox(g, 0.12, 0.26, 0.05, 0.02, lambert(0xcfe9ff), 0.12, 1.5, 0);
+  rbox(g, 0.12, 0.26, 0.05, 0.02, lambert(0xcfe9ff), -0.12, 1.5, 0);
+  return g;
+}
+/** Oxygen cylinder (green) with a white valve. */
+export function buildOxygenBottle(): THREE.Group {
+  const g = new THREE.Group();
+  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.7, 12), lambert(0x2f8f4a)); cyl.position.y = 0.4; g.add(cyl);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), lambert(0xf2f2f2)); cap.position.y = 0.75; g.add(cap);
+  box(g, 0.04, 0.1, 0.04, lambert(0x888888), 0, 0.88, 0);
+  return g;
+}
 /** Paramedic bag: red case with a white cross. */
 export function buildMedBag(): THREE.Group {
   const g = new THREE.Group();

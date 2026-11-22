@@ -40,7 +40,7 @@ export interface SnapPerson {
   /** only for people that are visible in the world (not inside a vehicle, building or hospital) */
   state: string;
   /** victims: condition for the renderer (pale skin, blood, blanket, stretcher) */
-  info?: { health: number; treated: boolean; incidentKind: string };
+  info?: { health: number; treated: boolean; incidentKind: string; /** the paramedic carrying this casualty (tile position and heading) */ carrier?: { x: number; y: number; heading: number } };
   /** a firefighter whose hose is connected: the vehicle the hose comes from, and (once deployed) the point being sprayed */
   hose?: { fromX: number; fromY: number; spray?: { x: number; y: number; buildingId: string } };
 }
@@ -139,7 +139,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
   for (const v of world.victims.values()) {
     if (v.transport !== 'scene' && v.transport !== 'carried' && v.transport !== 'dead') continue;
     const x = ix(v), y = iy(v);
-    snap.people.push({ id: v.id, kind: 'victim', model: modelId('person', v.transport === 'dead' ? 'victim_dead' : 'victim'), x, y, position: tileToWorld3D(x, y), heading: 0, state: v.transport, info: { health: v.health, treated: v.treated, incidentKind: world.incidents.get(v.incidentId)?.defId ?? '' } });
+    snap.people.push({ id: v.id, kind: 'victim', model: modelId('person', v.transport === 'dead' ? 'victim_dead' : 'victim'), x, y, position: tileToWorld3D(x, y), heading: 0, state: v.transport, info: { health: v.health, treated: v.treated, incidentKind: world.incidents.get(v.incidentId)?.defId ?? '', carrier: v.transport === 'carried' && v.carriedBy !== null && world.responders.get(v.carriedBy) ? { x: ix(world.responders.get(v.carriedBy)!), y: iy(world.responders.get(v.carriedBy)!), heading: world.responders.get(v.carriedBy)!.angle } : undefined } });
   }
   for (const s of world.suspects.values()) snap.people.push({ id: s.id, kind: 'suspect', model: modelId('person', 'suspect'), x: s.x, y: s.y, position: tileToWorld3D(s.x, s.y), heading: 0, state: s.arrested ? 'arrested' : 'free' });
   for (const b of world.bystanders.values()) {

@@ -296,3 +296,68 @@ describe('parked vehicles line up with the road', () => {
     if (w.isRoad(tx, ty)) { expect(aligned(v.angle)).toBe(true); expect(Math.abs(v.x - (tx + 0.5))).toBeLessThan(0.06); expect(Math.abs(v.y - (ty + 0.5))).toBeLessThan(0.06); }
   });
 });
+
+describe('control room, random calls, ambulance return', () => {
+  it('every new call carries an address and a spoken dispatch message', () => {
+    const w = newWorld(11);
+    const inc = w.spawnIncident('house_fire', { severity: 3 })!;
+    expect(inc.address).toMatch(/\S+ \d+$/);
+    const ev = w.drainEvents().find(e => e.type === 'incident_started') as { speech?: string; message: string };
+    expect(ev.speech).toContain(inc.name);
+    expect(ev.speech).toContain(inc.address);
+    expect(ev.speech).toContain('Prioriteit 1');
+    const road = w.spawnIncident('car_accident', { severity: 1 })!;
+    expect(road.address).toContain('ter hoogte van');
+  });
+
+  it('the same street keeps the same name and numbers differ along it', () => {
+    const w = newWorld(11);
+    const names = new Set<string>();
+    for (const b of [...w.buildings.values()].slice(0, 80)) names.add(w.addressOf(b.door.x + 0.5, b.door.y + 0.5).replace(/ \d+$/, ''));
+    expect(names.size).toBeGreaterThan(5);
+    expect(names.size).toBeLessThan(40);
+  });
+
+  it('a new game starts with random calls and the generator does not repeat the same kinds', () => {
+    const starts = new Set<string>();
+    for (let seed = 1; seed <= 12; seed++) {
+      const w = World.create(content, { seed, difficulty: 'normal', freeplay: true, traffic: false, scripted: true });
+      starts.add([...(w as unknown as { script: { def: string }[] }).script.map(s => s.def)].join(','));
+    }
+    expect(starts.size).toBeGreaterThanOrEqual(8);
+    const w = World.create(content, { seed: 5, difficulty: 'hard', freeplay: true, traffic: false });
+    w.reputation = 1e9;
+    const seen: string[] = [];
+    for (let i = 0; i < 30 * 1500; i++) { w.tick(); for (const e of w.drainEvents()) if (e.type === 'incident_started') seen.push(w.incidents.get(e.incidentId)?.defId ?? ''); }
+    expect(seen.length).toBeGreaterThan(15);
+    let repeats = 0;
+    for (let i = 1; i < seen.length; i++) if (seen[i] === seen[i - 1]) repeats++;
+    expect(repeats).toBeLessThanOrEqual(Math.ceil(seen.length * 0.12));
+    expect(new Set(seen).size).toBeGreaterThanOrEqual(12);
+  }, 40000);
+
+  it('an ambulance drives back to its station after delivering a patient to the hospital', () => {
+    const w = newWorld(8);
+    const inc = w.spawnIncident('car_accident', { severity: 1 })!;
+    const amb = [...w.vehicles.values()].find(v => v.defId === 'ambulance')!;
+    const victim = [...w.victims.values()].find(x => x.incidentId === inc.id)!;
+    w.orderMove([amb.id], inc.x, inc.y + 1);
+    run(w, 200, () => !amb.path.length);
+    const ids = w.orderDismount([amb.id]);
+    w.orderAbility(ids, 'treat', { kind: 'victim', id: victim.id });
+    run(w, 60, () => victim.treated);
+    w.orderAbility(ids, 'carry', { kind: 'victim', id: victim.id });
+    run(w, 60, () => amb.patients.length > 0);
+    expect(amb.patients.length).toBe(1);
+    w.orderBoard([amb.id]);
+    run(w, 30, () => w.vehicles.get(amb.id)!.crew.every(id => w.responders.get(id)!.inVehicle));
+    w.orderToHospital([amb.id]);
+    run(w, 300, () => amb.patients.length === 0 && victim.transport === 'atHospital');
+    expect(victim.transport).toBe('atHospital');
+    run(w, 5);
+    expect(w.vehicleStatus(amb)).toBe('Onderweg naar de kazerne');
+    expect(amb.lights).toBe(false);
+    run(w, 400, () => w.vehicleStatus(amb).startsWith('Gereed'));
+    expect(w.vehicleStatus(amb)).toMatch(/Gereed/);
+  });
+});

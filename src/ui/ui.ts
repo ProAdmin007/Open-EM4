@@ -62,6 +62,7 @@ export class UI {
     if (!a) return;
     a.setVolume(this.settings.volume);
     a.setMuted(this.settings.muted);
+    a.voiceOn = this.settings.voice !== false;
     this.el('btn-mute').textContent = this.settings.muted ? '🔇' : '🔊';
   }
 
@@ -189,6 +190,7 @@ export class UI {
       if (def.objectives.includes('area_secured')) bits.push(i.secured ? '✔ afgezet' : '○ afzetten');
       if (def.objectives.includes('device_defused')) bits.push(i.defused ? '✔ onschadelijk' : '○ ontmijnen');
       if (def.objectives.includes('obstacle_cleared')) bits.push(i.cleared ? '✔ geruimd' : '○ ruimen');
+      if (i.address) bits.unshift(`📍 ${esc(i.address)}`);
       return `<div class="inc s${i.severity}" data-iid="${i.id}"><div class="t"><span>${esc(def.icon ?? '')} ${esc(i.name)}</span><span>ernst ${i.severity}</span></div>` +
         `${i.description ? `<div class="d">${esc(i.description)}</div>` : ''}<div class="d">${bits.join(' · ')} · nog ${Math.ceil(left)}s</div><div class="meter"><i class="${frac < 0.3 ? 'low' : ''}" style="width:${(frac * 100).toFixed(0)}%"></i></div></div>`;
     }).join('');
@@ -304,8 +306,8 @@ export class UI {
           <button id="b-new" class="primary">▶ Nieuw spel</button><button id="b-free">♾ Freeplay</button><button id="b-miss">🎯 Missies</button>
           <button id="b-cont" ${save ? '' : 'disabled'}>⏵ Doorgaan met opgeslagen spel</button><button id="b-scores">🏆 Highscores</button><button id="b-set">⚙ Instellingen</button>
           <button id="b-view">${this.settings.viewMode === '3d' ? '🧊 Weergave: 3D (experimenteel)' : '▦ Weergave: 2D'}</button></div>
-          <p class="help">Nieuw spel start met een woningbrand, een ongeluk en een misdrijf en gaat daarna door in Freeplay.</p>`);
-        on('b-new', () => this.start({ seed: hashSeed(this.settings.seed), difficulty: this.settings.difficulty, freeplay: true, scripted: true }));
+          <p class="help">Nieuw spel start met een willekeurige brand, medische melding en politiemelding en gaat daarna door in Freeplay. De meldkamer spreekt elke melding in.</p>`);
+        on('b-new', () => this.start({ seed: hashSeed(String(Date.now()) + Math.random()), difficulty: this.settings.difficulty, freeplay: true, scripted: true }));
         on('b-free', () => this.showScreen('freeplay'));
         on('b-cont', () => this.loadSaved());
         on('b-set', () => this.showScreen('settings', 'main'));
@@ -334,8 +336,8 @@ export class UI {
       case 'freeplay':
         card(`<h2>Freeplay</h2><div class="col"><label>Moeilijkheid<select id="f-diff">${(['easy', 'normal', 'hard'] as Difficulty[]).map(d => `<option value="${d}" ${d === this.settings.difficulty ? 'selected' : ''}>${{ easy: 'Easy – weinig incidenten', normal: 'Normal', hard: 'Hard – veel & snelle escalatie' }[d]}</option>`).join('')}</select></label>
           <label>Kaart<select id="f-map">${Object.values(this.scene.content.maps).map(m => `<option value="${esc(m.id)}" ${m.id === this.settings.mapId ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
-          <label>Seed<input id="f-seed" type="text" value="${esc(this.settings.seed)}"></label>
-          <p class="help">Dezelfde seed geeft hetzelfde scenario.</p>
+          <label>Seed<input id="f-seed" type="text" value="${esc(String(Math.floor(Math.random() * 1e6)))}"></label>
+          <p class="help">Elke keer een nieuwe willekeurige seed; vul dezelfde seed in voor hetzelfde scenario.</p>
           <button id="f-go" class="primary">▶ Start Freeplay</button><button id="f-back">← Terug</button></div>`);
         on('f-go', () => {
           this.settings.difficulty = (sc.querySelector('#f-diff') as HTMLSelectElement).value as Difficulty;
@@ -356,6 +358,7 @@ export class UI {
           <label>Volume<input id="s-vol" type="range" min="0" max="100" value="${Math.round(this.settings.volume * 100)}"></label>
           <label>Standaard spelsnelheid<select id="s-speed">${[1, 2, 4].map(n => `<option value="${n}" ${this.settings.defaultSpeed === n ? 'selected' : ''}>${n}×</option>`).join('')}</select></label>
           <label>Weergave<select id="s-view"><option value="2d" ${this.settings.viewMode === '2d' ? 'selected' : ''}>2D</option><option value="3d" ${this.settings.viewMode === '3d' ? 'selected' : ''}>3D (experimenteel)</option></select></label>
+          <label>Meldkamer spreekt meldingen in<input id="s-voice" type="checkbox" ${this.settings.voice !== false ? 'checked' : ''}></label>
           <label>3D: schaduwen<input id="s-shadows" type="checkbox" ${localStorage.getItem('openrescue.shadows') !== '0' ? 'checked' : ''}></label>
           <label>3D: dag en nacht<input id="s-daynight" type="checkbox" ${localStorage.getItem('openrescue.daynight') !== '0' ? 'checked' : ''}></label>
           <hr style="border-color:#34405a;width:100%">
@@ -370,6 +373,7 @@ export class UI {
           this.settings.hints = (sc.querySelector('#s-hints') as HTMLInputElement).checked;
           this.settings.defaultSpeed = Number((sc.querySelector('#s-speed') as HTMLSelectElement).value) as 1 | 2 | 4;
           this.settings.muted = (sc.querySelector('#s-muted') as HTMLInputElement).checked;
+          this.settings.voice = (sc.querySelector('#s-voice') as HTMLInputElement).checked;
           this.settings.volume = Number((sc.querySelector('#s-vol') as HTMLInputElement).value) / 100;
           const view = (sc.querySelector('#s-view') as HTMLSelectElement).value as '2d' | '3d';
           if (view !== this.settings.viewMode) { this.settings.viewMode = view; void this.scene.setViewMode(this.settings.viewMode); }

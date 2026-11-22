@@ -80,6 +80,7 @@ export type OrderTarget =
   | { kind: 'suspect'; id: number }
   | { kind: 'incident'; id: number };
 
+const STREET_NAMES = ['Dorpsstraat', 'Kerkstraat', 'Molenweg', 'Stationsweg', 'Industrieweg', 'Parklaan', 'Beatrixlaan', 'Wilhelminastraat', 'Julianalaan', 'Havenstraat', 'Schoolstraat', 'Raadhuisplein', 'Lindelaan', 'Eikenlaan', 'Burgemeester Wiersmastraat', 'Nieuwstraat', 'Bloemenweg', 'Marktstraat', 'Koningin Emmalaan', 'Sportlaan', 'Haverkamp', 'Veldweg', 'Oranjestraat', 'Zandpad', 'Beukenlaan', 'Singel'];
 const TILE_GRASS = 0, TILE_ROAD = 1, TILE_BUILDING = 2, TILE_TREE = 3, TILE_PARKING = 4, TILE_WATER = 5;
 /** Harder incidents take longer to resolve: 1 at severity 1, growing by `k` per severity level. */
 export const sevFactor = (severity: number, k = 0.3) => 1 + k * (severity - 1);
@@ -220,7 +221,10 @@ export class World {
     const w = new World(content, opts);
     w.spawnFleets();
     if (w.mission) w.script = w.mission.script.map(e => ({ ...e }));
-    else if (opts.scripted) w.script = [{ at: 3, def: 'house_fire' }, { at: 30, def: 'car_accident' }, { at: 55, def: 'crime' }];
+    else if (opts.scripted) { // 'Nieuw spel': a random fire, a random ambulance call and a random police call
+      const of = (cat: string) => Object.values(content.incidents).filter(d => d.category === cat);
+      w.script = (['fire', 'ambulance', 'police'] as const).map((cat, i) => ({ at: [3, 30, 55][i], def: w.rng.pick(of(cat)).id }));
+    }
     if (opts.traffic !== false) w.spawnTraffic();
     return w;
   }
@@ -998,6 +1002,7 @@ export class World {
         if (p) { p.transport = 'atHospital'; this.emit({ type: 'info', message: `Slachtoffer afgeleverd bij het ziekenhuis (${Math.round(p.health)}% gezondheid)` }); }
       }
       v.patients = [];
+      if (v.category === 'ambulance') this.orderReturn([v.id]); // back to the station after handing over the patient
     }
   }
 
@@ -1292,13 +1297,38 @@ export class World {
     this.spawnTimer = this.rng.range(d.interval[0], d.interval[1]);
     if (this.incidents.size >= d.maxConcurrent) return;
     const defs = Object.values(this.content.incidents);
-    const total = defs.reduce((s, x) => s + x.weight, 0);
+    // anti-repeat: recently seen kinds and the category of the previous call are less likely, so the calls keep varying
+    const last = this.recentDefs[this.recentDefs.length - 1];
+    const lastCat = last ? this.content.incidents[last]?.category : null;
+    const wt = (x: IncidentDef) => x.weight * (this.recentDefs.includes(x.id) ? 0.12 : 1) * (x.category === lastCat ? 0.6 : 1);
+    const total = defs.reduce((s, x) => s + wt(x), 0);
     if (total <= 0) return;
     let roll = this.rng.next() * total;
     for (const def of defs) {
-      roll -= def.weight;
-      if (roll <= 0) { this.spawnIncident(def.id); return; }
+      roll -= wt(def);
+      if (roll <= 0) { if (this.spawnIncident(def.id)) { this.recentDefs.push(def.id); if (this.recentDefs.length > 6) this.recentDefs.shift(); } return; }
     }
+  }
+  private recentDefs: string[] = [];
+
+  /** A street address for a point: the nearest street (stable per street line) and a house number by position and side. */
+  addressOf(x: number, y: number, onRoad = false): string {
+    let rx = -1, ry = -1, bd = Infinity;
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    for (let j = y0 - 8; j <= y0 + 8; j++) for (let i = x0 - 8; i <= x0 + 8; i++) {
+      if (!this.isRoad(i, j)) continue;
+      const d = Math.hypot(i + 0.5 - x, j + 0.5 - y);
+      if (d < bd) { bd = d; rx = i; ry = j; }
+    }
+    if (rx < 0) return 'Rendam';
+    const hz = this.isRoad(rx - 1, ry) && this.isRoad(rx + 1, ry), vt = this.isRoad(rx, ry - 1) && this.isRoad(rx, ry + 1);
+    const horizontal = hz && (!vt || Math.abs(x - rx) >= Math.abs(y - ry));
+    const line = horizontal ? (this.isRoad(rx, ry - 1) ? ry - 1 : ry) : (this.isRoad(rx - 1, ry) ? rx - 1 : rx);
+    const name = STREET_NAMES[tileHash(line, horizontal ? 11 : 23) % STREET_NAMES.length];
+    const along = horizontal ? x : y;
+    const sideOdd = horizontal ? y < line + 1 : x < line + 1;
+    const num = Math.floor(along / 2) * 2 + (sideOdd ? 1 : 2);
+    return onRoad ? `${name}, ter hoogte van ${num}` : `${name} ${num}`;
   }
 
   /** Create an incident. Returns null when no suitable location exists. */
@@ -1309,7 +1339,7 @@ export class World {
     const scale = DIFFICULTY[this.opts.difficulty].timeScale;
     const inc: Incident = {
       id: this.newId(), defId, name: def.name, severity: sev, description: def.descriptions?.length ? this.rng.pick(def.descriptions) : '', x: 0, y: 0, buildingId: null, elapsed: 0,
-      nextEscalation: def.escalation.everySec * scale, status: 'active', secured: false, obstacle: [], victims: [], suspects: [], bystanders: [], deaths: 0, cleared: false, defused: false,
+      nextEscalation: def.escalation.everySec * scale, status: 'active', secured: false, obstacle: [], victims: [], suspects: [], bystanders: [], deaths: 0, cleared: false, defused: false, address: '',
     };
     let anchor: Vec;
     let b: Building | null = null;
@@ -1372,7 +1402,9 @@ export class World {
     }
     this.incidents.set(inc.id, inc);
     this.dispatchPatrols(inc, def, b);
-    this.emit({ type: 'incident_started', incidentId: inc.id, message: `Nieuwe melding: ${inc.name}` });
+    inc.address = this.addressOf(b ? b.door.x + 0.5 : inc.x, b ? b.door.y + 0.5 : inc.y, !b);
+    const prio = inc.severity >= 3 ? 'Prioriteit 1, spoed' : inc.severity === 2 ? 'Prioriteit 2' : 'Prioriteit 3';
+    this.emit({ type: 'incident_started', incidentId: inc.id, message: `Nieuwe melding: ${inc.name} – ${inc.address}`, speech: `Meldkamer. ${inc.name}. ${inc.description ? inc.description + '. ' : ''}Adres: ${inc.address}. ${prio}.` });
     return inc;
   }
 
@@ -1855,7 +1887,7 @@ export class World {
     for (const v of s.victims) w.victims.set(v.id, v);
     for (const x of s.suspects) w.suspects.set(x.id, x);
     for (const b of s.bystanders ?? []) w.bystanders.set(b.id, b);
-    for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; w.incidents.set(i.id, i); }
+    for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; i.address ??= ''; w.incidents.set(i.id, i); }
     w.obstacles = new Set(s.obstacles);
     w.rebuildCordon();
     w.script = s.script ?? [];

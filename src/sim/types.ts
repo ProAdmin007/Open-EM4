@@ -246,6 +246,8 @@ export interface Incident {
   deaths: number;
   cleared: boolean;
   defused: boolean;
+  /** Street address (or street + 'ter hoogte van') for the dispatch message. */
+  address: string;
 }
 export interface Civilian extends Entity {
   kind: 'civilian';
@@ -265,7 +267,7 @@ export interface Pedestrian extends Entity {
 }
 
 export type GameEvent =
-  | { type: 'incident_started' | 'incident_escalated' | 'incident_resolved' | 'incident_failed'; incidentId: number; message: string }
+  | { type: 'incident_started' | 'incident_escalated' | 'incident_resolved' | 'incident_failed'; incidentId: number; message: string; /** what the control room says over the radio */ speech?: string }
   | { type: 'info' | 'warn'; message: string }
   | { type: 'explosion'; x: number; y: number; message: string }
   | { type: 'game_over' | 'mission_complete'; message: string };

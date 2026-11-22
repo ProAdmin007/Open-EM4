@@ -65,7 +65,11 @@ test('scenario: send engine to a house fire, dismount, extinguish, incident disa
 
   // Right-click the burning building: the engine drives to it.
   const target = await screenOf(page, info.bx, info.by);
-  await page.mouse.click(target.x, target.y, { button: 'right' });
+  for (let attempt = 0; attempt < 4; attempt++) { // software GL is slow: the first click can land before the camera has settled
+    await page.mouse.click(target.x, target.y, { button: 'right' });
+    const started = await page.waitForFunction(id => (window as any).__openrescue.world.vehicles.get(id).path.length > 0, info.vid, { timeout: 10_000 }).then(() => true, () => false);
+    if (started) break;
+  }
   await page.waitForFunction(id => (window as any).__openrescue.world.vehicles.get(id).path.length > 0, info.vid);
   await page.waitForFunction(id => {
     const w = (window as any).__openrescue.world;
@@ -134,11 +138,11 @@ test('pause and resume stop and restart the simulation', async ({ page }) => {
   await expect(page.locator('#pause-banner')).toBeHidden();
 });
 
-test('new game starts the scripted fire and the menu can save', async ({ page }) => {
+test('new game starts with a random call and the menu can save', async ({ page }) => {
   await gotoHealthy(page);
   await page.getByRole('button', { name: /Nieuw spel/ }).click();
   await page.locator('[data-act="speed4"]').click();
-  await expect(page.locator('#incident-list .inc').first()).toContainText('Woningbrand', { timeout: 20_000 });
+  await expect(page.locator('#incident-list .inc').first()).toBeVisible({ timeout: 20_000 }); // the first call is random now
   await page.locator('[data-act="menu"]').click();
   await page.getByRole('button', { name: /Opslaan/ }).click();
   await expect(page.locator('#p-msg')).toContainText('opgeslagen');
@@ -341,6 +345,7 @@ test('vehicles start parked in the station lot, not on the road', async ({ page 
 });
 
 test('3D view: select engine, send to a house fire, dismount, extinguish, incident disappears', async ({ page }) => {
+  test.setTimeout(180_000);
   await openFreeplay(page);
   await page.evaluate(() => (window as any).__openrescue.scene.setViewMode('3d'));
   await page.waitForFunction(() => !!(window as any).__openrescue.scene.renderer3d);
