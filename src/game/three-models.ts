@@ -72,7 +72,7 @@ const SPECS: Record<string, Spec> = {
   'vehicle/aerial_ladder': { shape: 'truck', body: 0xb3261e, cab: 0xb3261e, stripe: 0xf2f2f2, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 3, extras: ladderExtras },
   'vehicle/rescue_vehicle': { shape: 'truck', body: 0xa82820, cab: 0xa82820, stripe: 0xffcc33, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 3 },
   'vehicle/command_vehicle': { shape: 'van', body: 0xf1f1ee, stripe: 0xc0281f, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: antennaExtras },
-  'vehicle/ambulance': { shape: 'van', body: 0xf6f4ea, stripe: 0xff7a1a, stripe2: 0xffd21a, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: crossExtras },
+  'vehicle/ambulance': { shape: 'van', body: 0xf6f4ea, stripe: 0xff7a1a, stripe2: 0xffd21a, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: ambulanceExtras },
   'vehicle/rapid_responder': { shape: 'car', body: 0xf6f4ea, stripe: 0xff7a1a, stripe2: 0xffd21a, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2 },
   'vehicle/mmt_car': { shape: 'car', body: 0xf6f4ea, stripe: 0xff7a1a, stripe2: 0xffd21a, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: crossExtras },
   'vehicle/patrol_car': { shape: 'car', body: 0xf3f4f6, stripe: 0x1f4fb3, stripe2: 0xff8c1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
@@ -139,6 +139,50 @@ export function buildSuspectPackage(): THREE.Group {
   box(g, 0.58, 0.05, 0.1, lambert(0xd8c9a0), 0.9, 0.42, 0.3).rotation.y = 0.4;
   return g;
 }
+/** Ambulance trolley with mattress and (optionally) a blanket; lies along X like a victim does. */
+export function buildStretcher(blanket: number | null): THREE.Group {
+  const g = new THREE.Group();
+  box(g, 2.0, 0.08, 0.66, lambert(0xbfc5ca), 0, 0.55, 0);
+  box(g, 1.9, 0.1, 0.6, lambert(0x2f6f9f), 0, 0.62, 0);
+  for (const x of [-0.8, 0.8]) for (const z of [-0.25, 0.25]) box(g, 0.05, 0.5, 0.05, lambert(0x8a9096), x, 0.27, z);
+  for (const x of [-0.8, 0.8]) box(g, 0.1, 0.08, 0.6, lambert(0x222222), x, 0.05, 0);
+  if (blanket !== null) box(g, 1.1, 0.13, 0.64, lambert(blanket), 0.4, 0.77, 0);
+  return g;
+}
+/** Paramedic bag: red case with a white cross. */
+export function buildMedBag(): THREE.Group {
+  const g = new THREE.Group();
+  box(g, 0.5, 0.3, 0.3, lambert(0xc62828), 0, 0.15, 0);
+  box(g, 0.2, 0.03, 0.08, lambert(0xffffff), 0, 0.31, 0);
+  box(g, 0.08, 0.03, 0.2, lambert(0xffffff), 0, 0.31, 0);
+  return g;
+}
+export function buildBloodPool(seed: number): THREE.Group {
+  const g = new THREE.Group();
+  const m = lambert(0x6e0f10);
+  for (let i = 0; i < 3; i++) {
+    const d = new THREE.Mesh(cylDisc(), m);
+    d.scale.set(0.5 + (i + seed) % 3 * 0.18, 1, 0.35 + (i * 0.17));
+    d.position.set(-0.1 + i * 0.35, 0.03 + i * 0.002, ((i + seed) % 2 - 0.5) * 0.3);
+    g.add(d);
+  }
+  return g;
+}
+let discGeo: THREE.BufferGeometry | null = null;
+function cylDisc(): THREE.BufferGeometry { if (!discGeo) { discGeo = new THREE.CylinderGeometry(1, 1, 0.01, 14); discGeo.userData.shared = true; } return discGeo; }
+/** Tyre marks, an oil puddle, scattered glass and a warning triangle for a road accident. */
+export function buildAccidentDetail(seed: number): THREE.Group {
+  const g = new THREE.Group();
+  const skid = lambert(0x16171a);
+  for (const z of [-0.7, 0.7]) box(g, 9, 0.02, 0.22, skid, -5.5, 0.03, z + (seed % 3) * 0.1);
+  const oil = new THREE.Mesh(cylDisc(), lambert(0x101215)); oil.scale.set(1.3, 1, 0.9); oil.position.set(1.8, 0.03, -1.6); g.add(oil);
+  for (let i = 0; i < 16; i++) box(g, 0.08 + (i % 3) * 0.04, 0.03, 0.08 + (i % 2) * 0.05, lambert(0xcfe6ee), Math.cos(i * 2.4 + seed) * 2.2 + 1, 0.04, Math.sin(i * 1.7 + seed) * 2.0);
+  const tri = new THREE.Group();
+  for (const a of [0, 2.094, 4.188]) box(tri, 0.7, 0.05, 0.06, lambert(0xd8352f), Math.cos(a) * 0.18, 0.4, Math.sin(a) * 0.18).rotation.y = -a + 1.57;
+  tri.position.set(-9, 0, 0.8);
+  g.add(tri);
+  return g;
+}
 /** Traffic cone with a reflective band. */
 export function buildCone(): THREE.Group {
   const g = new THREE.Group();
@@ -166,6 +210,18 @@ function crossExtras(g: THREE.Group, L: number, W: number, H: number): void {
     box(g, L * 0.16, 0.14, 0.03, red, -L * 0.12, H * 0.62, s * (W / 2 + 0.02));
     box(g, 0.14, L * 0.16, 0.03, red, -L * 0.12, H * 0.62, s * (W / 2 + 0.02));
   }
+}
+function ambulanceExtras(g: THREE.Group, L: number, W: number, H: number): void {
+  crossExtras(g, L, W, H);
+  const mat = lambert(0xf0efe8);
+  for (const s of [-1, 1]) { // rear doors, hinged at the corners; opened by the renderer while a patient is loaded
+    const pivot = new THREE.Group();
+    pivot.name = s < 0 ? 'rdoorL' : 'rdoorR';
+    pivot.position.set(-L / 2 - 0.04, H * 0.46, s * (W / 2 - 0.05));
+    box(pivot, 0.06, H * 0.72, W / 2 - 0.1, mat, 0, 0, -s * (W / 4 - 0.05));
+    g.add(pivot);
+  }
+  box(g, 0.1, 0.5, W * 0.6, lambert(0x2c3138), -L / 2 - 0.02, 0.5, 0); // rear step
 }
 function towExtras(g: THREE.Group, L: number, W: number, H: number): void {
   const dark = lambert(0x2b2b2b);

@@ -47,6 +47,8 @@ The experimental 3D view (procedural three.js, no external assets):
 
 <p align="center"><img src="docs/screenshot-3d-aerial.png" width="49%" alt="3D view: the aerial ladder at a high-rise fire"> <img src="docs/screenshot-3d-bomb.png" width="49%" alt="3D view: the bomb squad at a suspicious package"></p>
 
+<p align="center"><img src="docs/screenshot-3d-fire-big.png" width="32%" alt="3D view: a big house fire at dusk"> <img src="docs/screenshot-3d-fire-night.png" width="32%" alt="3D view: the same fire at night"> <img src="docs/screenshot-3d-medical.png" width="32%" alt="3D view: paramedics treat a casualty at a crash"></p>
+
 ## Play it
 
 **Requirements:** [Node.js](https://nodejs.org) 20+ and a modern browser with WebGL (developed and tested with Chrome).

@@ -47,6 +47,8 @@ De experimentele 3D-weergave (procedureel, three.js, geen externe assets):
 
 <p align="center"><img src="docs/screenshot-3d-aerial.png" width="49%" alt="3D-weergave: de hoogwerker bij een brand in hoogbouw"> <img src="docs/screenshot-3d-bomb.png" width="49%" alt="3D-weergave: de EOD-ploeg bij een verdacht pakket"></p>
 
+<p align="center"><img src="docs/screenshot-3d-fire-big.png" width="32%" alt="3D-weergave: grote woningbrand bij schemering"> <img src="docs/screenshot-3d-fire-night.png" width="32%" alt="3D-weergave: dezelfde brand in de nacht"> <img src="docs/screenshot-3d-medical.png" width="32%" alt="3D-weergave: ambulancepersoneel behandelt een slachtoffer bij een ongeluk"></p>
+
 ## Spelen
 
 **Vereist:** [Node.js](https://nodejs.org) 20+ en een moderne browser met WebGL (ontwikkeld en getest met Chrome).

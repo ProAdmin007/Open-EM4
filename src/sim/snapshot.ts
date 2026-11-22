@@ -26,6 +26,8 @@ export interface SnapVehicle {
   tank: number;
   hydrant: boolean;
   aerial: { x: number; y: number } | null;
+  /** rear doors open (crew is loading a patient) */
+  open: boolean;
 }
 export interface SnapPerson {
   id: number;
@@ -37,6 +39,8 @@ export interface SnapPerson {
   heading: number;
   /** only for people that are visible in the world (not inside a vehicle, building or hospital) */
   state: string;
+  /** victims: condition for the renderer (pale skin, blood, blanket, stretcher) */
+  info?: { health: number; treated: boolean; incidentKind: string };
   /** a firefighter whose hose is connected: the vehicle the hose comes from, and (once deployed) the point being sprayed */
   hose?: { fromX: number; fromY: number; spray?: { x: number; y: number; buildingId: string } };
 }
@@ -94,6 +98,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
   const snap: RenderSnapshot = { time: world.time, lightPhase: world.lightPhase, vehicles: [], people: [], cars: [], buildings: [], incidents: [], obstacles: [], hydrants: world.hydrants };
   const aerial = new Map<number, { x: number; y: number }>();
   const defusing = new Set<number>();
+  const loading = new Set<number>();
   for (const r of world.responders.values()) {
     const t = r.task;
     if (t?.type === 'extinguish' && t.deploy >= 2.5) {
@@ -101,6 +106,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
       if (v && b && world.vehicleDef(v).equipment.includes('aerial_ladder')) aerial.set(v.id, { x: b.x + b.w / 2, y: b.y + b.h / 2 });
     }
     if (t?.type === 'defuse' && !r.inVehicle) defusing.add(t.incidentId);
+    if (t?.type === 'load' && !r.inVehicle) loading.add(r.vehicleId);
   }
 
   for (const v of world.vehicles.values()) {
@@ -108,7 +114,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
     snap.vehicles.push({
       id: v.id, model: modelId('vehicle', v.defId, def.model), category: v.category, x, y, position: tileToWorld3D(x, y), heading: v.angle, yaw: headingToYaw(v.angle),
       size: vehicleDimensions(def), lights: v.lights, moving: v.path.length > 0,
-      water: v.water, tank: def.tank ?? 0, hydrant: v.hydrant, aerial: aerial.get(v.id) ?? null,
+      water: v.water, tank: def.tank ?? 0, hydrant: v.hydrant, aerial: aerial.get(v.id) ?? null, open: loading.has(v.id),
     });
   }
   for (const r of world.responders.values()) {
@@ -128,7 +134,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
   for (const v of world.victims.values()) {
     if (v.transport !== 'scene' && v.transport !== 'carried' && v.transport !== 'dead') continue;
     const x = ix(v), y = iy(v);
-    snap.people.push({ id: v.id, kind: 'victim', model: modelId('person', v.transport === 'dead' ? 'victim_dead' : 'victim'), x, y, position: tileToWorld3D(x, y), heading: 0, state: v.transport });
+    snap.people.push({ id: v.id, kind: 'victim', model: modelId('person', v.transport === 'dead' ? 'victim_dead' : 'victim'), x, y, position: tileToWorld3D(x, y), heading: 0, state: v.transport, info: { health: v.health, treated: v.treated, incidentKind: world.incidents.get(v.incidentId)?.defId ?? '' } });
   }
   for (const s of world.suspects.values()) snap.people.push({ id: s.id, kind: 'suspect', model: modelId('person', 'suspect'), x: s.x, y: s.y, position: tileToWorld3D(s.x, s.y), heading: 0, state: s.arrested ? 'arrested' : 'free' });
   for (const b of world.bystanders.values()) {

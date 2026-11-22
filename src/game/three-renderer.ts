@@ -5,7 +5,7 @@ import type { Category } from '../sim/types';
 import type { GameRenderer } from './renderer';
 import { TILE_METERS, tileToWorld3D, world3DToTile } from '../sim/space';
 import { Commands, type SelectionHost } from './selection';
-import { buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
+import { buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
 import { ParticlePool, setSegment } from './three-fx';
 import { Environment, bakeGround, buildStreetFurniture, buildVegetation, decorateBuilding, windowSlots } from './three-world';
 
@@ -116,7 +116,7 @@ export function buildRoof(type: string, w: number, d: number): THREE.Object3D {
 }
 
 interface Tracked { obj: THREE.Object3D; frame: number; parts?: VehicleParts; lastX?: number; lastZ?: number; spin?: number }
-interface BuildingObj { decor: THREE.Mesh[]; win: { start: number; count: number; dark: boolean }[]; group: THREE.Group; body: THREE.Mesh; roof: THREE.Object3D; bodyMat: THREE.MeshLambertMaterial; roofMat: THREE.MeshLambertMaterial; wall: THREE.Color; roofCol: THREE.Color; h: number; key: string }
+interface BuildingObj { fw: { start: number; mats: THREE.Matrix4[]; key: string }; decor: THREE.Mesh[]; win: { start: number; count: number; dark: boolean }[]; group: THREE.Group; body: THREE.Mesh; roof: THREE.Object3D; bodyMat: THREE.MeshLambertMaterial; roofMat: THREE.MeshLambertMaterial; wall: THREE.Color; roofCol: THREE.Color; h: number; key: string }
 const CHAR = new THREE.Color(0x1b1918);
 const cx = (b: { x: number; w: number }, _w: number): number => (b.x + b.w / 2) * TILE_METERS;
 const cz = (b: { y: number; h: number }, _d: number): number => (b.y + b.h / 2) * TILE_METERS;
@@ -140,6 +140,7 @@ export class Three3DRenderer implements GameRenderer {
   private env!: Environment;
   private winLit: THREE.InstancedMesh | null = null;
   private winDark: THREE.InstancedMesh | null = null;
+  private fireWin: THREE.InstancedMesh | null = null;
   shadows = false;
   private treesGroup = new THREE.Group();
   private lightsGroup = new THREE.Group();
@@ -158,14 +159,15 @@ export class Three3DRenderer implements GameRenderer {
   private keys = new Set<string>();
   private pointer = { downTile: { x: 0, y: 0 }, downScreen: { x: 0, y: 0 }, dragging: false, shift: false, rotating: false, lastX: 0 };
   // fire / smoke / water particle pools, burning-building lights, props, hoses
-  private flames = new ParticlePool(900, THREE.AdditiveBlending, 1.2, 0.6);
+  private flames = new ParticlePool(1100, THREE.AdditiveBlending, 0.8, 0.5, 'flame');
+  private halo = new ParticlePool(160, THREE.AdditiveBlending, 0, 0.2);
   private smoke = new ParticlePool(700, THREE.NormalBlending, 0.35, 0.35);
   private water = new ParticlePool(500, THREE.NormalBlending, -9, 0.05);
   private fireLights: THREE.PointLight[] = [];
   private buildingObjs = new Map<string, BuildingObj>();
   private propsGroup = new THREE.Group();
   private obstacleKey = '';
-  private incidentFx = new Map<number, { ring: THREE.Mesh; beam: THREE.Mesh; tape?: THREE.Group; props: THREE.Group; flares?: THREE.Vector3[]; robot?: THREE.Group; pack?: THREE.Group }>();
+  private incidentFx = new Map<number, { ring: THREE.Mesh; beam: THREE.Mesh; tape?: THREE.Group; props: THREE.Group; flares?: THREE.Vector3[]; steam?: THREE.Vector3[]; beacon?: THREE.Mesh; robot?: THREE.Group; pack?: THREE.Group }>();
   private hoseSegs: THREE.Mesh[] = [];
   private hoseMat = new THREE.MeshLambertMaterial({ color: 0xf0b21a });
 
@@ -194,7 +196,7 @@ export class Three3DRenderer implements GameRenderer {
     this.dragBox.visible = false;
     this.scene.add(this.dragBox);
 
-    this.scene.add(this.propsGroup, this.smoke.points, this.flames.points, this.water.points);
+    this.scene.add(this.propsGroup, this.smoke.points, this.flames.points, this.halo.points, this.water.points);
     for (let i = 0; i < 3; i++) {
       const l = new THREE.PointLight(0xff7a2a, 0, 38, 1.6);
       l.visible = false;
@@ -218,6 +220,10 @@ export class Three3DRenderer implements GameRenderer {
     this.disposeGroup(this.propsGroup);
     for (const f of this.incidentFx.values()) { this.scene.remove(f.ring, f.beam); if (f.tape) this.scene.remove(f.tape); this.disposeObj(f.ring); this.disposeObj(f.beam); }
     this.incidentFx.clear();
+    for (const vp of this.victimProps.values()) { this.scene.remove(vp.obj); this.disposeObj(vp.obj); }
+    this.victimProps.clear();
+    for (const bp of this.bagProps.values()) { this.scene.remove(bp.obj); this.disposeObj(bp.obj); }
+    this.bagProps.clear();
     for (const m of [this.vehicles, this.people, this.cars]) { for (const t of m.values()) this.disposeObj(t.obj); m.clear(); }
     for (const s of this.incidentMarkers.values()) this.disposeObj(s);
     this.incidentMarkers.clear();
@@ -287,10 +293,10 @@ export class Three3DRenderer implements GameRenderer {
   setDayNight(on: boolean): void { this.env.enabled = on; }
   private updatePoolScale(): void {
     const h = this.renderer.getDrawingBufferSize(new THREE.Vector2()).y || 768;
-    for (const p of [this.flames, this.smoke, this.water]) p.setScale(h, this.camera.fov);
+    for (const p of [this.flames, this.halo, this.smoke, this.water]) p.setScale(h, this.camera.fov);
   }
   destroy(): void {
-    for (const p of [this.flames, this.smoke, this.water]) p.dispose();
+    for (const p of [this.flames, this.halo, this.smoke, this.water]) p.dispose();
     this.renderer.dispose();
     this.canvas.remove();
   }
@@ -375,12 +381,13 @@ export class Three3DRenderer implements GameRenderer {
       const decor = decorateBuilding(group, b.type, b.roof ?? 'flat', w, d, heightMeters, seed, side, rise);
       const slots = windowSlots(b.type, w, d, heightMeters, seed, side);
       const win: BuildingObj['win'] = [];
+      const fwMats: THREE.Matrix4[] = [];
       for (const [list, dark, all] of [[slots.lit, false, litAll], [slots.dark, true, darkAll]] as [THREE.Matrix4[], boolean, THREE.Matrix4[]][]) {
         win.push({ start: all.length, count: list.length, dark });
-        for (const m of list) { baseM.compose(new THREE.Vector3(group.position.x, 0, group.position.z), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1)); all.push(baseM.clone().multiply(m)); }
+        for (const m of list) { baseM.compose(new THREE.Vector3(group.position.x, 0, group.position.z), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1)); const wm = baseM.clone().multiply(m); all.push(wm); fwMats.push(wm); }
       }
       this.buildingsGroup.add(group);
-      this.buildingObjs.set(b.id, { decor, win, group, body, roof, bodyMat, roofMat, wall: new THREE.Color(colors.wall), roofCol: new THREE.Color(colors.roof), h: heightMeters, key: '' });
+      this.buildingObjs.set(b.id, { fw: { start: -1, mats: fwMats, key: '' }, decor, win, group, body, roof, bodyMat, roofMat, wall: new THREE.Color(colors.wall), roofCol: new THREE.Color(colors.roof), h: heightMeters, key: '' });
     }
     const wg = new THREE.BoxGeometry(1, 1, 0.08);
     const mk = (list: THREE.Matrix4[], mat: THREE.Material): THREE.InstancedMesh | null => {
@@ -391,6 +398,17 @@ export class Three3DRenderer implements GameRenderer {
       this.scene.add(im);
       return im;
     };
+    if (this.fireWin) { this.scene.remove(this.fireWin); this.fireWin.dispose(); this.fireWin = null; }
+    let total = 0;
+    for (const bo of this.buildingObjs.values()) { bo.fw.start = total; total += bo.fw.mats.length; }
+    if (total) {
+      const fw = new THREE.InstancedMesh(wg, new THREE.MeshBasicMaterial({ color: 0xffffff }), total);
+      const zero = new THREE.Matrix4().makeScale(0, 0, 0), white = new THREE.Color(1, 1, 1);
+      for (let i = 0; i < total; i++) { fw.setMatrixAt(i, zero); fw.setColorAt(i, white); }
+      fw.frustumCulled = false;
+      this.scene.add(fw);
+      this.fireWin = fw;
+    }
     this.winLit = mk(litAll, this.env.windowLit);
     this.winDark = mk(darkAll, this.env.windowDark);
   }
@@ -481,47 +499,103 @@ export class Three3DRenderer implements GameRenderer {
         ladder.rotation.z = 1.05 * t;
         ladder.scale.x = 1 + 0.9 * t;
       }
+      for (const nm of ['rdoorL', 'rdoorR']) {
+        const door = obj.getObjectByName(nm);
+        if (!door) continue;
+        const target = v.open ? 1 : 0;
+        door.userData.t = (door.userData.t ?? 0) + (target - (door.userData.t ?? 0)) * Math.min(1, this.lastDt * 4);
+        door.rotation.y = (nm === 'rdoorR' ? 1 : -1) * 1.75 * (door.userData.t as number);
+      }
       const robot = obj.getObjectByName('robot');
       if (robot) robot.visible = !this.anyDefusing;
     });
   }
+  private paleSkin = lambert(0xcdbfb4);
   private makePerson(p: SnapPerson): THREE.Object3D {
     const color = p.kind === 'responder' ? roleColor(p.model) : p.kind === 'suspect' ? 0x90a4ae : p.kind === 'victim' ? 0xffab91 : pedColor(p.model);
     const group = new THREE.Group();
+    const rig = new THREE.Group();
+    group.add(rig);
     const skin = lambert(0xe8c39e), cloth = lambert(color), legs = lambert(p.kind === 'responder' ? 0x20242c : 0x2d3340);
-    const mk = (g: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number): THREE.Mesh => { const mesh = new THREE.Mesh(g, m); mesh.position.set(x, y, z); group.add(mesh); return mesh; };
+    const mk = (g: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number): THREE.Mesh => { const mesh = new THREE.Mesh(g, m); mesh.position.set(x, y, z); rig.add(mesh); return mesh; };
     const legGeo = sharedBox(0.16, 0.5, 0.18), torsoGeo = sharedBox(0.28, 0.5, 0.42), armGeo = sharedBox(0.1, 0.44, 0.1);
     const headGeo = sharedSphere(0.15);
-    mk(legGeo, legs, 0, 0.25, 0.1); mk(legGeo, legs, 0, 0.25, -0.1);
-    mk(torsoGeo, cloth, 0, 0.75, 0);
+    const legA = mk(legGeo, legs, 0, 0.25, 0.1), legB = mk(legGeo, legs, 0, 0.25, -0.1);
+    const torso = mk(torsoGeo, cloth, 0, 0.75, 0);
     const armL = mk(armGeo, cloth, 0, 0.8, 0.27), armR = mk(armGeo, cloth, 0, 0.8, -0.27);
-    mk(headGeo, skin, 0, 1.15, 0);
+    const head = mk(headGeo, skin, 0, 1.15, 0);
     if (p.kind === 'responder') { // helmet / cap in the service colour, reflective stripe
       mk(sharedHelmet(), lambert(/fire|rescue/.test(p.model) ? 0xf2c230 : /officer/.test(p.model) ? 0x1b2a55 : 0xf2f2f2), 0, 1.2, 0);
       mk(sharedBox(0.3, 0.07, 0.44), lambert(0xe8e04a), 0, 0.62, 0);
+      if (/paramedic|doctor/.test(p.model)) mk(sharedBox(0.3, 0.06, 0.44), lambert(0xff7a1a), 0, 0.9, 0); // hi-vis band
     }
     group.userData.arms = [armL, armR];
+    group.userData.rig = rig;
+    group.userData.parts = { legs: [legA, legB], torso, head, skin };
     group.userData.kind = 'person';
     group.userData.id = p.id;
     return group;
   }
+  private victimProps = new Map<number, { obj: THREE.Object3D; key: string; frame: number }>();
+  private bagProps = new Map<number, { obj: THREE.Object3D; frame: number }>();
   private syncPeople(list: SnapPerson[]): void {
+    const seenVictims = new Set<number>();
     this.track(this.people, list, p => this.makePerson(p), (obj, p) => {
+      const info = p.info;
       const lying = p.kind === 'victim' && p.state !== 'carried';
       obj.visible = true;
       obj.position.set(p.position.x, 0, p.position.z);
       obj.rotation.y = lying ? 0 : -p.heading;
       obj.rotation.z = lying ? Math.PI / 2 : 0;
-      obj.position.y = lying ? 0.2 : 0;
+      const onBed = !!(info && info.treated && p.state === 'scene');
+      obj.position.y = lying ? (onBed ? 0.78 : 0.2) : 0;
+      const rig = obj.userData.rig as THREE.Group;
+      const parts = obj.userData.parts as { legs: THREE.Mesh[]; torso: THREE.Mesh; head: THREE.Mesh; skin: THREE.Material };
+      if (info && parts) parts.head.material = info.health < 45 ? this.paleSkin : parts.skin;
       const arms = obj.userData.arms as THREE.Mesh[] | undefined;
+      const t = this.time * 7 + p.id;
+      const kneeling = p.state === 'treat' || p.state === 'rescue';
+      rig.position.y = kneeling ? -0.26 : 0;
+      rig.rotation.x = p.state === 'extinguish' ? 0.18 : 0; // lean into the hose
+      if (parts) for (const l of parts.legs) { l.scale.y = kneeling ? 0.55 : 1; l.position.y = kneeling ? 0.14 : 0.25; }
       if (arms) {
-        const t = this.time * 7 + p.id;
         const walking = p.state === 'walking' || p.state === 'move' || p.state === 'leaving';
-        const working = p.state === 'extinguish' || p.state === 'treat' || p.state === 'rescue' || p.state === 'arrest' || p.state === 'clear' || p.state === 'secure';
-        arms[0].rotation.z = walking ? Math.sin(t) * 0.7 : working ? -1.1 : 0;
-        arms[1].rotation.z = walking ? -Math.sin(t) * 0.7 : working ? -1.1 : 0;
+        const working = p.state === 'extinguish' || p.state === 'arrest' || p.state === 'clear' || p.state === 'secure' || p.state === 'defuse';
+        if (p.state === 'treat') { // chest compressions
+          const pump = Math.sin(this.time * 9 + p.id) * 0.3;
+          arms[0].rotation.z = -1.35 + pump; arms[1].rotation.z = -1.35 + pump;
+        } else {
+          arms[0].rotation.z = walking ? Math.sin(t) * 0.7 : working ? -1.1 : 0;
+          arms[1].rotation.z = walking ? -Math.sin(t) * 0.7 : working ? -1.1 : 0;
+        }
+      }
+      if (p.kind === 'victim' && info) {
+        seenVictims.add(p.id);
+        const trauma = /accident|collision|hit|fall|armed|fight/.test(info.incidentKind);
+        const key = `${p.state}|${info.treated ? 1 : 0}|${trauma && info.health < 85 ? 1 : 0}`;
+        let vp = this.victimProps.get(p.id);
+        if (!vp || vp.key !== key) {
+          if (vp) { this.scene.remove(vp.obj); this.disposeObj(vp.obj); }
+          const g = new THREE.Group();
+          if (p.state === 'dead') g.add(buildStretcher(0xe0b030));
+          else if (p.state === 'scene' && info.treated) g.add(buildStretcher(0xd24a2a));
+          else if (p.state === 'scene' && trauma && info.health < 85) g.add(buildBloodPool(p.id));
+          this.scene.add(g);
+          vp = { obj: g, key, frame: 0 };
+          this.victimProps.set(p.id, vp);
+        }
+        vp.frame = this.frame;
+        vp.obj.position.set(p.position.x, 0, p.position.z);
+      }
+      if (p.state === 'treat') { // medical bag next to the kneeling paramedic
+        let bag = this.bagProps.get(p.id);
+        if (!bag) { const g = buildMedBag(); this.scene.add(g); bag = { obj: g, frame: 0 }; this.bagProps.set(p.id, bag); }
+        bag.frame = this.frame;
+        bag.obj.position.set(p.position.x + Math.cos(-p.heading + 1.2) * 0.8, 0, p.position.z + Math.sin(-p.heading + 1.2) * 0.8);
       }
     });
+    for (const [id, vp] of this.victimProps) if (vp.frame !== this.frame || !seenVictims.has(id)) { this.scene.remove(vp.obj); this.disposeObj(vp.obj); this.victimProps.delete(id); }
+    for (const [id, bp] of this.bagProps) if (bp.frame !== this.frame) { this.scene.remove(bp.obj); this.disposeObj(bp.obj); this.bagProps.delete(id); }
   }
   private syncCars(list: SnapCar[]): void {
     this.track(this.cars, list, c => {
@@ -549,6 +623,7 @@ export class Three3DRenderer implements GameRenderer {
   private propsFor(kind: string, seed: number): THREE.Group {
     const g = new THREE.Group();
     if (/accident|collision|hit/.test(kind)) {
+      g.add(buildAccidentDetail(seed));
       const w = buildWreck(seed); w.position.set(0, 0, 0); w.rotation.y = seed * 0.9; g.add(w);
       if (kind !== 'pedestrian_hit') { const w2 = buildWreck(seed + 1); w2.position.set(3.2, 0, 2.4); w2.rotation.y = seed * 0.9 + 1.2; g.add(w2); }
       const d = buildDebris(seed); d.position.set(1.5, 0, 1); g.add(d);
@@ -590,7 +665,16 @@ export class Three3DRenderer implements GameRenderer {
           pack.position.set(p0.x, 0, p0.z + ((bb ? bb.h : 3) / 2 + 0.8) * TILE_METERS);
           this.scene.add(pack);
         }
-        fx = { ring, beam, props, pack };
+        let steam: THREE.Vector3[] | undefined;
+        if (/accident|collision|hit/.test(inc.kind)) steam = [new THREE.Vector3(props.position.x, 1.0, props.position.z)];
+        let beacon: THREE.Mesh | undefined;
+        if (/burglary|armed_robbery/.test(inc.kind)) { // burglar alarm beacon on the front of the building
+          const bb2 = snap.buildings.find(x => Math.abs(x.x + x.w / 2 - inc.x) < 0.01 && Math.abs(x.y + x.h / 2 - inc.y) < 0.01);
+          beacon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.4), new THREE.MeshStandardMaterial({ color: 0xff2a1a, emissive: 0xff2a1a, emissiveIntensity: 1 }));
+          beacon.position.set(p0.x, 3.8, p0.z + ((bb2 ? bb2.h : 3) / 2) * TILE_METERS + 0.3);
+          this.scene.add(beacon);
+        }
+        fx = { ring, beam, props, pack, steam, beacon };
         this.incidentFx.set(inc.id, fx);
       }
       if (fx.pack) { // the bomb robot rolls up to the package while the crew defuses it
@@ -598,6 +682,7 @@ export class Three3DRenderer implements GameRenderer {
         if (fx.robot) { fx.robot.visible = inc.defusing; fx.robot.children.forEach((c, i) => { if (i === 5) c.rotation.z = -0.25 + Math.sin(this.time * 3) * 0.2; }); }
         fx.pack.visible = !inc.defused;
       }
+      if (fx.beacon) (fx.beacon.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(this.time * 10) > 0 ? 2 : 0.1;
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 3 + inc.id);
       (fx.ring.material as THREE.MeshBasicMaterial).opacity = 0.3 + pulse * 0.4;
       fx.ring.scale.setScalar(1 + pulse * 0.08);
@@ -642,7 +727,7 @@ export class Three3DRenderer implements GameRenderer {
     for (const [id, s] of this.incidentMarkers) if (!keep.has(id)) { this.scene.remove(s); this.disposeObj(s); this.incidentMarkers.delete(id); }
     for (const [id, f] of this.incidentFx) if (!keep.has(id)) {
       this.scene.remove(f.ring, f.beam, f.props); this.disposeObj(f.ring); this.disposeObj(f.beam); this.disposeObj(f.props);
-      for (const extra of [f.pack, f.robot]) if (extra) { this.scene.remove(extra); this.disposeObj(extra); }
+      for (const extra of [f.pack, f.robot, f.beacon]) if (extra) { this.scene.remove(extra); this.disposeObj(extra); }
       if (f.tape) { this.scene.remove(f.tape); this.disposeObj(f.tape); }
       this.incidentFx.delete(id);
     }
@@ -760,8 +845,41 @@ export class Three3DRenderer implements GameRenderer {
   }
 
   // ---------- fire / smoke ----------
+  /** Windows of burning buildings glow orange and flicker; more of them as the fire grows. */
+  private updateFireWindows(snap: RenderSnapshot): void {
+    const fw = this.fireWin;
+    if (!fw) return;
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0), grow = new THREE.Matrix4().makeScale(1.12, 1.12, 2.2), tmp = new THREE.Matrix4(), col = new THREE.Color();
+    let colorsDirty = false, matsDirty = false;
+    for (const sb of snap.buildings) {
+      const bo = this.buildingObjs.get(sb.id);
+      if (!bo || bo.fw.start < 0) continue;
+      const burning = sb.fire > 0 && !sb.destroyed;
+      const key = burning ? String(Math.round((sb.fire / 100) * 24)) : 'off';
+      if (key !== bo.fw.key) {
+        bo.fw.key = key;
+        const k = burning ? Math.min(1, (sb.fire / 100) * 1.25) : 0;
+        bo.fw.mats.forEach((m, j) => {
+          const on = burning && (((j * 2654435761) >>> 0) % 1000) / 1000 < k;
+          fw.setMatrixAt(bo.fw.start + j, on ? tmp.copy(m).multiply(grow) : zero);
+        });
+        matsDirty = true;
+      }
+      if (!burning) continue;
+      bo.fw.mats.forEach((_, j) => {
+        const f = 0.55 + 0.45 * Math.sin(this.time * 9 + j * 1.7) * Math.sin(this.time * 5.3 + j);
+        col.setRGB(1, 0.35 + 0.4 * f, 0.05 + 0.1 * f);
+        fw.setColorAt(bo.fw.start + j, col);
+      });
+      colorsDirty = true;
+    }
+    if (matsDirty) fw.instanceMatrix.needsUpdate = true;
+    if (colorsDirty && fw.instanceColor) fw.instanceColor.needsUpdate = true;
+  }
+
   private updateFire(snap: RenderSnapshot, dt: number): void {
     const live = this.host.state === 'playing';
+    this.updateFireWindows(snap);
     const burning: { b: typeof snap.buildings[number]; cx: number; cz: number; k: number }[] = [];
     for (const b of snap.buildings) {
       if (b.fire <= 0) continue;
@@ -769,35 +887,38 @@ export class Three3DRenderer implements GameRenderer {
       burning.push({ b, cx: (b.x + b.w / 2) * TILE_METERS, cz: (b.y + b.h / 2) * TILE_METERS, k });
       if (!live) continue;
       const w = b.w * TILE_METERS, d = b.h * TILE_METERS, top = b.destroyed ? b.heightMeters * 0.3 : b.heightMeters;
-      // flames: through windows (random height on the walls) and out of the roof; more of them as the fire grows
-      let nFlames = (3 + k * 22) * dt * 6;
+      // tongues of flame out of windows (on the walls, bending upwards) and a fire bed on the roof
+      let nFlames = (2 + k * 20) * dt * 7;
       while (nFlames > 0) {
         if (Math.random() < Math.min(1, nFlames)) {
-          const wall = Math.random() < 0.55 && !b.destroyed;
-          let x: number, z: number, y: number;
+          const wall = Math.random() < 0.6 && !b.destroyed;
+          let x: number, z: number, y: number, vx = (Math.random() - 0.5) * 0.7, vz = (Math.random() - 0.5) * 0.7;
           if (wall) {
             const side = Math.floor(Math.random() * 4);
-            y = 1.4 + Math.random() * Math.max(1, top - 1.6);
+            y = 1.6 + Math.random() * Math.max(1, top - 2.2);
             x = side < 2 ? (b.x + Math.random() * b.w) * TILE_METERS : (b.x + (side === 2 ? 0 : b.w)) * TILE_METERS;
             z = side < 2 ? (b.y + (side === 0 ? 0 : b.h)) * TILE_METERS : (b.y + Math.random() * b.h) * TILE_METERS;
-          } else { x = cx(b, w) + (Math.random() - 0.5) * w * 0.8; z = cz(b, d) + (Math.random() - 0.5) * d * 0.8; y = top; }
-          const s = 0.9 + k * 1.6 + Math.random() * 0.8;
-          this.flames.emit({ x, y, z, vx: (Math.random() - 0.5) * 0.8, vy: 2.2 + k * 3 + Math.random() * 1.8, vz: (Math.random() - 0.5) * 0.8, life: 0.55 + Math.random() * 0.6, size0: s, size1: s * 0.25, c0: Math.random() < 0.35 ? 0xfff2a0 : 0xffa030, c1: 0xc01c08, alpha: 0.9 });
+            if (side < 2) vz += (side === 0 ? -1 : 1) * 0.9; else vx += (side === 2 ? -1 : 1) * 0.9; // flames lean out of the window
+          } else { x = cx(b, w) + (Math.random() - 0.5) * w * 0.85; z = cz(b, d) + (Math.random() - 0.5) * d * 0.85; y = top; }
+          const s = 2.0 + k * 2.6 + Math.random() * 1.2;
+          this.flames.emit({ x, y: y + s * 0.25, z, vx, vy: 1.6 + k * 2.4 + Math.random() * 1.4, vz, life: 0.5 + Math.random() * 0.55, size0: s * 0.7, size1: s * 1.15, c0: Math.random() < 0.3 ? 0xffd860 : 0xff8a1c, c1: 0xd0300a, alpha: 0.95 });
         }
         nFlames -= 1;
       }
-      // smoke: dark, billowing, drifting with the wind
-      let nSmoke = (1.5 + k * 9) * dt * 6;
+      // heat glow over the roof
+      if (Math.random() < dt * (3 + k * 12)) this.halo.emit({ x: cx(b, w) + (Math.random() - 0.5) * w * 0.6, y: top + 1.5, z: cz(b, d) + (Math.random() - 0.5) * d * 0.6, vx: 0, vy: 0.4, vz: 0, life: 0.9, size0: 7 + k * 8, size1: 10 + k * 10, c0: 0xff6a1a, c1: 0xa02808, alpha: 0.1 + k * 0.09 });
+      // smoke: reddish-black at the base, thickening with the fire, leaning with the wind
+      let nSmoke = (1.5 + k * 11) * dt * 6;
       while (nSmoke > 0) {
         if (Math.random() < Math.min(1, nSmoke)) {
-          const dark = 0.28 + Math.random() * 0.14;
-          const c = (Math.round(dark * 255) << 16) | (Math.round(dark * 255) << 8) | Math.round(dark * 255 + 6);
-          this.smoke.emit({ x: cx(b, w) + (Math.random() - 0.5) * w * 0.7, y: top + 0.5, z: cz(b, d) + (Math.random() - 0.5) * d * 0.7, vx: 1.2 + Math.random() * 0.8, vy: 2.5 + k * 2.5 + Math.random() * 1.2, vz: 0.4 + Math.random() * 0.5, life: 3.2 + Math.random() * 2.2, size0: 1.8 + k, size1: 7 + k * 6, c0: c, c1: 0x8a8a90, alpha: 0.32 });
+          const dark = 0.12 + Math.random() * 0.14;
+          const c = (Math.round(dark * 255 * 1.2) << 16) | (Math.round(dark * 255) << 8) | Math.round(dark * 255);
+          this.smoke.emit({ x: cx(b, w) + (Math.random() - 0.5) * w * 0.7, y: top + 0.8, z: cz(b, d) + (Math.random() - 0.5) * d * 0.7, vx: 1.4 + Math.random() * 0.8, vy: 2.8 + k * 2.8 + Math.random() * 1.2, vz: 0.5 + Math.random() * 0.5, life: 3.6 + Math.random() * 2.4 + k * 1.5, size0: 1.8 + k * 1.2, size1: 6 + k * 5, c0: c, c1: 0x9a9aa0, alpha: 0.2 + k * 0.1 });
         }
         nSmoke -= 1;
       }
-      // embers
-      if (Math.random() < k * dt * 8) this.flames.emit({ x: cx(b, w), y: top, z: cz(b, d), vx: (Math.random() - 0.3) * 3, vy: 4 + Math.random() * 3, vz: (Math.random() - 0.5) * 3, life: 1.3, size0: 0.22, size1: 0.1, c0: 0xffd060, c1: 0xff3000, alpha: 1 });
+      // sparks and embers
+      if (Math.random() < k * dt * 14) this.halo.emit({ x: cx(b, w) + (Math.random() - 0.5) * w * 0.5, y: top, z: cz(b, d) + (Math.random() - 0.5) * d * 0.5, vx: (Math.random() - 0.3) * 3.5, vy: 4 + Math.random() * 4, vz: (Math.random() - 0.5) * 3.5, life: 1.6, size0: 0.28, size1: 0.1, c0: 0xffd060, c1: 0xff3000, alpha: 1 });
     }
     // flickering light on the (up to three) strongest fires
     burning.sort((a, c) => c.k - a.k);
@@ -806,12 +927,14 @@ export class Three3DRenderer implements GameRenderer {
       l.visible = !!f;
       if (!f) return;
       l.position.set(f.cx, Math.min(f.b.heightMeters, 12) * 0.7, f.cz);
-      l.intensity = (60 + 160 * f.k) * (0.85 + 0.15 * Math.sin(this.time * 17 + i * 3) + 0.1 * Math.sin(this.time * 31));
+      l.distance = 46;
+      l.intensity = (80 + 200 * f.k) * (0.85 + 0.15 * Math.sin(this.time * 17 + i * 3) + 0.1 * Math.sin(this.time * 31));
     });
-    if (live) for (const f of this.incidentFx.values()) for (const p of f.flares ?? []) { // road flares: a small red glow and sparks
-      if (Math.random() < dt * 12) this.flames.emit({ x: p.x, y: p.y, z: p.z, vx: (Math.random() - 0.5) * 0.6, vy: 0.8 + Math.random(), vz: (Math.random() - 0.5) * 0.6, life: 0.5, size0: 0.5, size1: 0.15, c0: 0xff6a4a, c1: 0xb01010, alpha: 0.9 });
+    if (live) for (const f of this.incidentFx.values()) {
+      for (const p of f.flares ?? []) if (Math.random() < dt * 12) this.halo.emit({ x: p.x, y: p.y, z: p.z, vx: (Math.random() - 0.5) * 0.6, vy: 0.8 + Math.random(), vz: (Math.random() - 0.5) * 0.6, life: 0.5, size0: 0.6, size1: 0.2, c0: 0xff6a4a, c1: 0xb01010, alpha: 0.9 });
+      for (const p of f.steam ?? []) if (Math.random() < dt * 5) this.smoke.emit({ x: p.x, y: p.y, z: p.z, vx: 0.3, vy: 1.3, vz: 0.2, life: 2.4, size0: 0.6, size1: 3.4, c0: 0xe4e4e4, c1: 0xffffff, alpha: 0.22 });
     }
-    this.flames.update(dt); this.smoke.update(dt); this.water.update(dt);
+    this.flames.update(dt); this.halo.update(dt); this.smoke.update(dt); this.water.update(dt);
   }
 
   // ---------- input ----------
