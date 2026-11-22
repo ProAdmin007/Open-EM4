@@ -26,9 +26,13 @@ await page.evaluate(() => {
   or.scene.select([v.id]);
   w.contextOrder([v.id], b.x + b.w / 2, b.y + b.h / 2);
   or.scene.centerOn(b.x + b.w / 2, b.y + b.h / 2 + 2);
-  or.scene.zoomBy(0.6);
+  or.scene.renderer3d.distance = 52; or.scene.centerOn(b.x + b.w / 2, b.y + b.h / 2 + 1);
 });
-await page.locator('[data-act="speed3"]').click().catch(() => {});
-await page.waitForTimeout(12000);
+await page.locator('[data-act="speed4"]').click().catch(() => {});
+await page.waitForTimeout(9000);
+await page.keyboard.press('b');
+await page.waitForFunction(() => [...window.__openrescue.world.responders.values()].some(r => r.task?.type === 'extinguish' && r.task.deploy >= 2.5), undefined, { timeout: 90000 });
+await page.locator('[data-act="speed1"]').click().catch(() => {});
+await page.waitForTimeout(1500);
 await page.screenshot({ path: 'docs/screenshot-3d-fire.png' });
 await browser.close();

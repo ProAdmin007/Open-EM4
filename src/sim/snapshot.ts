@@ -32,6 +32,8 @@ export interface SnapPerson {
   heading: number;
   /** only for people that are visible in the world (not inside a vehicle, building or hospital) */
   state: string;
+  /** a firefighter whose hose is connected: the vehicle the hose comes from, and (once deployed) the point being sprayed */
+  hose?: { fromX: number; fromY: number; spray?: { x: number; y: number; buildingId: string } };
 }
 export interface SnapCar {
   id: number;
@@ -61,6 +63,7 @@ export interface SnapIncident {
   severity: number;
   x: number;
   y: number;
+  secured: boolean;
 }
 export interface RenderSnapshot {
   time: number;
@@ -71,7 +74,7 @@ export interface RenderSnapshot {
   cars: SnapCar[];
   buildings: SnapBuilding[];
   incidents: SnapIncident[];
-  obstacles: { x: number; y: number }[];
+  obstacles: { x: number; y: number; kind: string }[];
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -92,7 +95,16 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
   for (const r of world.responders.values()) {
     if (r.inVehicle) continue;
     const x = ix(r), y = iy(r);
-    snap.people.push({ id: r.id, kind: 'responder', model: modelId('person', r.role, world.roleDef(r).model), x, y, position: tileToWorld3D(x, y), heading: r.angle, state: r.task?.type ?? 'idle' });
+    const person: SnapPerson = { id: r.id, kind: 'responder', model: modelId('person', r.role, world.roleDef(r).model), x, y, position: tileToWorld3D(x, y), heading: r.angle, state: r.task?.type ?? 'idle' };
+    if (r.task?.type === 'extinguish') {
+      const veh = world.vehicles.get(r.vehicleId);
+      const b = world.buildings.get(r.task.buildingId);
+      if (veh) {
+        person.hose = { fromX: ix(veh), fromY: iy(veh) };
+        if (b && r.task.deploy >= 2.5) person.hose.spray = { x: Math.max(b.x, Math.min(b.x + b.w, r.x)), y: Math.max(b.y, Math.min(b.y + b.h, r.y)), buildingId: b.id };
+      }
+    }
+    snap.people.push(person);
   }
   for (const v of world.victims.values()) {
     if (v.transport !== 'scene' && v.transport !== 'carried' && v.transport !== 'dead') continue;
@@ -119,7 +131,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
       roof: b.roof ?? 'flat', fire: b.fire, damage: b.damage, destroyed: b.destroyed,
     });
   }
-  for (const i of world.incidents.values()) snap.incidents.push({ id: i.id, kind: i.defId, severity: i.severity, x: i.x, y: i.y });
-  for (const key of world.obstacles) snap.obstacles.push({ x: key % 4096, y: Math.floor(key / 4096) });
+  for (const i of world.incidents.values()) snap.incidents.push({ id: i.id, kind: i.defId, severity: i.severity, x: i.x, y: i.y, secured: i.secured });
+  for (const i of world.incidents.values()) for (const o of i.obstacle) snap.obstacles.push({ x: o.x, y: o.y, kind: i.defId });
   return snap;
 }
