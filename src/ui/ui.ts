@@ -349,6 +349,8 @@ export class UI {
           <label>Volume<input id="s-vol" type="range" min="0" max="100" value="${Math.round(this.settings.volume * 100)}"></label>
           <label>Standaard spelsnelheid<select id="s-speed">${[1, 2, 4].map(n => `<option value="${n}" ${this.settings.defaultSpeed === n ? 'selected' : ''}>${n}×</option>`).join('')}</select></label>
           <label>Weergave<select id="s-view"><option value="2d" ${this.settings.viewMode === '2d' ? 'selected' : ''}>2D</option><option value="3d" ${this.settings.viewMode === '3d' ? 'selected' : ''}>3D (experimenteel)</option></select></label>
+          <label>3D: schaduwen<input id="s-shadows" type="checkbox" ${localStorage.getItem('openrescue.shadows') !== '0' ? 'checked' : ''}></label>
+          <label>3D: dag en nacht<input id="s-daynight" type="checkbox" ${localStorage.getItem('openrescue.daynight') !== '0' ? 'checked' : ''}></label>
           <hr style="border-color:#34405a;width:100%">
           <div><b>Mods</b> <span class="help">(JSON-bestand met voertuigen, incidenten, rollen of kaarten — zie docs/modding.md)</span></div>
           <input id="s-mod" type="file" accept=".json,application/json">
@@ -365,6 +367,10 @@ export class UI {
           const view = (sc.querySelector('#s-view') as HTMLSelectElement).value as '2d' | '3d';
           if (view !== this.settings.viewMode) { this.settings.viewMode = view; void this.scene.setViewMode(this.settings.viewMode); }
           this.scene.edgeScroll = this.settings.edgeScroll;
+          const shadows = (sc.querySelector('#s-shadows') as HTMLInputElement).checked, dayNight = (sc.querySelector('#s-daynight') as HTMLInputElement).checked;
+          try { localStorage.setItem('openrescue.shadows', shadows ? '1' : '0'); localStorage.setItem('openrescue.daynight', dayNight ? '1' : '0'); } catch { /* storage unavailable */ }
+          const r3 = this.scene.renderer3d as unknown as { setShadows?(on: boolean): void; setDayNight?(on: boolean): void } | null;
+          r3?.setShadows?.(shadows); r3?.setDayNight?.(dayNight);
           this.applyAudio();
           saveSettings(this.settings);
         };

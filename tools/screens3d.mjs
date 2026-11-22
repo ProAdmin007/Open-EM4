@@ -3,7 +3,7 @@ import { chromium } from '@playwright/test';
 const browser = await chromium.launch({ channel: process.env.PW_CHANNEL ?? 'chrome', args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
 for (let i = 0; i < 8; i++) { // the first software-GL context after a browser start is sometimes lost
-  await page.goto('http://localhost:4173/?e2e');
+  await page.goto('http://localhost:4173/?e2e&fx');
   await page.waitForFunction(() => !!window.__openrescue?.scene, undefined, { timeout: 15000 }).catch(() => {});
   const a = await page.evaluate(() => window.__openrescue?.game?.loop?.frame ?? -1);
   await page.waitForTimeout(1200);
@@ -35,4 +35,7 @@ await page.waitForFunction(() => [...window.__openrescue.world.responders.values
 await page.locator('[data-act="speed1"]').click().catch(() => {});
 await page.waitForTimeout(1500);
 await page.screenshot({ path: 'docs/screenshot-3d-fire.png' });
+await page.evaluate(() => { window.__openrescue.world.time = 770; });
+await page.waitForTimeout(1500);
+await page.screenshot({ path: 'docs/screenshot-3d-night.png' });
 await browser.close();

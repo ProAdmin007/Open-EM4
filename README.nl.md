@@ -41,7 +41,7 @@ Het spel is geïnspireerd op de gameplay van *Emergency 4* (2006), maar is een *
 
 De experimentele 3D-weergave (procedureel, three.js, geen externe assets):
 
-<p align="center"><img src="docs/screenshot-3d-fire.png" width="49%" alt="3D-weergave: een tankautospuit bij een brandende woning"> <img src="docs/screenshot-3d-city.png" width="49%" alt="3D-weergave: de stad van bovenaf"></p>
+<p align="center"><img src="docs/screenshot-3d-city.png" width="32%" alt="3D-weergave: de stad overdag"> <img src="docs/screenshot-3d-fire.png" width="32%" alt="3D-weergave: brandweer bij een brand"> <img src="docs/screenshot-3d-night.png" width="32%" alt="3D-weergave: de stad bij nacht"></p>
 
 ## Spelen
 

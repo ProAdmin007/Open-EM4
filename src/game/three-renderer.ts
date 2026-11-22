@@ -7,6 +7,7 @@ import { TILE_METERS, tileToWorld3D, world3DToTile } from '../sim/space';
 import { Commands, type SelectionHost } from './selection';
 import { buildBarrier, buildCivilianCar, buildDebris, buildFallenTree, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
 import { ParticlePool, setSegment } from './three-fx';
+import { Environment, bakeGround, buildStreetFurniture, buildVegetation, decorateBuilding, windowSlots } from './three-world';
 
 /**
  * First 3D view for OpenRescue (docs/3d.md). Everything is procedural (no external assets, MIT three.js): a baked
@@ -41,7 +42,6 @@ function sharedBox(w: number, h: number, d: number): THREE.BufferGeometry {
 let sphereGeo: THREE.BufferGeometry | null = null, helmetGeo: THREE.BufferGeometry | null = null;
 function sharedSphere(r: number): THREE.BufferGeometry { if (!sphereGeo) { sphereGeo = new THREE.SphereGeometry(r, 10, 8); sphereGeo.userData.shared = true; } return sphereGeo; }
 function sharedHelmet(): THREE.BufferGeometry { if (!helmetGeo) { helmetGeo = new THREE.SphereGeometry(0.17, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2); helmetGeo.userData.shared = true; } return helmetGeo; }
-const doorGeo = (): THREE.BufferGeometry => sharedBox(1.2, 2.1, 0.1);
 const hash = (x: number, y: number) => ((x * 73856093) ^ (y * 19349663)) >>> 0;
 
 /**
@@ -116,7 +116,7 @@ export function buildRoof(type: string, w: number, d: number): THREE.Object3D {
 }
 
 interface Tracked { obj: THREE.Object3D; frame: number; parts?: VehicleParts; lastX?: number; lastZ?: number; spin?: number }
-interface BuildingObj { group: THREE.Group; body: THREE.Mesh; roof: THREE.Object3D; bodyMat: THREE.MeshLambertMaterial; roofMat: THREE.MeshLambertMaterial; wall: THREE.Color; roofCol: THREE.Color; h: number; key: string }
+interface BuildingObj { decor: THREE.Mesh[]; win: { start: number; count: number; dark: boolean }[]; group: THREE.Group; body: THREE.Mesh; roof: THREE.Object3D; bodyMat: THREE.MeshLambertMaterial; roofMat: THREE.MeshLambertMaterial; wall: THREE.Color; roofCol: THREE.Color; h: number; key: string }
 const CHAR = new THREE.Color(0x1b1918);
 const cx = (b: { x: number; w: number }, _w: number): number => (b.x + b.w / 2) * TILE_METERS;
 const cz = (b: { y: number; h: number }, _d: number): number => (b.y + b.h / 2) * TILE_METERS;
@@ -134,7 +134,13 @@ export class Three3DRenderer implements GameRenderer {
   private world: World | null = null;
   private commands: Commands;
   private groundMesh: THREE.Mesh | null = null;
+  private outerGround: THREE.Mesh | null = null;
   private buildingsGroup = new THREE.Group();
+  private furnitureGroup = new THREE.Group();
+  private env!: Environment;
+  private winLit: THREE.InstancedMesh | null = null;
+  private winDark: THREE.InstancedMesh | null = null;
+  shadows = false;
   private treesGroup = new THREE.Group();
   private lightsGroup = new THREE.Group();
   private vehicles = new Map<number, Tracked>();
@@ -171,13 +177,15 @@ export class Three3DRenderer implements GameRenderer {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.camera = new THREE.PerspectiveCamera(48, 1, 0.5, 2500);
-    this.scene.background = new THREE.Color(0x1d2a1d);
-    this.scene.fog = new THREE.Fog(0x1d2a1d, 220, 820);
-    this.scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x33402a, 0.95));
-    const sun = new THREE.DirectionalLight(0xfff3e0, 1.05);
-    sun.position.set(140, 220, 90);
-    this.scene.add(sun);
-    this.scene.add(this.buildingsGroup, this.treesGroup, this.lightsGroup);
+    this.scene.background = null;
+    const fog = new THREE.Fog(0xbcd8f0, 260, 900);
+    this.scene.fog = fog;
+    this.env = new Environment(this.scene, fog);
+    const q = new URLSearchParams(location.search);
+    const auto = q.has('e2e') && !q.has('fx'); // automated tests: constant daylight, no shadow pass (software GL is slow)
+    this.env.enabled = !auto && localStorage.getItem('openrescue.daynight') !== '0';
+    this.setShadows(!auto && localStorage.getItem('openrescue.shadows') !== '0');
+    this.scene.add(this.buildingsGroup, this.treesGroup, this.lightsGroup, this.furnitureGroup);
 
     const dragMat = new THREE.MeshBasicMaterial({ color: 0x66ff66, transparent: true, opacity: 0.18, side: THREE.DoubleSide });
     this.dragBox = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), dragMat);
@@ -221,6 +229,7 @@ export class Three3DRenderer implements GameRenderer {
     this.time += dt;
     this.lastDt = dt;
     this.stepCamera(dt);
+    this.env.update(snap.time, this.target, this.camera.position);
     this.syncVehicles(snap.vehicles);
     this.syncPeople(snap.people);
     this.syncCars(snap.cars);
@@ -266,6 +275,14 @@ export class Three3DRenderer implements GameRenderer {
     this.renderer.setSize(width, height);
     this.updatePoolScale();
   }
+  setShadows(on: boolean): void {
+    this.shadows = on;
+    this.renderer.shadowMap.enabled = on;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.env.sun.castShadow = on;
+    this.scene.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.material) (Array.isArray(m.material) ? m.material : [m.material]).forEach(mm => { mm.needsUpdate = true; }); });
+  }
+  setDayNight(on: boolean): void { this.env.enabled = on; }
   private updatePoolScale(): void {
     const h = this.renderer.getDrawingBufferSize(new THREE.Vector2()).y || 768;
     for (const p of [this.flames, this.smoke, this.water]) p.setScale(h, this.camera.fov);
@@ -300,38 +317,12 @@ export class Three3DRenderer implements GameRenderer {
   // ---------- static scenery ----------
   private buildGround(world: World): void {
     if (this.groundMesh) { this.scene.remove(this.groundMesh); this.disposeObj(this.groundMesh); this.groundMesh = null; }
-    const texel = 10, w = world.w, h = world.h;
-    const canvas = document.createElement('canvas');
-    canvas.width = w * texel; canvas.height = h * texel;
-    const ctx = canvas.getContext('2d')!;
-    const bays = new Set(world.map.stations.flatMap(st => (st.bays ?? []).map(b => b.y * w + b.x)));
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const px = x * texel, py = y * texel;
-        if (world.isRoad(x, y)) {
-          ctx.fillStyle = '#3b3f46'; ctx.fillRect(px, py, texel, texel);
-          ctx.fillStyle = '#a9a79f';
-          if (!world.isRoad(x, y - 1)) ctx.fillRect(px, py, texel, 1);
-          if (!world.isRoad(x, y + 1)) ctx.fillRect(px, py + texel - 1, texel, 1);
-          if (!world.isRoad(x - 1, y)) ctx.fillRect(px, py, 1, texel);
-          if (!world.isRoad(x + 1, y)) ctx.fillRect(px + texel - 1, py, 1, texel);
-          if (!world.isIntersection(x, y) && (hash(x, y) % 3 === 0)) { ctx.fillStyle = '#e8e0a0'; ctx.fillRect(px + texel / 2 - 1, py + 2, 2, texel - 4); }
-        } else if (world.isWater(x, y)) {
-          ctx.fillStyle = '#2d6fa6'; ctx.fillRect(px, py, texel, texel);
-          ctx.fillStyle = 'rgba(79,147,200,0.5)'; ctx.fillRect(px + 2, py + ((hash(x, y) % 4) * 2), texel - 4, 1);
-        } else if (world.isParking(x, y)) {
-          ctx.fillStyle = '#4b505b'; ctx.fillRect(px, py, texel, texel);
-          if (bays.has(y * w + x)) { ctx.fillStyle = 'rgba(242,242,242,0.85)'; ctx.fillRect(px, py, 1, texel); ctx.fillRect(px + texel - 1, py, 1, texel); }
-        } else {
-          const v = hash(x, y) % 4;
-          ctx.fillStyle = v === 0 ? '#34522f' : v === 1 ? '#2c4529' : '#315030';
-          ctx.fillRect(px, py, texel, texel);
-        }
-      }
-    }
+    const w = world.w, h = world.h;
+    const canvas = bakeGround(world);
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
+    tex.generateMipmaps = true;
     const W = w * TILE_METERS, H = h * TILE_METERS;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, W, 0, 0, W, 0, H, 0, 0, H], 3));
@@ -340,12 +331,23 @@ export class Three3DRenderer implements GameRenderer {
     geo.setIndex([0, 2, 1, 0, 3, 2]); // counter-clockwise seen from above, otherwise the ground is back-face culled
     const mat = new THREE.MeshLambertMaterial({ map: tex });
     this.groundMesh = new THREE.Mesh(geo, mat);
+    this.groundMesh.receiveShadow = true;
+    if (!this.outerGround) {
+      this.outerGround = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshLambertMaterial({ color: 0x3a5f36 }));
+      this.outerGround.rotation.x = -Math.PI / 2;
+      this.outerGround.position.set(W / 2, -0.08, H / 2);
+      this.scene.add(this.outerGround);
+    }
     this.scene.add(this.groundMesh);
   }
 
   private buildBuildings(world: World): void {
     this.disposeGroup(this.buildingsGroup);
+    for (const im of [this.winLit, this.winDark]) if (im) { this.scene.remove(im); im.dispose(); }
     this.buildingObjs.clear();
+    const litAll: THREE.Matrix4[] = [], darkAll: THREE.Matrix4[] = [];
+    const stationIds = new Set(world.map.stations.map(st => st.buildingId));
+    const baseM = new THREE.Matrix4();
     for (const b of world.buildings.values()) {
       const w = b.w * TILE_METERS, d = b.h * TILE_METERS;
       const heightMeters = (b.floors ?? Math.max(1, Math.round(b.height / 10))) * 3.2;
@@ -355,64 +357,61 @@ export class Three3DRenderer implements GameRenderer {
       const roofMat = new THREE.MeshLambertMaterial({ color: colors.roof });
       const body = new THREE.Mesh(new THREE.BoxGeometry(w, heightMeters, d), bodyMat);
       body.position.y = heightMeters / 2;
+      body.castShadow = true; body.receiveShadow = true;
       group.add(body);
-      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25 })).translateY(heightMeters / 2));
-      this.addWindows(group, w, d, heightMeters, b.type, hash(b.x, b.y));
       const roof = buildRoof(b.roof ?? 'flat', w, d);
       (roof as THREE.Mesh).material = roofMat;
       roof.position.y = heightMeters;
+      (roof as THREE.Mesh).castShadow = true;
       group.add(roof);
       group.position.set((b.x + b.w / 2) * TILE_METERS, 0, (b.y + b.h / 2) * TILE_METERS);
       group.name = `building:${b.id}`;
       group.userData.buildingId = b.id;
+      const side = stationIds.has(b.id) ? 'north' : 'south';
+      const seed = hash(b.x, b.y);
+      const rise = Math.min(w, d) * 0.28;
+      const decor = decorateBuilding(group, b.type, b.roof ?? 'flat', w, d, heightMeters, seed, side, rise);
+      const slots = windowSlots(b.type, w, d, heightMeters, seed, side);
+      const win: BuildingObj['win'] = [];
+      for (const [list, dark, all] of [[slots.lit, false, litAll], [slots.dark, true, darkAll]] as [THREE.Matrix4[], boolean, THREE.Matrix4[]][]) {
+        win.push({ start: all.length, count: list.length, dark });
+        for (const m of list) { baseM.compose(new THREE.Vector3(group.position.x, 0, group.position.z), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1)); all.push(baseM.clone().multiply(m)); }
+      }
       this.buildingsGroup.add(group);
-      this.buildingObjs.set(b.id, { group, body, roof, bodyMat, roofMat, wall: new THREE.Color(colors.wall), roofCol: new THREE.Color(colors.roof), h: heightMeters, key: '' });
+      this.buildingObjs.set(b.id, { decor, win, group, body, roof, bodyMat, roofMat, wall: new THREE.Color(colors.wall), roofCol: new THREE.Color(colors.roof), h: heightMeters, key: '' });
     }
+    const wg = new THREE.BoxGeometry(1, 1, 0.08);
+    const mk = (list: THREE.Matrix4[], mat: THREE.Material): THREE.InstancedMesh | null => {
+      if (!list.length) return null;
+      const im = new THREE.InstancedMesh(wg, mat, list.length);
+      list.forEach((m, i) => im.setMatrixAt(i, m));
+      im.frustumCulled = false;
+      this.scene.add(im);
+      return im;
+    };
+    this.winLit = mk(litAll, this.env.windowLit);
+    this.winDark = mk(darkAll, this.env.windowDark);
   }
 
-  /** Window grid (lit/dark mix) and a door, as a few small boxes per wall side. */
-  private addWindows(group: THREE.Group, w: number, d: number, h: number, type: string, seed: number): void {
-    if (type === 'church') return;
-    const floors = Math.max(1, Math.round(h / 3.2));
-    const lit = lambert(0xf2d48a), dark = lambert(0x1c2733);
-    const geo = sharedBox(1.1, 1.2, 0.08);
-    const sides: { len: number; rot: number; off: number }[] = [
-      { len: w, rot: 0, off: d / 2 + 0.03 }, { len: w, rot: Math.PI, off: d / 2 + 0.03 },
-      { len: d, rot: Math.PI / 2, off: w / 2 + 0.03 }, { len: d, rot: -Math.PI / 2, off: w / 2 + 0.03 },
-    ];
-    for (const [si, sd] of sides.entries()) {
-      const cols = Math.max(1, Math.floor((sd.len - 1) / 3));
-      const holder = new THREE.Group();
-      holder.rotation.y = sd.rot;
-      for (let f = 0; f < floors; f++) for (let c = 0; c < cols; c++) {
-        const isDoor = f === 0 && c === Math.floor(cols / 2) && si === 0;
-        const m = new THREE.Mesh(isDoor ? doorGeo() : geo, isDoor ? lambert(0x4a3523) : (hash(seed + si * 7 + f * 13, c + 3) % 3 === 0 ? lit : dark));
-        m.position.set((c + 0.5) * (sd.len / cols) - sd.len / 2, isDoor ? 1.05 : f * 3.2 + 1.9, sd.off);
-        holder.add(m);
-      }
-      group.add(holder);
+  /** Remove a collapsed building's windows and decorations. */
+  private hideBuildingExtras(bo: BuildingObj): void {
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (const win of bo.win) {
+      const im = win.dark ? this.winDark : this.winLit;
+      if (!im) continue;
+      for (let i = 0; i < win.count; i++) im.setMatrixAt(win.start + i, zero);
+      im.instanceMatrix.needsUpdate = true;
     }
+    for (const m of bo.decor) m.visible = false;
   }
 
   private buildTrees(world: World): void {
     this.disposeGroup(this.treesGroup);
-    const spots: { x: number; y: number }[] = [];
-    for (let y = 0; y < world.h; y++) for (let x = 0; x < world.w; x++) if (world.isTree(x, y)) spots.push({ x, y });
-    if (!spots.length) return;
-    const trunkGeo = new THREE.CylinderGeometry(0.22, 0.28, 1.6, 6);
-    const leafGeo = new THREE.ConeGeometry(1.6, 3.2, 7);
-    const trunk = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x4e3a28 }), spots.length);
-    const leaf = new THREE.InstancedMesh(leafGeo, new THREE.MeshLambertMaterial({ color: 0x2f6b34 }), spots.length);
-    const m = new THREE.Matrix4();
-    spots.forEach((s, i) => {
-      const scale = 0.8 + (hash(s.x, s.y) % 5) / 10;
-      const cx = (s.x + 0.5) * TILE_METERS + ((hash(s.x, s.y) >> 3) % 5) / 10, cz = (s.y + 0.5) * TILE_METERS;
-      m.compose(new THREE.Vector3(cx, 0.8 * scale, cz), new THREE.Quaternion(), new THREE.Vector3(scale, scale, scale));
-      trunk.setMatrixAt(i, m);
-      m.compose(new THREE.Vector3(cx, 1.8 * scale, cz), new THREE.Quaternion(), new THREE.Vector3(scale, scale, scale));
-      leaf.setMatrixAt(i, m);
-    });
-    this.treesGroup.add(trunk, leaf);
+    this.treesGroup.add(buildVegetation(world));
+    this.disposeGroup(this.furnitureGroup);
+    const f = buildStreetFurniture(world);
+    this.env.attachLamps(f.lampHeads);
+    this.furnitureGroup.add(f.group);
   }
 
   private buildTrafficLights(world: World): void {
@@ -440,7 +439,7 @@ export class Three3DRenderer implements GameRenderer {
   private track<T extends { id: number }>(map: Map<number, Tracked>, items: Iterable<T>, make: (i: T) => THREE.Object3D, upd: (obj: THREE.Object3D, i: T) => void): void {
     for (const it of items) {
       let t = map.get(it.id);
-      if (!t) { const obj = make(it); this.scene.add(obj); t = { obj, frame: 0 }; map.set(it.id, t); }
+      if (!t) { const obj = make(it); obj.traverse(o => { (o as THREE.Mesh).castShadow = true; }); this.scene.add(obj); t = { obj, frame: 0 }; map.set(it.id, t); }
       t.frame = this.frame;
       upd(t.obj, it);
     }
@@ -630,6 +629,7 @@ export class Three3DRenderer implements GameRenderer {
       bo.bodyMat.color.copy(bo.wall).lerp(CHAR, char);
       bo.roofMat.color.copy(bo.roofCol).lerp(CHAR, Math.min(0.95, char + 0.1));
       bo.roof.visible = !sb.destroyed;
+      if (sb.destroyed) this.hideBuildingExtras(bo);
       bo.body.scale.y = sb.destroyed ? 0.3 : 1;
       bo.body.position.y = (bo.h * bo.body.scale.y) / 2;
     }
