@@ -79,9 +79,18 @@ export function gableRoofGeometry(w: number, d: number, rise: number): THREE.Buf
   return geo;
 }
 
-function buildRoof(type: string, w: number, d: number): THREE.Object3D {
+export function buildRoof(type: string, w: number, d: number): THREE.Object3D {
   const rise = Math.min(w, d) * 0.28;
-  if (type === 'gable') return new THREE.Mesh(gableRoofGeometry(w, d, rise));
+  if (type === 'gable') {
+    // Ridge runs along the geometry's local X axis; swap w/d and rotate 90° so the
+    // ridge always follows the building's longer side instead of always the X axis.
+    if (d > w) {
+      const mesh = new THREE.Mesh(gableRoofGeometry(d, w, rise));
+      mesh.rotation.y = Math.PI / 2;
+      return mesh;
+    }
+    return new THREE.Mesh(gableRoofGeometry(w, d, rise));
+  }
   if (type === 'hip') {
     const geo = new THREE.ConeGeometry(Math.max(w, d) * 0.5 * Math.SQRT2, rise, 4, 1);
     geo.rotateY(Math.PI / 4);
