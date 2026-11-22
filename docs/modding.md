@@ -148,3 +148,10 @@ dispersing ×(1 + 0.2·…) and fire resistance ×(1 + 0.12·…). When an incid
 
 Building types: `residential, apartment, office, commercial, shopping, school, church, warehouse, industrial, station, hospital`. Buildings may carry `floors` and `roof` (`gable`/`hip`/`flat`) for a future 3D view; vehicles and roles may carry a `model` id.
 Map character `W` is water (not walkable or drivable).
+
+
+## Fire-fighting and bomb-disposal fields (added later)
+
+- Vehicle `tank` (litres): fire vehicles use `6 L/s` per working nozzle, refill at hydrants (`HYDRANT_REFILL`) and stop spraying when empty. A vehicle parked within 4.5 tiles of a hydrant hooks up and has unlimited water.
+- Buildings with `floors >= 4` need an `aerial_ladder` crew on the fire for full effect (otherwise 40%).
+- Ability `defuse` needs the vehicle equipment `bomb_robot`; incident objective `device_defused` with an optional `defuseTime` (seconds, scaled by severity). See the `suspicious_package` incident and the `bomb_squad` vehicle / `bomb_tech` role in `src/data`.

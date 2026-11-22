@@ -9,7 +9,7 @@ Stuur brandweer, ambulances, politie en bergingsvoertuigen aan in een levende st
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-86%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-94%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 [English](README.md) · **Nederlands**
@@ -31,17 +31,21 @@ Het spel is geïnspireerd op de gameplay van *Emergency 4* (2006), maar is een *
 - 🏙️ **Een grote, levende stad** – 102 × 72 tegels, ruim 160 gebouwen in 11 soorten (woningen, flats, kantoren, winkelcentrum, school, kerk, loodsen, fabrieken…), vijf wijken, parken met vijvers, burgerverkeer met verkeerslichten en voetgangers.
 - 🚒🚑🚓🔧 **13 voertuigtypes en 7 rollen** – tankautospuit, hoogwerker, hulpverlenings- en commandovoertuig; ambulance, rapid responder, MMT; surveillancewagen, bus, motor; bergingswagen, monteursvoertuig, kraan. De bemanning stapt uit, rolt slangen uit, redt, behandelt, draagt, arresteert, zet af, stuurt omstanders weg en ruimt wrakken.
 - 🔥 **26 soorten meldingen**, elk met eigen omschrijving: woning-, keuken-, appartements-, kantoor/school-, industrie- en loodsbrand · hartstilstand, val, verslikking, bevalling, allergische reactie, beroerte · auto-, motor-, voetgangers- en vrachtwagenongelukken · inbraak, vechtpartij, gewapende overval, vandalisme · blokkades, omgevallen bomen en pech met vrachtwagens.
+- 🧯 **Realistisch blussen** – elke tankautospuit heeft een watertank (die raakt leeg!) en sluit aan op brandkranen om bij te vullen; branden in hoogbouw vragen om de hoogwerker (zonder is het effect maar 40%), en in 3D klapt de ladder uit richting de brand.
+- 🤖 **Explosievenopruiming** (geïnspireerd door de Los Angeles-mod) – de melding *verdacht pakket*: zet het gebied af met lint, pylonen, afzethekken en fakkels, stuur omstanders weg en laat de EOD-ploeg de robot inzetten.
 - ⏱️ **Ernst telt** – behandel-, arrestatie-, afzet-, ruim- en bluswerk duren langer naarmate de ernst stijgt en verschillen per soort melding. Een melding die je negeert escaleert en mislukt uiteindelijk.
 - 🚦 **Geloofwaardig verkeer** – rechts rijden, keren op de weg, hulpdiensten die nooit door andere voertuigen of mensen heen rijden, parkeervakken bij elke post en bemanning die *naast* het voertuig uitstapt.
 - 🔊 **Volledig gegenereerd geluid** – Nederlandse tweetonige sirenes, knetterend vuur, waterstralen, verkeer en interface-effecten, allemaal met de Web Audio API (geen geluidsbestanden).
 - 🎯 **Spelmodi** – zes missies, eindeloze Freeplay (Easy / Normal / Hard, met seed voor reproduceerbare scenario's), opslaan en laden, lokale highscores.
 - 🧩 **Moddable** – voertuigen, rollen, meldingen, missies en kaarten zijn gevalideerde JSON; er zit een voorbeeldpakket bij.
-- 🧪 **Goed getest** – een deterministische simulatie met 86 unit-tests en 16 browsertests (Playwright), waaronder het complete scenario "rij naar een brand, stap uit, blus, melding verdwijnt" in zowel de 2D- als de 3D-weergave.
+- 🧪 **Goed getest** – een deterministische simulatie met 94 unit-tests en 16 browsertests (Playwright), waaronder het complete scenario "rij naar een brand, stap uit, blus, melding verdwijnt" in zowel de 2D- als de 3D-weergave.
 - 🧊 **Experimentele 3D-weergave** – een procedurele three.js-stad (gebouwen, voertuigen, mensen, vuur/rook, verkeerslichten) met een RTS-camera, naast de originele 2D-weergave; omschakelen via Instellingen of het hoofdmenu. Wordt pas geladen zodra je hem aanzet, dus kost niets als je hem nooit gebruikt ([docs/3d.md](docs/3d.md)).
 
 De experimentele 3D-weergave (procedureel, three.js, geen externe assets):
 
 <p align="center"><img src="docs/screenshot-3d-city.png" width="32%" alt="3D-weergave: de stad overdag"> <img src="docs/screenshot-3d-fire.png" width="32%" alt="3D-weergave: brandweer bij een brand"> <img src="docs/screenshot-3d-night.png" width="32%" alt="3D-weergave: de stad bij nacht"></p>
+
+<p align="center"><img src="docs/screenshot-3d-aerial.png" width="49%" alt="3D-weergave: de hoogwerker bij een brand in hoogbouw"> <img src="docs/screenshot-3d-bomb.png" width="49%" alt="3D-weergave: de EOD-ploeg bij een verdacht pakket"></p>
 
 ## Spelen
 

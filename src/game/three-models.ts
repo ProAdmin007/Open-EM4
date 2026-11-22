@@ -78,6 +78,7 @@ const SPECS: Record<string, Spec> = {
   'vehicle/patrol_car': { shape: 'car', body: 0xf3f4f6, stripe: 0x1f4fb3, stripe2: 0xff8c1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
   'vehicle/police_van': { shape: 'van', body: 0x233f7a, stripe: 0xf3f4f6, stripe2: 0xff8c1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
   'vehicle/police_motorcycle': { shape: 'bike', body: 0xf3f4f6, stripe: 0x1f4fb3, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
+  'vehicle/bomb_squad': { shape: 'truck', body: 0x37474f, cab: 0x37474f, stripe: 0xff7a1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 3, extras: bombSquadExtras },
   'vehicle/tow_truck': { shape: 'truck', body: 0xf0b41a, cab: 0xf0b41a, stripe: 0x222222, accent: 0xffa000, accent2: 0xffa000, wheels: 3, extras: towExtras },
   'vehicle/service_van': { shape: 'van', body: 0x4d7a2a, stripe: 0xf0d02a, accent: 0xffa000, accent2: 0xffa000, wheels: 2, extras: rackExtras },
   'vehicle/crane_truck': { shape: 'truck', body: 0xe5a91a, cab: 0xe5a91a, stripe: 0x222222, accent: 0xffa000, accent2: 0xffa000, wheels: 3, extras: craneExtras },
@@ -96,12 +97,65 @@ function fireEngineExtras(g: THREE.Group, L: number, W: number, H: number): void
 }
 function ladderExtras(g: THREE.Group, L: number, W: number, H: number): void {
   const grey = lambert(0xc9ced4), dark = lambert(0x2a2c30);
-  box(g, L * 0.62, 0.22, 0.12, grey, -L * 0.12, H + 0.32, 0.45);
-  box(g, L * 0.62, 0.22, 0.12, grey, -L * 0.12, H + 0.32, -0.45);
-  for (let i = 0; i < 12; i++) box(g, 0.06, 0.06, 0.9, grey, -L * 0.42 + i * (L * 0.052), H + 0.32, 0);
+  // the ladder hangs on a pivot at the turntable so it can be raised, turned and extended (see animateAerial)
+  const pivot = new THREE.Group();
+  pivot.name = 'ladder';
+  pivot.position.set(-L * 0.36, H + 0.3, 0);
+  g.add(pivot);
+  box(pivot, L * 0.62, 0.22, 0.12, grey, L * 0.31, 0, 0.45);
+  box(pivot, L * 0.62, 0.22, 0.12, grey, L * 0.31, 0, -0.45);
+  for (let i = 0; i < 12; i++) box(pivot, 0.06, 0.06, 0.9, grey, i * (L * 0.052) + 0.2, 0, 0);
   box(g, 0.9, 0.35, W * 0.8, dark, -L * 0.36, H + 0.12, 0); // turntable
   for (const s of [-1, 1]) box(g, 0.25, 0.25, 0.9, dark, -L * 0.2, 0.3, s * (W / 2 + 0.45)); // outrigger pads
 }
+function bombSquadExtras(g: THREE.Group, L: number, W: number, H: number): void {
+  const dark = lambert(0x24262a);
+  box(g, L * 0.4, 0.12, W * 0.7, dark, -L * 0.22, H * 0.96, 0); // robot bay roof rails
+  const robot = buildBombRobot();
+  robot.name = 'robot';
+  robot.scale.setScalar(0.8);
+  robot.position.set(-L * 0.22, H * 0.96 + 0.25, 0);
+  g.add(robot);
+  box(g, 0.3, 0.1, W * 0.7, lambert(0xff7a1a), -L / 2 - 0.12, 0.7, 0); // rear ramp edge
+}
+/** A small tracked bomb-disposal robot with a gripper arm. */
+export function buildBombRobot(): THREE.Group {
+  const g = new THREE.Group();
+  const body = lambert(0x2f3a40), track = lambert(0x151515), arm = lambert(0xe6a817);
+  box(g, 0.9, 0.35, 0.55, body, 0, 0.32, 0);
+  for (const s of [-1, 1]) box(g, 1.1, 0.26, 0.16, track, 0, 0.15, s * 0.38);
+  const a1 = box(g, 0.1, 0.7, 0.1, arm, 0.25, 0.7, 0); a1.rotation.z = -0.5;
+  const a2 = box(g, 0.6, 0.08, 0.08, arm, 0.55, 1.0, 0); a2.rotation.z = -0.25;
+  box(g, 0.14, 0.14, 0.2, lambert(0xcccccc), 0.88, 0.95, 0);
+  box(g, 0.14, 0.1, 0.14, glow(0x3fa9ff, 1), -0.3, 0.55, 0.18);
+  return g;
+}
+/** The suspect item: a holdall with a taped box next to it. */
+export function buildSuspectPackage(): THREE.Group {
+  const g = new THREE.Group();
+  box(g, 0.9, 0.5, 0.5, lambert(0x3a4a2f), 0, 0.25, 0);
+  box(g, 0.5, 0.06, 0.06, lambert(0x222222), 0, 0.53, 0);
+  box(g, 0.55, 0.4, 0.45, lambert(0xb08a5a), 0.9, 0.2, 0.3).rotation.y = 0.4;
+  box(g, 0.58, 0.05, 0.1, lambert(0xd8c9a0), 0.9, 0.42, 0.3).rotation.y = 0.4;
+  return g;
+}
+/** Traffic cone with a reflective band. */
+export function buildCone(): THREE.Group {
+  const g = new THREE.Group();
+  const o = lambert(0xff6a1a);
+  box(g, 0.34, 0.04, 0.34, lambert(0x222222), 0, 0.02, 0);
+  box(g, 0.2, 0.3, 0.2, o, 0, 0.2, 0);
+  box(g, 0.12, 0.28, 0.12, o, 0, 0.45, 0);
+  box(g, 0.15, 0.07, 0.15, lambert(0xf4f4f0), 0, 0.4, 0);
+  return g;
+}
+/** A road flare: a short red stick that glows. */
+export function buildFlare(): THREE.Group {
+  const g = new THREE.Group();
+  box(g, 0.05, 0.3, 0.05, glow(0xff2a1a, 1.4), 0, 0.15, 0);
+  return g;
+}
+
 function antennaExtras(g: THREE.Group, L: number, _W: number, H: number): void {
   box(g, 0.05, 1.0, 0.05, lambert(0x222222), -L * 0.3, H + 0.55, 0);
   box(g, 1.1, 0.12, 0.7, lambert(0xdadada), -L * 0.05, H + 0.07, 0);

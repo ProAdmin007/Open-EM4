@@ -54,4 +54,11 @@ export function buildingHeightMeters(b: BuildingDef): number {
 }
 
 /** Default model id for an asset: `<group>/<id>`. A definition's own `model` field overrides it. */
+/** Deterministic hash of a tile coordinate (placement of hydrants, street furniture, variation). */
+export const tileHash = (x: number, y: number): number => {
+  let h = (x * 374761393 + y * 668265263) >>> 0;
+  h = ((h ^ (h >>> 13)) * 1274126177) >>> 0;
+  return (h ^ (h >>> 16)) >>> 0;
+};
+
 export const modelId = (group: 'vehicle' | 'person' | 'building', id: string, override?: string): string => override ?? `${group}/${id}`;

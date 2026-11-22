@@ -1,8 +1,8 @@
 import type { Vec } from './pathfinding';
 
 export type Category = 'fire' | 'ambulance' | 'police' | 'tech';
-export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate' | 'disperse';
-export type Objective = 'fire_out' | 'victims_safe' | 'suspects_arrested' | 'area_secured' | 'obstacle_cleared' | 'bystanders_dispersed';
+export type Ability = 'extinguish' | 'rescue' | 'treat' | 'carry' | 'arrest' | 'secure' | 'clear' | 'coordinate' | 'disperse' | 'defuse';
+export type Objective = 'fire_out' | 'victims_safe' | 'suspects_arrested' | 'area_secured' | 'obstacle_cleared' | 'bystanders_dispersed' | 'device_defused';
 export type BuildingType = 'residential' | 'apartment' | 'commercial' | 'industrial' | 'office' | 'warehouse' | 'school' | 'shopping' | 'church' | 'station' | 'hospital';
 
 export interface RoleDef {
@@ -32,6 +32,8 @@ export interface VehicleDef {
   /** Price (in budget) to call this vehicle as reinforcement. Default 500. */
   cost?: number;
   firePowerBonus?: number;
+  /** Water tank in litres (fire vehicles); refilled at hydrants. */
+  tank?: number;
   clearPowerBonus?: number;
 }
 export interface IncidentDef {
@@ -53,6 +55,8 @@ export interface IncidentDef {
   objectives: Objective[];
   escalation: { everySec: number };
   failAfterSec: number;
+  /** Seconds a bomb robot needs to render a device safe (objective device_defused). */
+  defuseTime?: number;
   reward: { score: number; budget: number };
 }
 export interface MissionDef {
@@ -134,6 +138,9 @@ export interface Vehicle extends Entity {
   /** While > 0 the vehicle ignores collisions (deadlock breaker). */
   ghost: number;
   pathVersion: number;
+  /** Water left in the tank (litres) and whether the vehicle is hooked up to a hydrant (unlimited water). */
+  water: number;
+  hydrant: boolean;
   crew: number[];
   patients: number[];
   lights: boolean;
@@ -151,7 +158,8 @@ export type Task =
   | { type: 'arrest'; suspectId: number; progress: number }
   | { type: 'secure'; incidentId: number; progress: number }
   | { type: 'clear'; incidentId: number; progress: number }
-  | { type: 'disperse'; incidentId: number; progress: number };
+  | { type: 'disperse'; incidentId: number; progress: number }
+  | { type: 'defuse'; incidentId: number; progress: number };
 export interface Responder extends Entity {
   kind: 'responder';
   role: string;
@@ -226,6 +234,7 @@ export interface Incident {
   bystanders: number[];
   deaths: number;
   cleared: boolean;
+  defused: boolean;
 }
 export interface Civilian extends Entity {
   kind: 'civilian';

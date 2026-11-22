@@ -1,3 +1,4 @@
+import { tileHash } from './space';
 import { Rng } from './rng';
 import { findPath, type Vec } from './pathfinding';
 import type {
@@ -11,6 +12,13 @@ export const KMH_TO_TILES = 1 / 12;
 const FIRE_POWER_SCALE = 0.12;
 const HOSE_LENGTH = 16;
 const DEPLOY_TIME = 2.5;
+/** Litres per second a working nozzle uses; a vehicle hooked up to a hydrant has unlimited water. */
+export const WATER_PER_SEC = 6;
+export const HYDRANT_RANGE = 4.5;
+export const HYDRANT_REFILL = 90;
+/** Buildings from this many floors up need an aerial ladder to fight the fire at full strength. */
+export const TALL_FLOORS = 4;
+export const TALL_FACTOR = 0.4;
 /** A dismounted responder with the `coordinate` ability (bevelvoerder) within this range makes others 25% more effective. */
 export const COMMANDER_RANGE = 10;
 export const COMMANDER_BONUS = 1.25;
@@ -30,6 +38,7 @@ export const ABILITY_EQUIPMENT: Partial<Record<Ability, string[]>> = {
   arrest: ['handcuffs'],
   secure: ['barrier_tape'],
   clear: ['tow_gear', 'rescue_tools'],
+  defuse: ['bomb_robot'],
 };
 
 export interface WorldOptions {
@@ -355,7 +364,7 @@ export class World {
   createVehicle(def: VehicleDef, stationId: string, x: number, y: number): Vehicle {
     const v: Vehicle = {
       kind: 'vehicle', ...this.addEntityBase(x, y), defId: def.id, category: def.category, stationId, path: [], dest: null, home: { x: Math.floor(x), y: Math.floor(y) }, returning: false, toHospital: false, contraflow: false, blocked: 0, avoid: [], ghost: 0,
-      pathVersion: this.roadVersion, crew: [], patients: [], lights: false, angle: 0, state: 'idle',
+      pathVersion: this.roadVersion, water: def.tank ?? 0, hydrant: false, crew: [], patients: [], lights: false, angle: 0, state: 'idle',
       name: `${def.name} ${[...this.vehicles.values()].filter(o => o.defId === def.id).length + 1}`,
     };
     this.vehicles.set(v.id, v);
@@ -393,6 +402,7 @@ export class World {
     if (this.opts.freeplay && !this.script.length) this.updateSpawner(dt);
     for (const v of this.vehicles.values()) this.updateVehicle(v, dt);
     for (const r of this.responders.values()) this.updateResponder(r, dt);
+    this.updateWater(dt);
     this.updateHospital();
     this.updateFire(dt);
     for (const v of this.victims.values()) this.updateVictim(v, dt);
@@ -755,7 +765,18 @@ export class World {
         t.deploy += dt;
         if (t.deploy >= DEPLOY_TIME) {
           const bonus = (veh && this.vehicleDef(veh).firePowerBonus) || 1;
-          b.fire = Math.max(0, b.fire - (role.power * bonus * (this.commanderNear(r) ? COMMANDER_BONUS : 1) * FIRE_POWER_SCALE * dt) / b.resistance);
+          const tanked = !!(veh && this.vehicleDef(veh).tank);
+          if (veh && tanked && !veh.hydrant && veh.water <= 0) {
+            this.emit({ type: 'warn', message: `${veh.name}: tank leeg! Rijd naar een brandkraan` });
+            return done();
+          }
+          let eff = 1;
+          if ((b.floors ?? 1) >= TALL_FLOORS && !this.aerialActive(b.id)) {
+            eff = TALL_FACTOR;
+            if (!this.tallWarned.has(b.id)) { this.tallWarned.add(b.id); this.emit({ type: 'warn', message: `${b.name ?? 'Hoogbouw'}: de brand zit te hoog, zet de hoogwerker in` }); }
+          }
+          if (veh && tanked && !veh.hydrant) veh.water = Math.max(0, veh.water - WATER_PER_SEC * dt);
+          b.fire = Math.max(0, b.fire - (role.power * bonus * eff * (this.commanderNear(r) ? COMMANDER_BONUS : 1) * FIRE_POWER_SCALE * dt) / b.resistance);
         }
         break;
       }
@@ -824,6 +845,16 @@ export class World {
         if (this.approach(r, inc.x, inc.y, 3, done)) {
           t.progress += dt;
           if (t.progress >= 5 * sevFactor(inc.severity, 0.25)) { inc.secured = true; this.emit({ type: 'info', message: `Locatie afgezet: ${inc.name}` }); done(); }
+        }
+        break;
+      }
+      case 'defuse': {
+        const inc = this.incidents.get(t.incidentId);
+        if (!inc || inc.defused) return done();
+        if (this.approach(r, inc.x, inc.y, 4.5, done)) {
+          t.progress += dt;
+          const need = (this.content.incidents[inc.defId].defuseTime ?? 15) * sevFactor(inc.severity, 0.4);
+          if (t.progress >= need) { inc.defused = true; this.emit({ type: 'info', message: `${r.name} heeft het verdachte object onschadelijk gemaakt` }); done(); }
         }
         break;
       }
@@ -914,6 +945,53 @@ export class World {
     }
   }
 
+  private tallWarned = new Set<string>();
+  private _hydrants: Vec[] | null = null;
+
+  /** Fire hydrants on the pavements next to the roads; placed deterministically from the map. */
+  get hydrants(): Vec[] {
+    if (this._hydrants) return this._hydrants;
+    const out: Vec[] = [];
+    for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) {
+      const ch = this.map.rows[y]?.[x];
+      if (ch !== '.' && ch !== 'T') continue;
+      if (!(this.isRoad(x - 1, y) || this.isRoad(x + 1, y) || this.isRoad(x, y - 1) || this.isRoad(x, y + 1))) continue;
+      if (tileHash(x, y) % 14 === 0) out.push({ x, y });
+    }
+    return (this._hydrants = out);
+  }
+
+  nearestHydrant(x: number, y: number): { h: Vec; d: number } | null {
+    let best: { h: Vec; d: number } | null = null;
+    for (const h of this.hydrants) { const d = Math.hypot(h.x + 0.5 - x, h.y + 0.5 - y); if (!best || d < best.d) best = { h, d }; }
+    return best;
+  }
+
+  /** Is an aerial-ladder crew spraying this building? */
+  aerialActive(buildingId: string): boolean {
+    for (const r of this.responders.values()) {
+      const t = r.task;
+      if (t?.type !== 'extinguish' || t.buildingId !== buildingId || t.deploy < DEPLOY_TIME) continue;
+      const v = this.vehicles.get(r.vehicleId);
+      if (v && this.vehicleDef(v).equipment.includes('aerial_ladder')) return true;
+    }
+    return false;
+  }
+
+  /** Parked fire vehicles next to a hydrant hook up (unlimited water) and refill their tank. */
+  private updateWater(dt: number): void {
+    for (const v of this.vehicles.values()) {
+      const def = this.vehicleDef(v);
+      if (!def.tank) continue;
+      const near = v.path.length === 0 && (() => { const n = this.nearestHydrant(v.x, v.y); return !!n && n.d <= HYDRANT_RANGE; })();
+      if (near !== v.hydrant) {
+        v.hydrant = near;
+        if (near && v.water < def.tank) this.emit({ type: 'info', message: `${v.name} is aangesloten op een brandkraan` });
+      }
+      if (near && v.water < def.tank) v.water = Math.min(def.tank, v.water + HYDRANT_REFILL * dt);
+    }
+  }
+
   private igniteNeighbour(nb: Building): void {
     nb.fire = 8;
     const def = Object.values(this.content.incidents).find(d => d.fire && d.spawn.on === 'building' && d.spawn.buildingTypes?.includes(nb.type))
@@ -975,7 +1053,7 @@ export class World {
     const scale = DIFFICULTY[this.opts.difficulty].timeScale;
     const inc: Incident = {
       id: this.newId(), defId, name: def.name, severity: sev, description: def.descriptions?.length ? this.rng.pick(def.descriptions) : '', x: 0, y: 0, buildingId: null, elapsed: 0,
-      nextEscalation: def.escalation.everySec * scale, status: 'active', secured: false, obstacle: [], victims: [], suspects: [], bystanders: [], deaths: 0, cleared: false,
+      nextEscalation: def.escalation.everySec * scale, status: 'active', secured: false, obstacle: [], victims: [], suspects: [], bystanders: [], deaths: 0, cleared: false, defused: false,
     };
     let anchor: Vec;
     let b: Building | null = null;
@@ -1075,6 +1153,7 @@ export class World {
         case 'area_secured': return inc.secured;
         case 'obstacle_cleared': return inc.cleared;
         case 'bystanders_dispersed': return inc.bystanders.every(id => this.bystanders.get(id)?.leaving !== false);
+        case 'device_defused': return inc.defused;
       }
     });
   }
@@ -1301,6 +1380,7 @@ export class World {
       case 'arrest': for (const s of this.suspects.values()) if (!s.arrested) consider({ kind: 'suspect', id: s.id }, dist(r, s)); break;
       case 'secure': for (const i of this.incidents.values()) if (this.content.incidents[i.defId].objectives.includes('area_secured') && !i.secured) consider({ kind: 'incident', id: i.id }, dist(r, i)); break;
       case 'clear': for (const i of this.incidents.values()) if (i.obstacle.length && !i.cleared) consider({ kind: 'incident', id: i.id }, dist(r, i)); break;
+      case 'defuse': for (const i of this.incidents.values()) if (this.content.incidents[i.defId].objectives.includes('device_defused') && !i.defused) consider({ kind: 'incident', id: i.id }, dist(r, i)); break;
       case 'disperse': for (const i of this.incidents.values()) if (i.bystanders.some(id => this.bystanders.get(id)?.leaving === false)) consider({ kind: 'incident', id: i.id }, dist(r, i)); break;
     }
     return best;
@@ -1337,6 +1417,7 @@ export class World {
       case 'secure': return t.kind === 'incident' ? { type: 'secure', incidentId: t.id, progress: 0 } : null;
       case 'clear': return t.kind === 'incident' ? { type: 'clear', incidentId: t.id, progress: 0 } : null;
       case 'disperse': return t.kind === 'incident' ? { type: 'disperse', incidentId: t.id, progress: 0 } : null;
+      case 'defuse': return t.kind === 'incident' ? { type: 'defuse', incidentId: t.id, progress: 0 } : null;
       default: return null;
     }
   }
@@ -1378,7 +1459,8 @@ export class World {
         const inc = this.incidents.get(target.id)!;
         const abil = this.roleDef(r).abilities;
         const crowd = inc.bystanders.some(id => this.bystanders.get(id)?.leaving === false);
-        ability = inc.obstacle.length && !inc.cleared && abil.includes('clear') ? 'clear' : abil.includes('secure') && !inc.secured ? 'secure' : crowd && abil.includes('disperse') ? 'disperse' : abil.includes('secure') ? 'secure' : null;
+        const bomb = this.content.incidents[inc.defId].objectives.includes('device_defused') && !inc.defused;
+        ability = bomb && abil.includes('defuse') ? 'defuse' : inc.obstacle.length && !inc.cleared && abil.includes('clear') ? 'clear' : abil.includes('secure') && !inc.secured ? 'secure' : crowd && abil.includes('disperse') ? 'disperse' : abil.includes('secure') ? 'secure' : null;
       } else if (target?.kind === 'victim') {
         const v = this.victims.get(target.id)!;
         const abil = this.roleDef(r).abilities;
@@ -1496,12 +1578,12 @@ export class World {
     w.time = s.time; w.score = s.score; w.budget = s.budget; w.reputation = s.reputation; w.solved = s.solved; w.failed = s.failed; w.deaths = s.deaths;
     w.over = s.over; w.nextId = s.nextId; w.rng.state = s.rng; w.spawnTimer = s.spawnTimer;
     for (const sb of s.buildings) { const b = w.buildings.get(sb.id); if (b) Object.assign(b, { ...sb, resistance: sb.resistance ?? 1 }); }
-    for (const v of s.vehicles) { v.home ??= { x: Math.floor(v.x), y: Math.floor(v.y) }; v.returning ??= false; v.toHospital ??= false; v.contraflow ??= false; v.blocked ??= 0; v.avoid ??= []; v.ghost ??= 0; w.vehicles.set(v.id, v); }
+    for (const v of s.vehicles) { v.home ??= { x: Math.floor(v.x), y: Math.floor(v.y) }; v.returning ??= false; v.toHospital ??= false; v.contraflow ??= false; v.blocked ??= 0; v.avoid ??= []; v.ghost ??= 0; v.water ??= content.vehicles[v.defId]?.tank ?? 0; v.hydrant ??= false; w.vehicles.set(v.id, v); }
     for (const r of s.responders) w.responders.set(r.id, r);
     for (const v of s.victims) w.victims.set(v.id, v);
     for (const x of s.suspects) w.suspects.set(x.id, x);
     for (const b of s.bystanders ?? []) w.bystanders.set(b.id, b);
-    for (const i of s.incidents) { i.bystanders ??= []; w.incidents.set(i.id, i); }
+    for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; w.incidents.set(i.id, i); }
     w.obstacles = new Set(s.obstacles);
     w.script = s.script ?? [];
     w.won = s.won ?? false;

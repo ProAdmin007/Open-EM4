@@ -22,7 +22,8 @@
       }
     ],
     "patientCapacity": 0,
-    "cost": 900
+    "cost": 900,
+    "tank": 3000
   },
   {
     "id": "aerial_ladder",
@@ -44,7 +45,8 @@
     ],
     "patientCapacity": 0,
     "firePowerBonus": 1.4,
-    "cost": 1500
+    "cost": 1500,
+    "tank": 1500
   },
   {
     "id": "rescue_vehicle",
@@ -65,7 +67,8 @@
       }
     ],
     "patientCapacity": 0,
-    "cost": 1100
+    "cost": 1100,
+    "tank": 800
   },
   {
     "id": "command_vehicle",
@@ -277,5 +280,31 @@
     "patientCapacity": 0,
     "clearPowerBonus": 2,
     "cost": 1400
+  },
+  {
+    "id": "bomb_squad",
+    "name": "Explosievenopruimingsdienst",
+    "category": "police",
+    "maxSpeed": 60,
+    "capacity": 3,
+    "color": "#37474f",
+    "length": 1.9,
+    "equipment": [
+      "bomb_robot",
+      "barrier_tape",
+      "handcuffs"
+    ],
+    "crew": [
+      {
+        "role": "bomb_tech",
+        "count": 2
+      },
+      {
+        "role": "officer",
+        "count": 1
+      }
+    ],
+    "patientCapacity": 0,
+    "cost": 1100
   }
 ]

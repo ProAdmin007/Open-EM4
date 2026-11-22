@@ -70,7 +70,7 @@ for (let bj = 0; bj < BH; bj++) {
     if (sp === 'fire2') { station(bx, by, 'Brandweerpost Oost', 'fire_station_2', 'fire', 5, 3, ['fire_engine', 'rescue_vehicle']); continue; }
     if (sp === 'ambulance') { station(bx, by, 'Ambulancepost', 'ambulance_post', 'ambulance', 5, 3, ['ambulance', 'ambulance', 'rapid_responder', 'mmt_car']); continue; }
     if (sp === 'ambulance2') { station(bx, by, 'Ambulancepost Zuid', 'ambulance_post_2', 'ambulance', 5, 3, ['ambulance', 'rapid_responder']); continue; }
-    if (sp === 'police') { station(bx, by, 'Politiebureau', 'police_station', 'police', 5, 4, ['patrol_car', 'patrol_car', 'police_van', 'police_motorcycle']); continue; }
+    if (sp === 'police') { station(bx, by, 'Politiebureau', 'police_station', 'police', 5, 4, ['patrol_car', 'patrol_car', 'police_van', 'police_motorcycle', 'bomb_squad']); continue; }
     if (sp === 'police2') { station(bx, by, 'Politiepost Noord', 'police_station_2', 'police', 5, 3, ['patrol_car', 'police_motorcycle']); continue; }
     if (sp === 'depot') { station(bx, by, 'Technische dienst', 'tech_depot', 'tech', 5, 4, ['tow_truck', 'service_van', 'crane_truck']); continue; }
     if (sp === 'hospital') { add('hospital', bx + 1, by + 1, 6, 5, 26, { name: 'Ziekenhuis Centrum', floors: 6, roof: 'flat' }); trees(bx, by + 6, bx + 7, by + 7, 4, 3); continue; }

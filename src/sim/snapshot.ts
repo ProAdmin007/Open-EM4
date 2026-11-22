@@ -21,6 +21,11 @@ export interface SnapVehicle {
   size: { length: number; width: number; height: number };
   lights: boolean;
   moving: boolean;
+  /** water in the tank / tank size (litres), hooked up to a hydrant, and the tile being sprayed by an aerial ladder crew */
+  water: number;
+  tank: number;
+  hydrant: boolean;
+  aerial: { x: number; y: number } | null;
 }
 export interface SnapPerson {
   id: number;
@@ -64,6 +69,8 @@ export interface SnapIncident {
   x: number;
   y: number;
   secured: boolean;
+  defusing: boolean;
+  defused: boolean;
 }
 export interface RenderSnapshot {
   time: number;
@@ -75,6 +82,7 @@ export interface RenderSnapshot {
   buildings: SnapBuilding[];
   incidents: SnapIncident[];
   obstacles: { x: number; y: number; kind: string }[];
+  hydrants: { x: number; y: number }[];
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -83,13 +91,24 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
   const ix = (e: { px: number; x: number }) => lerp(e.px, e.x, alpha);
   const iy = (e: { py: number; y: number }) => lerp(e.py, e.y, alpha);
-  const snap: RenderSnapshot = { time: world.time, lightPhase: world.lightPhase, vehicles: [], people: [], cars: [], buildings: [], incidents: [], obstacles: [] };
+  const snap: RenderSnapshot = { time: world.time, lightPhase: world.lightPhase, vehicles: [], people: [], cars: [], buildings: [], incidents: [], obstacles: [], hydrants: world.hydrants };
+  const aerial = new Map<number, { x: number; y: number }>();
+  const defusing = new Set<number>();
+  for (const r of world.responders.values()) {
+    const t = r.task;
+    if (t?.type === 'extinguish' && t.deploy >= 2.5) {
+      const v = world.vehicles.get(r.vehicleId), b = world.buildings.get(t.buildingId);
+      if (v && b && world.vehicleDef(v).equipment.includes('aerial_ladder')) aerial.set(v.id, { x: b.x + b.w / 2, y: b.y + b.h / 2 });
+    }
+    if (t?.type === 'defuse' && !r.inVehicle) defusing.add(t.incidentId);
+  }
 
   for (const v of world.vehicles.values()) {
     const def = world.vehicleDef(v), x = ix(v), y = iy(v);
     snap.vehicles.push({
       id: v.id, model: modelId('vehicle', v.defId, def.model), category: v.category, x, y, position: tileToWorld3D(x, y), heading: v.angle, yaw: headingToYaw(v.angle),
       size: vehicleDimensions(def), lights: v.lights, moving: v.path.length > 0,
+      water: v.water, tank: def.tank ?? 0, hydrant: v.hydrant, aerial: aerial.get(v.id) ?? null,
     });
   }
   for (const r of world.responders.values()) {
@@ -131,7 +150,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
       roof: b.roof ?? 'flat', fire: b.fire, damage: b.damage, destroyed: b.destroyed,
     });
   }
-  for (const i of world.incidents.values()) snap.incidents.push({ id: i.id, kind: i.defId, severity: i.severity, x: i.x, y: i.y, secured: i.secured });
+  for (const i of world.incidents.values()) snap.incidents.push({ id: i.id, kind: i.defId, severity: i.severity, x: i.x, y: i.y, secured: i.secured, defusing: defusing.has(i.id), defused: i.defused });
   for (const i of world.incidents.values()) for (const o of i.obstacle) snap.obstacles.push({ x: o.x, y: o.y, kind: i.defId });
   return snap;
 }

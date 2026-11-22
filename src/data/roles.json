@@ -82,5 +82,17 @@
     "speed": 2.6,
     "color": "#8bc34a",
     "power": 1
+  },
+  {
+    "id": "bomb_tech",
+    "name": "Explosievenverkenner (EOD)",
+    "category": "police",
+    "abilities": [
+      "defuse",
+      "secure"
+    ],
+    "speed": 2.6,
+    "color": "#90a4ae",
+    "power": 1
   }
 ]

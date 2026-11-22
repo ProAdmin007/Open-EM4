@@ -5,7 +5,7 @@ import type { Category } from '../sim/types';
 import type { GameRenderer } from './renderer';
 import { TILE_METERS, tileToWorld3D, world3DToTile } from '../sim/space';
 import { Commands, type SelectionHost } from './selection';
-import { buildBarrier, buildCivilianCar, buildDebris, buildFallenTree, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
+import { buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
 import { ParticlePool, setSegment } from './three-fx';
 import { Environment, bakeGround, buildStreetFurniture, buildVegetation, decorateBuilding, windowSlots } from './three-world';
 
@@ -152,6 +152,7 @@ export class Three3DRenderer implements GameRenderer {
   private lightPhase = -1;
   private time = 0;
   private lastDt = 0.016;
+  private anyDefusing = false;
   private trafficBulbs: { pos: THREE.Vector3; ew: boolean; mesh: THREE.Mesh }[] = [];
   private dragBox: THREE.Mesh;
   private keys = new Set<string>();
@@ -164,7 +165,7 @@ export class Three3DRenderer implements GameRenderer {
   private buildingObjs = new Map<string, BuildingObj>();
   private propsGroup = new THREE.Group();
   private obstacleKey = '';
-  private incidentFx = new Map<number, { ring: THREE.Mesh; beam: THREE.Mesh; tape?: THREE.Group; props: THREE.Group }>();
+  private incidentFx = new Map<number, { ring: THREE.Mesh; beam: THREE.Mesh; tape?: THREE.Group; props: THREE.Group; flares?: THREE.Vector3[]; robot?: THREE.Group; pack?: THREE.Group }>();
   private hoseSegs: THREE.Mesh[] = [];
   private hoseMat = new THREE.MeshLambertMaterial({ color: 0xf0b21a });
 
@@ -230,6 +231,7 @@ export class Three3DRenderer implements GameRenderer {
     this.lastDt = dt;
     this.stepCamera(dt);
     this.env.update(snap.time, this.target, this.camera.position);
+    this.anyDefusing = snap.incidents.some(i => i.defusing);
     this.syncVehicles(snap.vehicles);
     this.syncPeople(snap.people);
     this.syncCars(snap.cars);
@@ -467,6 +469,20 @@ export class Three3DRenderer implements GameRenderer {
       obj.position.set(v.position.x, 0, v.position.z);
       obj.rotation.y = v.yaw;
       this.animateParts(obj.userData.parts as VehicleParts, v.moving, v.lights, this.lastDt);
+      const ladder = obj.getObjectByName('ladder');
+      if (ladder) { // raise, turn towards the building and extend while the crew is spraying
+        const up = v.aerial ? 1 : 0;
+        const k = Math.min(1, this.lastDt * 1.6);
+        ladder.userData.t = (ladder.userData.t ?? 0) + (up - (ladder.userData.t ?? 0)) * k;
+        const t = ladder.userData.t as number;
+        let yaw = 0;
+        if (v.aerial) { const p = tileToWorld3D(v.aerial.x, v.aerial.y); yaw = Math.atan2(-(p.z - v.position.z), p.x - v.position.x) - v.yaw; ladder.userData.yaw = yaw; }
+        ladder.rotation.y = (ladder.userData.yaw ?? 0) * t;
+        ladder.rotation.z = 1.05 * t;
+        ladder.scale.x = 1 + 0.9 * t;
+      }
+      const robot = obj.getObjectByName('robot');
+      if (robot) robot.visible = !this.anyDefusing;
     });
   }
   private makePerson(p: SnapPerson): THREE.Object3D {
@@ -567,8 +583,20 @@ export class Three3DRenderer implements GameRenderer {
         const props = this.propsFor(inc.kind, inc.id);
         props.position.set(p0.x + 3.2, 0, p0.z + 1.2);
         this.scene.add(ring, beam, props);
-        fx = { ring, beam, props };
+        let pack: THREE.Group | undefined;
+        if (inc.kind === 'suspicious_package') {
+          const bb = snap.buildings.find(x => Math.abs(x.x + x.w / 2 - inc.x) < 0.01 && Math.abs(x.y + x.h / 2 - inc.y) < 0.01);
+          pack = buildSuspectPackage();
+          pack.position.set(p0.x, 0, p0.z + ((bb ? bb.h : 3) / 2 + 0.8) * TILE_METERS);
+          this.scene.add(pack);
+        }
+        fx = { ring, beam, props, pack };
         this.incidentFx.set(inc.id, fx);
+      }
+      if (fx.pack) { // the bomb robot rolls up to the package while the crew defuses it
+        if (inc.defusing && !fx.robot) { fx.robot = buildBombRobot(); fx.robot.position.set(fx.pack.position.x - 1.8, 0, fx.pack.position.z + 1.2); fx.robot.rotation.y = -0.6; this.scene.add(fx.robot); }
+        if (fx.robot) { fx.robot.visible = inc.defusing; fx.robot.children.forEach((c, i) => { if (i === 5) c.rotation.z = -0.25 + Math.sin(this.time * 3) * 0.2; }); }
+        fx.pack.visible = !inc.defused;
       }
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 3 + inc.id);
       (fx.ring.material as THREE.MeshBasicMaterial).opacity = 0.3 + pulse * 0.4;
@@ -585,6 +613,26 @@ export class Three3DRenderer implements GameRenderer {
           setSegment(seg, A, B, 0.07);
           tape.add(seg);
         }
+        const flares: THREE.Vector3[] = [];
+        for (let i = 0; i < 4; i++) { // cones along every side, a flare at each corner, barriers mid-side
+          const A = posts[i], B = posts[(i + 1) % 4];
+          for (let k = 0; k < 5; k++) {
+            const cone = buildCone();
+            cone.position.set(p0.x + (A[0] + (B[0] - A[0]) * (k / 5)) * a * 0.96, 0, p0.z + (A[1] + (B[1] - A[1]) * (k / 5)) * a * 0.96);
+            tape.add(cone);
+          }
+          const fl = buildFlare();
+          fl.position.set(p0.x + A[0] * a * 0.85, 0, p0.z + A[1] * a * 0.85);
+          tape.add(fl);
+          flares.push(fl.position.clone().setY(0.4));
+          if (i % 2 === 0) {
+            const bar = buildBarrier();
+            bar.position.set(p0.x + (A[0] + B[0]) / 2 * a * 1.04, 0, p0.z + (A[1] + B[1]) / 2 * a * 1.04);
+            bar.rotation.y = i === 0 ? 0 : Math.PI / 2;
+            tape.add(bar);
+          }
+        }
+        fx.flares = flares;
         this.scene.add(tape);
         fx.tape = tape;
       }
@@ -594,6 +642,7 @@ export class Three3DRenderer implements GameRenderer {
     for (const [id, s] of this.incidentMarkers) if (!keep.has(id)) { this.scene.remove(s); this.disposeObj(s); this.incidentMarkers.delete(id); }
     for (const [id, f] of this.incidentFx) if (!keep.has(id)) {
       this.scene.remove(f.ring, f.beam, f.props); this.disposeObj(f.ring); this.disposeObj(f.beam); this.disposeObj(f.props);
+      for (const extra of [f.pack, f.robot]) if (extra) { this.scene.remove(extra); this.disposeObj(extra); }
       if (f.tape) { this.scene.remove(f.tape); this.disposeObj(f.tape); }
       this.incidentFx.delete(id);
     }
@@ -664,6 +713,18 @@ export class Three3DRenderer implements GameRenderer {
           const j = 0.25;
           this.water.emit({ x: nozzle.x, y: nozzle.y, z: nozzle.z, vx: (dir.x / tFlight) + (Math.random() - 0.5) * j * 4, vy: vy + (Math.random() - 0.5) * j * 3, vz: (dir.z / tFlight) + (Math.random() - 0.5) * j * 4, life: tFlight * 1.15, size0: 0.35, size1: 0.18, c0: 0xcfe9ff, c1: 0x6fb4ee, alpha: 0.85 });
         }
+      }
+    }
+    for (const v of snap.vehicles) { // supply hose from the hydrant to a hooked-up vehicle
+      if (!v.hydrant || !this.world) continue;
+      const nh = this.world.nearestHydrant(v.x, v.y);
+      if (!nh) continue;
+      const A = new THREE.Vector3((nh.h.x + 0.5) * TILE_METERS, 0.3, (nh.h.y + 0.5) * TILE_METERS), B = new THREE.Vector3(v.position.x, 0.3, v.position.z);
+      const M = A.clone().add(B).multiplyScalar(0.5); M.y = 0.12;
+      for (const [u, w2] of [[A, M], [M, B]] as [THREE.Vector3, THREE.Vector3][]) {
+        let seg = this.hoseSegs[n];
+        if (!seg) { seg = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.hoseMat); seg.userData.shared = true; this.hoseSegs.push(seg); this.scene.add(seg); }
+        seg.visible = true; setSegment(seg, u, w2, 0.22); n++;
       }
     }
     for (let i = n; i < this.hoseSegs.length; i++) this.hoseSegs[i].visible = false;
@@ -747,6 +808,9 @@ export class Three3DRenderer implements GameRenderer {
       l.position.set(f.cx, Math.min(f.b.heightMeters, 12) * 0.7, f.cz);
       l.intensity = (60 + 160 * f.k) * (0.85 + 0.15 * Math.sin(this.time * 17 + i * 3) + 0.1 * Math.sin(this.time * 31));
     });
+    if (live) for (const f of this.incidentFx.values()) for (const p of f.flares ?? []) { // road flares: a small red glow and sparks
+      if (Math.random() < dt * 12) this.flames.emit({ x: p.x, y: p.y, z: p.z, vx: (Math.random() - 0.5) * 0.6, vy: 0.8 + Math.random(), vz: (Math.random() - 0.5) * 0.6, life: 0.5, size0: 0.5, size1: 0.15, c0: 0xff6a4a, c1: 0xb01010, alpha: 0.9 });
+    }
     this.flames.update(dt); this.smoke.update(dt); this.water.update(dt);
   }
 

@@ -8,9 +8,9 @@ import { mergeContent, type ModPack } from '../sim/content';
 
 const CAT_LABEL: Record<Category, string> = { fire: '🚒 Brandweer', ambulance: '🚑 Ambulance', police: '🚓 Politie', tech: '🔧 Techniek' };
 const ABILITY_LABEL: Partial<Record<Ability, string>> = {
-  extinguish: '💧 Blussen', rescue: '🆘 Redden', treat: '🩺 Behandelen', carry: '🛏 Inladen', arrest: '🔗 Arresteren', secure: '🚧 Afzetten', clear: '🏗 Bergen', disperse: '📣 Wegsturen',
+  extinguish: '💧 Blussen', rescue: '🆘 Redden', treat: '🩺 Behandelen', carry: '🛏 Inladen', arrest: '🔗 Arresteren', secure: '🚧 Afzetten', clear: '🏗 Bergen', disperse: '📣 Wegsturen', defuse: '🤖 Ontmijnen',
 };
-const ABILITY_ORDER: Ability[] = ['extinguish', 'rescue', 'treat', 'carry', 'arrest', 'secure', 'disperse', 'clear'];
+const ABILITY_ORDER: Ability[] = ['extinguish', 'rescue', 'treat', 'carry', 'arrest', 'secure', 'disperse', 'defuse', 'clear'];
 const TASK_LABEL = (t: Task | null): string => {
   if (!t) return 'Wacht op opdracht';
   switch (t.type) {
@@ -24,6 +24,7 @@ const TASK_LABEL = (t: Task | null): string => {
     case 'secure': return 'Zet locatie af';
     case 'clear': return 'Ruimt obstakel';
     case 'disperse': return 'Stuurt omstanders weg';
+    case 'defuse': return 'Ontmijnt verdacht object';
   }
 };
 const TRANSPORT_LABEL: Record<string, string> = { trapped: 'Opgesloten in pand', scene: 'Ter plaatse', carried: 'Wordt gedragen', inAmbulance: 'In ambulance', atHospital: 'In ziekenhuis', dead: 'Overleden' };
@@ -183,6 +184,7 @@ export class UI {
       const crowd = i.bystanders.filter(id => w.bystanders.get(id)?.leaving === false).length;
       if (crowd) bits.push(`👥 ${crowd} omstanders`);
       if (def.objectives.includes('area_secured')) bits.push(i.secured ? '✔ afgezet' : '○ afzetten');
+      if (def.objectives.includes('device_defused')) bits.push(i.defused ? '✔ onschadelijk' : '○ ontmijnen');
       if (def.objectives.includes('obstacle_cleared')) bits.push(i.cleared ? '✔ geruimd' : '○ ruimen');
       return `<div class="inc s${i.severity}" data-iid="${i.id}"><div class="t"><span>${esc(def.icon ?? '')} ${esc(i.name)}</span><span>ernst ${i.severity}</span></div>` +
         `${i.description ? `<div class="d">${esc(i.description)}</div>` : ''}<div class="d">${bits.join(' · ')} · nog ${Math.ceil(left)}s</div><div class="meter"><i class="${frac < 0.3 ? 'low' : ''}" style="width:${(frac * 100).toFixed(0)}%"></i></div></div>`;
@@ -236,6 +238,7 @@ export class UI {
         const out = v.crew.filter(id => !w.responders.get(id)!.inVehicle).length;
         html = `<div class="name">${esc(v.name)}</div><div class="row">${v.state === 'moving' ? 'Rijdt (' + Math.round(def.maxSpeed) + ' km/h max)' : 'Staat stil'} · Bemanning: ${v.crew.length - out}/${v.crew.length} aan boord${v.patients.length ? ' · patiënt aan boord' : ''}</div>` +
           `<div class="row">Uitrusting: ${def.equipment.map(e => esc(e.replace(/_/g, ' '))).join(', ') || '—'}</div>` +
+          (def.tank ? `<div class="row">💧 Water: ${Math.round(v.water)} / ${def.tank} L${v.hydrant ? ' · aangesloten op brandkraan' : ''}</div><div class="meter"><i class="${v.water / def.tank < 0.25 && !v.hydrant ? 'low' : ''}" style="width:${Math.round((v.water / def.tank) * 100)}%"></i></div>` : '') +
           `<div class="actions"><button data-act="dismount">⬇ Uitstappen (E)</button><button data-act="board">⬆ Instappen (R)</button><button data-act="crew" ${out ? '' : 'disabled'}>👥 Bemanning</button><button data-act="stop">⏹ Stop (X)</button></div>` +
           `<div class="actions">${def.equipment.includes('fire_hose') ? '<button data-act="deploy" class="primary" title="Bemanning stapt uit, rolt slangen uit en begint direct te blussen">🧯 Slangen aansluiten & blussen (B)</button>' : ''}${def.patientCapacity > 0 ? `<button data-act="hospital" class="${v.patients.length ? 'primary' : ''}" ${v.patients.length ? '' : 'disabled'} title="Rijdt met de patiënt naar het dichtstbijzijnde ziekenhuis">🏥 Naar ziekenhuis (Z)</button>` : ''}<button data-act="return">🏠 Terug naar kazerne (H)</button></div>` +
           `<div class="row">Rechtermuisknop op de kaart = rijden, dubbel rechtsklikken op het voertuig = iedereen uitstappen. Op een ziekenhuis = patiënt afleveren.</div>`;

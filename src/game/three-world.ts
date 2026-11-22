@@ -172,8 +172,6 @@ export function buildStreetFurniture(world: World): FurnitureResult {
         q.setFromAxisAngle(up, yaw);
         m.compose(new THREE.Vector3(cx + dx * 0.9, 6.35, cz + dz * 0.9), q, new THREE.Vector3(1.4, 0.14, 0.5)); heads.push(m.clone());
         batch.box(0.3, 0.3, 0.3, cx, 0.15, cz, 0x2a2c30);
-      } else if (r % 19 === 0) { // hydrant
-        m.compose(new THREE.Vector3(cx - dx * 0.4 + (along ? 0 : 1.2), 0.38, cz - dz * 0.4 + (along ? 1.2 : 0)), q.identity(), new THREE.Vector3(1, 1, 1)); hydrants.push(m.clone());
       } else if (r % 23 === 1) { // bench facing the road
         const bx = cx - dx * 0.5, bz = cz - dz * 0.5;
         batch.box(dx ? 0.5 : 1.7, 0.1, dx ? 1.7 : 0.5, bx, 0.5, bz, 0x7a5a3a);
@@ -191,6 +189,12 @@ export function buildStreetFurniture(world: World): FurnitureResult {
         batch.box(0.5, 0.5, 0.06, sx + dx * 1.1 + (dx ? 0 : 1.4), 2.5, sz + dz * 1.1 + (dx ? 1.4 : 0), 0xffd21a);
       }
     }
+  }
+  for (const h of world.hydrants) { // the simulation decides where the hydrants are (fire vehicles hook up to them)
+    let hx = 0, hz = 0;
+    if (road(h.x - 1, h.y)) hx = -1; else if (road(h.x + 1, h.y)) hx = 1; else if (road(h.x, h.y - 1)) hz = -1; else hz = 1;
+    m.compose(new THREE.Vector3((h.x + 0.5) * TILE_METERS + hx * 1.7, 0.38, (h.y + 0.5) * TILE_METERS + hz * 1.7), q.identity(), new THREE.Vector3(1, 1, 1));
+    hydrants.push(m.clone());
   }
   const mkInst = (geo: THREE.BufferGeometry, mat: THREE.Material, mats: THREE.Matrix4[], cast: boolean): void => {
     if (!mats.length) return;

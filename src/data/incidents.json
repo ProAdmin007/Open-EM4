@@ -263,5 +263,51 @@
     "objectives": ["obstacle_cleared"],
     "escalation": { "everySec": 100 }, "failAfterSec": 280,
     "reward": { "score": 170, "budget": 380 }
+  },
+  {
+    "id": "suspicious_package",
+    "name": "Verdacht pakket",
+    "category": "police",
+    "weight": 3,
+    "icon": "📦",
+    "descriptions": [
+      "Een achtergelaten koffer bij de ingang; de omgeving wordt ontruimd.",
+      "Verdacht pakket met draden gevonden, bomrobot gevraagd.",
+      "Onbeheerde rugzak in de publieke ruimte, mogelijk een explosief."
+    ],
+    "spawn": {
+      "on": "building",
+      "buildingTypes": [
+        "commercial",
+        "shopping",
+        "office",
+        "school"
+      ]
+    },
+    "severity": {
+      "min": 1,
+      "max": 3
+    },
+    "requires": [
+      "police"
+    ],
+    "bystanders": {
+      "min": 3,
+      "max": 8
+    },
+    "objectives": [
+      "area_secured",
+      "bystanders_dispersed",
+      "device_defused"
+    ],
+    "escalation": {
+      "everySec": 80
+    },
+    "failAfterSec": 260,
+    "defuseTime": 16,
+    "reward": {
+      "score": 400,
+      "budget": 350
+    }
   }
 ]
