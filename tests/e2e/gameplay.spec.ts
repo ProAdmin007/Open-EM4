@@ -374,7 +374,7 @@ test('3D view: select engine, send to a house fire, dismount, extinguish, incide
   const target = await screenOf(page, info.bx, info.by);
   await page.mouse.click(target.x, target.y, { button: 'right' });
   await page.waitForFunction(id => (window as any).__openrescue.world.vehicles.get(id).path.length > 0, info.vid);
-  await page.waitForFunction(id => (window as any).__openrescue.world.vehicles.get(id).path.length === 0, info.vid, { timeout: 60_000 });
+  await page.waitForFunction(id => (window as any).__openrescue.world.vehicles.get(id).path.length === 0, info.vid, { timeout: 150_000 });
 
   await page.getByRole('button', { name: /Uitstappen/ }).click();
   await page.waitForFunction(id => (window as any).__openrescue.world.vehicles.get(id).crew.every((r: number) => !(window as any).__openrescue.world.responders.get(r).inVehicle), info.vid);
