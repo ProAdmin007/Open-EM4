@@ -491,10 +491,9 @@ export class World {
     const skip = new Set(avoid);
     const passable = (x: number, y: number) => this.isDrivable(x, y) && !idle.has(key(x, y)) && !skip.has(key(x, y));
     const start = { x: Math.floor(v.x), y: Math.floor(v.y) };
-    const plain = findPath(this.w, this.h, start, dest, passable, { edge: v.contraflow ? this.bayEdgeOk : this.laneEdgeOk });
-    // emergency vehicles may turn around on the spot when that saves a long detour (or when there is no other way)
-    const turning = v.contraflow ? null : findPath(this.w, this.h, start, dest, passable, { edge: this.laneUturnOk });
-    return !plain ? turning : turning && plain.length > turning.length + 4 ? turning : plain;
+    // every vehicle may turn around anywhere on the street (a U-turn into the opposite lane), so routes are the shortest ones
+    const turning = findPath(this.w, this.h, start, dest, passable, { edge: v.contraflow ? this.bayEdgeOk : this.laneUturnOk });
+    return turning ?? findPath(this.w, this.h, start, dest, passable, { edge: this.laneEdgeOk });
   }
 
   /** Nearest drivable tiles to a point that are not blocked by an obstacle or a parked vehicle, best first. */
@@ -600,7 +599,15 @@ export class World {
       v.lights = !v.silent;
       this.driveVehicle(v, dt);
     }
-    if (!v.path.length && v.state === 'idle') this.settleVehicle(v, dt);
+    if (!v.path.length && v.state === 'idle') {
+      // a vehicle that comes to a halt in a junction drives on to a clear spot instead of blocking all four directions
+      if (this.isIntersection(Math.floor(v.x), Math.floor(v.y)) && this.groundVehicle(v) && !v.returning) {
+        const t = (this.junctionTimer.get(v.id) ?? 0) + dt;
+        this.junctionTimer.set(v.id, t);
+        if (t > 1.2) { this.junctionTimer.set(v.id, -3); this.driveNear(v, v.x, v.y); }
+      } else this.junctionTimer.delete(v.id);
+      this.settleVehicle(v, dt);
+    }
     for (const rid of v.crew) {
       const r = this.responders.get(rid);
       if (r?.inVehicle) { r.x = v.x; r.y = v.y; r.px = v.px; r.py = v.py; }
@@ -619,7 +626,10 @@ export class World {
       const dx = tx - v.x, dy = ty - v.y, d = Math.hypot(dx, dy);
       if (d < 1e-4) { v.path.shift(); continue; }
       const ux = dx / d, uy = dy / d, step = Math.min(budget, d);
-      const blocker = v.ghost > 0 ? null : this.gate(v, def.length) ?? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, halfWidth(def.length), PRIO_EMERGENCY);
+      // a U-turn swings the whole length of the vehicle through the neighbouring lane: reserve that space
+      const la0 = this.laneAt(Math.floor(v.x), Math.floor(v.y)), lb0 = this.laneAt(v.path[0].x, v.path[0].y);
+      const uturn = !!(la0 && lb0 && la0.x === -lb0.x && la0.y === -lb0.y && Math.abs(ux * la0.x + uy * la0.y) < 1e-6);
+      const blocker = v.ghost > 0 ? null : this.gate(v, def.length) ?? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, uturn ? def.length * 0.52 : halfWidth(def.length), PRIO_EMERGENCY);
       if (blocker) { this.onBlocked(v, blocker, dt); return; }
       v.blocked = 0;
       // U-turn: sliding into the opposite lane while rotating through 180 degrees
@@ -664,17 +674,47 @@ export class World {
     return null;
   }
 
+  /** Tile keys around a blocker (its footprint, and the rest of the junction when it stands in one): routes avoid them all. */
+  private blockerTiles(b: Blocker): number[] {
+    const out: number[] = [];
+    const bx = Math.floor(b.x), by = Math.floor(b.y);
+    for (let j = by - 2; j <= by + 2; j++) for (let i = bx - 2; i <= bx + 2; i++) {
+      if (!this.isRoad(i, j)) continue;
+      const near = Math.hypot(i + 0.5 - b.x, j + 0.5 - b.y) <= 1.5;
+      const sameJunction = this.isIntersection(bx, by) && this.isIntersection(i, j);
+      if (near || sameJunction) out.push(key(i, j));
+    }
+    return out;
+  }
+
   private onBlocked(v: Vehicle, b: Blocker, dt: number): void {
     const before = v.blocked;
     v.blocked += dt;
-    // a civilian car standing in the way of an emergency vehicle pulls away
-    if (b.kind === 'civ' && b.halted && v.blocked > 1.2) this.respawnCivilian(b.civ!);
-    // a parked vehicle in the way: plan a different route around it (still obeying the lane rules)
-    if (b.kind === 'veh' && b.halted && v.dest && v.blocked > 1.5 && Math.floor(v.blocked / 2) !== Math.floor(before / 2)) {
-      const k = key(Math.floor(b.x), Math.floor(b.y));
-      if (!v.avoid.includes(k)) v.avoid = [...v.avoid.slice(-5), k];
+    const movingVeh = b.kind === 'veh' && !b.halted;
+    // head-on or crossing standoff between two moving vehicles: the one with the higher id turns around and takes another way
+    if (movingVeh && v.dest && v.blocked > 1.2 && (b.id ?? 0) < v.id && Math.floor(v.blocked / 2) !== Math.floor(before / 2)) {
+      v.contraflow = false;
+      v.avoid = [...v.avoid.slice(-8), ...this.blockerTiles(b)];
       const dest = v.dest;
       if (!this.routeVehicle(v, dest, v.avoid)) v.dest = dest;
+    }
+    // a civilian car standing in the way of an emergency vehicle pulls away
+    if (b.kind === 'civ' && (b.halted || v.blocked > 3) && v.blocked > 1.2) this.respawnCivilian(b.civ!);
+    // a parked vehicle in the way: plan a different route around it (still obeying the lane rules)
+    if (((b.kind === 'veh' && b.halted) || (b.kind === 'civ' && v.blocked > 3.5)) && v.dest && v.blocked > 1.5 && Math.floor(v.blocked / 2) !== Math.floor(before / 2)) {
+      v.avoid = [...v.avoid.slice(-8), ...this.blockerTiles(b)];
+      const dest = v.dest;
+      if (!this.routeVehicle(v, dest, v.avoid)) {
+        v.dest = dest;
+        // no legal way around (everything is one-way and blocked): as a last resort drive against the lane direction around it
+        v.contraflow = true;
+        if (!this.routeVehicle(v, dest, v.avoid)) {
+          v.contraflow = false;
+          v.dest = dest;
+          // the destination itself is taken by a stopped vehicle: stop at the nearest free spot instead
+          if (v.blocked > 3) this.driveNear(v, dest.x + 0.5, dest.y + 0.5);
+        }
+      }
     }
     if (b.kind === 'person' && v.blocked > 1) {
       if (b.responder && !b.responder.task && !b.responder.path.length) {
@@ -683,12 +723,12 @@ export class World {
         if (!this.walkTo(b.responder, (x, y) => !this.isRoad(x, y) && !this.isParking(x, y))) { b.responder.task = null; b.responder.path = []; }
       } else if (v.dest && Math.floor(v.blocked / 2) !== Math.floor(before / 2)) {
         // somebody working in the way (or a casualty): plan around them
-        const k = key(Math.floor(b.x), Math.floor(b.y));
-        if (!v.avoid.includes(k)) v.avoid = [...v.avoid.slice(-5), k];
+        v.avoid = [...v.avoid.slice(-8), ...this.blockerTiles(b)];
         const dest = v.dest;
         if (!this.routeVehicle(v, dest, v.avoid)) v.dest = dest;
       }
     }
+    if (v.blocked > 7 && v.blocked < 7.2 && movingVeh && (b.id ?? 0) < v.id) v.ghost = 2.5; // last resort for a deadlock between moving vehicles: slip past
     if (v.blocked > 12) { // never drive through anything: give up and let the player re-order
       v.path = [];
       v.dest = null;
@@ -1041,6 +1081,7 @@ export class World {
   }
 
   private tallWarned = new Set<string>();
+  private junctionTimer = new Map<number, number>();
 
   /** How many responders (chosen by the player) are assisting next to this casualty: they speed up treatment (max 2). */
   helpers(v: { id: number; x: number; y: number }): number {
@@ -1822,7 +1863,7 @@ export class World {
       this.civilians.push({
         kind: 'civilian', ...this.addEntityBase(r.x + 0.5, r.y + 0.5), path: [], angle: 0, color: this.rng.int(0, 5), wait: this.rng.range(0, 3), stuck: 0,
         speed: type === 'bike' ? this.rng.range(1.5, 2.1) : type === 'van' ? this.rng.range(2.9, 3.7) : this.rng.range(3.2, 4.2),
-        v: 0, type, len: type === 'bike' ? 0.55 : type === 'van' ? 1.7 : CAR_LEN, hw: type === 'bike' ? 0.17 : CAR_HW, braking: false, signal: 0,
+        v: 0, type, len: type === 'bike' ? 0.55 : type === 'van' ? 1.7 : CAR_LEN, hw: type === 'bike' ? 0.17 : CAR_HW, braking: false, signal: 0, avoidTile: -1, avoidUntil: 0,
       });
     }
     const walk: Vec[] = [];
@@ -1852,9 +1893,12 @@ export class World {
       const idle = new Set<number>();
       for (const v of this.vehicles.values()) if (!v.path.length) idle.add(key(Math.floor(v.x), Math.floor(v.y)));
       const from = { x: Math.floor(c.x), y: Math.floor(c.y) };
-      const ok = (x: number, y: number) => this.civCanEnter(c, x, y) && !idle.has(key(x, y));
+      const avoidK = c.avoidUntil > this.time ? c.avoidTile : -1;
+      const ok = (x: number, y: number) => this.civCanEnter(c, x, y) && !idle.has(key(x, y)) && key(x, y) !== avoidK;
       // cars turn around when they are facing a closed road or a dead end
-      const p = findPath(this.w, this.h, from, dest, ok, { edge: this.laneEdgeOk }) ?? findPath(this.w, this.h, from, dest, ok, { edge: this.laneUturnOk });
+      const turn = findPath(this.w, this.h, from, dest, ok, { edge: this.laneUturnOk });
+      const lane = turn ? findPath(this.w, this.h, from, dest, ok, { edge: this.laneEdgeOk }) : null;
+      const p = turn && lane && lane.length <= turn.length + 6 ? lane : turn; // a U-turn when it saves more than a few tiles (or the only way)
       if (!p || p.length < 8) { c.wait = 1; return; }
       c.path = p;
     }
@@ -1887,16 +1931,26 @@ export class World {
     c.v += Math.max(-7 * dt, Math.min(2.6 * dt, target - c.v));
     c.braking = c.v < before - 1e-3 || (target === 0 && c.v < 0.3);
     const step = Math.min(c.v * dt, d);
-    const blocker = this.findBlocker(c, c.x, c.y, ux, uy, Math.max(step, 0.02), c.len, c.hw, PRIO_CIVILIAN);
+    const la1 = this.laneAt(Math.floor(c.x), Math.floor(c.y)), lb1 = this.laneAt(next.x, next.y);
+    const cUturn = !!(la1 && lb1 && la1.x === -lb1.x && la1.y === -lb1.y && Math.abs(ux * la1.x + uy * la1.y) < 1e-6);
+    const blocker = this.findBlocker(c, c.x, c.y, ux, uy, Math.max(step, 0.02), c.len, cUturn ? c.len * 0.52 : c.hw, PRIO_CIVILIAN);
     if (blocker) {
       c.v = Math.max(0, c.v - 10 * dt); c.braking = true;
       c.stuck += dt;
-      if (c.stuck > 3 && blocker.kind === 'veh') { c.path = []; c.wait = 0.3; } // re-plan around a parked emergency vehicle
-      if (c.stuck > 8) this.respawnCivilian(c); // deadlock breaker: this car drives off somewhere else
+      if (c.stuck > 2 && c.path.length) { // stuck: turn around and take another way (the blocking tile is avoided for a while)
+        const k = key(Math.floor(blocker.x), Math.floor(blocker.y));
+        c.avoidTile = k; c.avoidUntil = this.time + 8;
+        c.path = []; c.wait = 0.2;
+      }
+      if (c.stuck > 6) this.respawnCivilian(c); // deadlock breaker: this car drives off somewhere else
       return;
     }
     c.stuck = Math.max(0, c.stuck - dt);
-    c.angle = Math.atan2(dy, dx);
+    const la = this.laneAt(Math.floor(c.x), Math.floor(c.y)), lb = this.laneAt(next.x, next.y);
+    if (la && lb && la.x === -lb.x && la.y === -lb.y && Math.abs(ux * la.x + uy * la.y) < 1e-6) { // U-turn: slide into the opposite lane while turning through 180 degrees
+      const sign = Math.sign(la.x * uy - la.y * ux) || 1;
+      c.angle = Math.atan2(la.y, la.x) + sign * Math.PI * Math.min(1, Math.max(0, 1 - (d - step)));
+    } else c.angle = Math.atan2(dy, dx);
     c.x += ux * step; c.y += uy * step;
     if (d - step < 1e-3) { c.x = next.x + 0.5; c.y = next.y + 0.5; c.path.shift(); }
   }

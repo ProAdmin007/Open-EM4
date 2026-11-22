@@ -268,6 +268,9 @@ export interface Civilian extends Entity {
   /** braking now / turn indicator (-1 left, 1 right) for the renderer */
   braking: boolean;
   signal: number;
+  /** a tile to avoid when planning (what blocked this car) until this time */
+  avoidTile: number;
+  avoidUntil: number;
 }
 export interface Pedestrian extends Entity {
   kind: 'pedestrian';

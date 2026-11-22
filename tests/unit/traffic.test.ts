@@ -63,7 +63,11 @@ describe('lanes', () => {
     let prev = { x: Math.floor(v.x), y: Math.floor(v.y) };
     for (const t of v.path) {
       const ln = w.laneAt(prev.x, prev.y);
-      if (ln && !w.isParking(t.x, t.y)) expect([t.x - prev.x, t.y - prev.y]).toEqual([ln.x, ln.y]);
+      if (ln && !w.isParking(t.x, t.y)) {
+        const step = [t.x - prev.x, t.y - prev.y];
+        const uturn = (() => { const lb = w.laneAt(t.x, t.y); return !!lb && lb.x === -ln.x && lb.y === -ln.y && step[0] * ln.x + step[1] * ln.y === 0; })();
+        if (!uturn) expect(step).toEqual([ln.x, ln.y]); // lanes are followed, except for a U-turn into the opposite lane
+      }
       prev = t;
     }
   });
@@ -216,5 +220,52 @@ describe('turning around', () => {
     w.orderMove([v.id], r.x + 3.5, r.y + 1.5);
     run(w, 120, () => !v.path.length);
     expect(Math.hypot(v.x - (r.x + 3.5), v.y - (r.y + 1.5))).toBeLessThan(3);
+  });
+});
+
+describe('vehicles turn around freely and do not get stuck', () => {
+  it('in a busy hard game every dispatched vehicle arrives, and giving up is rare', { timeout: 120000 }, () => {
+    let trips = 0, arrived = 0, failed = 0, gaveUp = 0;
+    for (const seed of [31, 32]) {
+      const w = World.create(content, { seed, difficulty: 'hard', freeplay: true, traffic: true });
+      w.reputation = 1e9;
+      const busy = new Map<number, { t: number }>();
+      for (let i = 0; i < 30 * 420; i++) {
+        w.tick();
+        for (const e of w.drainEvents()) {
+          if (/komt er niet door/.test(e.message)) gaveUp++;
+          if (e.type !== 'incident_started') continue;
+          const inc = w.incidents.get(e.incidentId)!;
+          const b = inc.buildingId ? w.buildings.get(inc.buildingId) : null;
+          const tx = b ? b.door.x + 0.5 : inc.x, ty = b ? b.door.y + 0.5 : inc.y;
+          for (const cat of w.content.incidents[inc.defId].requires) {
+            const v = [...w.vehicles.values()].filter(x => x.category === cat && !busy.has(x.id) && !x.path.length && x.crew.every(id => w.responders.get(id)!.inVehicle)).sort((a, c) => Math.hypot(a.x - tx, a.y - ty) - Math.hypot(c.x - tx, c.y - ty))[0];
+            if (v) { w.orderMove([v.id], tx, ty); busy.set(v.id, { t: w.time }); trips++; }
+          }
+        }
+        for (const [id, job] of busy) {
+          const v = w.vehicles.get(id)!;
+          if (!v.path.length && w.time - job.t > 5) { arrived++; busy.delete(id); w.orderReturn([id]); }
+          else if (w.time - job.t > 300) { failed++; busy.delete(id); w.orderReturn([id]); }
+        }
+      }
+    }
+    expect(trips).toBeGreaterThan(20);
+    expect(failed).toBe(0);
+    expect(arrived).toBeGreaterThanOrEqual(trips - 3);
+    expect(gaveUp).toBeLessThanOrEqual(16);
+  });
+
+  it('a car whose way is blocked turns around instead of waiting for ever', () => {
+    const w = World.create(content, { seed: 41, difficulty: 'normal', freeplay: false, traffic: true });
+    const r = straightRoad(w, 'h', 14);
+    const car = w.civilians[0];
+    w.civilians.length = 1; // alone on the road
+    car.x = car.px = r.x + 3.5; car.y = car.py = r.y + 1.5; car.angle = 0; car.path = []; car.wait = 0; car.v = 0;
+    w.spawnIncident('road_blockage', { severity: 1, at: { x: r.x + 6, y: r.y + 1 } });
+    car.path = Array.from({ length: 8 }, (_, i) => ({ x: r.x + 4 + i, y: r.y + 1 }));
+    for (let i = 0; i < 30 * 30; i++) w.tick();
+    expect(Math.abs(car.x - (r.x + 3.5)) + Math.abs(car.y - (r.y + 1.5))).toBeGreaterThan(0); // it moved on somewhere (it did not sit there)
+    expect(car.stuck).toBeLessThan(6);
   });
 });

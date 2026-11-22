@@ -9,7 +9,7 @@ Command fire engines, ambulances, police cars and tow trucks in a living city �
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-119%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-121%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 **English** · [Nederlands](README.nl.md)
@@ -42,12 +42,13 @@ It is inspired by the gameplay of *Emergency 4* (2006), but it is an **independe
 - 🚑 **Medical scenes** – relatives kneel beside the patient, casualties are carried on a trolley with a drip stand and oxygen bottle, sitting poses for choking and allergic reactions; the ambulance drives back to its station without sirens after the hospital.
 - 🤝 **You choose who helps** – select any firefighter, officer or technician and right-click (or press *Helpen*) a casualty: they assist the paramedic, which speeds up treatment (up to two helpers) and walk alongside the trolley. Selected units get a pulsing ring, a light column, an arrow and a name label in 3D.
 - 🚦 **Livelier traffic** – cars accelerate and brake smoothly, queue for red lights, use brake lights and indicators, there are vans and cyclists keeping to the right edge of the lane. Buildings always keep a pavement strip from the road.
+- 🔄 **U-turns anywhere** – every vehicle, civilian or emergency, can turn around on the street; routes are the shortest ones, a vehicle that is blocked plans around the obstruction (or turns back), and stopped vehicles leave junctions again, so traffic keeps flowing.
 - ⏱️ **Severity matters** – treatment, arrest, securing, clearing and fire-fighting times grow with the severity, differ per incident type, and unattended incidents escalate and eventually fail.
 - 🚦 **Believable traffic** – right-hand lanes, U-turns, emergency vehicles that never overlap other vehicles or people, parking bays at every station, and crews that step out *beside* the vehicle.
 - 🔊 **Fully procedural audio** – Dutch-style two-tone sirens, crackling fire, water spray, traffic hum and UI effects, all synthesised with the Web Audio API (no sound files).
 - 🎯 **Game modes** – six missions, endless Freeplay (Easy / Normal / Hard, seeded for reproducible scenarios), save & load, local highscores.
 - 🧩 **Moddable** – vehicles, roles, incidents, missions and maps are validated JSON; an example content pack is included.
-- 🧪 **Well tested** – deterministic simulation with 119 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
+- 🧪 **Well tested** – deterministic simulation with 121 unit tests and 16 Playwright browser tests (including the full "drive to a fire, dismount, extinguish, incident disappears" scenario, in both the 2D and 3D views).
 - 🧊 **The 3D game** – the game is played in 3D by default (the 2D view is still there as a lightweight alternative): a procedural three.js city (buildings, vehicles, people, fire/smoke, traffic lights) with an RTS camera, next to the original 2D view; switch in Settings or the main menu. Lazily loaded, so it costs nothing if you never turn it on ([docs/3d.md](docs/3d.md)).
 
 The experimental 3D view (procedural three.js, no external assets):
