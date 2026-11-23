@@ -758,6 +758,50 @@ export function buildDebris(seed: number): THREE.Group {
   return g;
 }
 
+let beamTex: THREE.Texture | null = null;
+function beamTexture(): THREE.Texture {
+  if (beamTex) return beamTex;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 128;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createLinearGradient(0, 128, 0, 0); // bright at the lamp (bottom), fading away
+  g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(0.5, 'rgba(255,255,255,0.3)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 128);
+  ctx.globalCompositeOperation = 'destination-in'; // soft sides
+  const s = ctx.createLinearGradient(0, 0, 64, 0);
+  s.addColorStop(0, 'rgba(0,0,0,0)'); s.addColorStop(0.5, 'rgba(0,0,0,1)'); s.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = s; ctx.fillRect(0, 0, 64, 128);
+  beamTex = new THREE.CanvasTexture(c); beamTex.userData.shared = true; beamTex.colorSpace = THREE.SRGBColorSpace;
+  return beamTex;
+}
+let beamMats: Record<string, THREE.MeshBasicMaterial> = {};
+function beamMat(color: number, radial: boolean): THREE.MeshBasicMaterial {
+  const k = color + (radial ? 'r' : 'b');
+  if (!beamMats[k]) { const m = new THREE.MeshBasicMaterial({ map: radial ? softSpriteTexture() : beamTexture(), color, transparent: true, opacity: radial ? 0.5 : 0.8, depthWrite: false, blending: THREE.AdditiveBlending }); m.userData.shared = true; beamMats[k] = m; }
+  return beamMats[k];
+}
+let beamGeoCache: THREE.PlaneGeometry | null = null;
+/** Night effects of a vehicle: two headlight pools on the road ahead and (emergency vehicles) a flashing coloured glow around it. Hidden by day. */
+export function buildNightFx(length: number, width: number, emergency: boolean): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'nightfx';
+  if (!beamGeoCache) { beamGeoCache = new THREE.PlaneGeometry(1, 1); beamGeoCache.rotateX(-Math.PI / 2); beamGeoCache.rotateY(-Math.PI / 2); beamGeoCache.userData.shared = true; } // lies flat, texture runs away from the lamp along +x
+  for (const s of [-1, 1]) {
+    const m = new THREE.Mesh(beamGeoCache, beamMat(0xfff2c8, false));
+    m.scale.set(8, 1, width * 0.8);
+    m.position.set(length / 2 + 3.4, 0.07, s * width * 0.3);
+    g.add(m);
+  }
+  if (emergency) for (const [i, col] of [0xff2a1a, 0x2a6aff].entries()) {
+    const m = new THREE.Mesh(beamGeoCache, beamMat(col, true));
+    m.scale.set(length * 2.8, 1, length * 2.8);
+    m.position.set(i ? -length * 0.15 : length * 0.15, 0.08 + i * 0.002, 0);
+    m.userData.flash = i;
+    g.add(m);
+  }
+  g.visible = false;
+  return g;
+}
+
 /** A soft round sprite texture for flames and smoke. */
 export function softSpriteTexture(): THREE.Texture {
   const c = document.createElement('canvas');

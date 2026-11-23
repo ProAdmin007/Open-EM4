@@ -7,7 +7,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Commands, type SelectionHost } from './selection';
 import { Weather } from './three-weather';
-import { buildGasCloud, buildPuddle, buildRubble, addCrashFx, buildDemonstration, buildOverturnedTruck, buildDripStand, buildOxygenBottle, paint, buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
+import { buildNightFx, buildGasCloud, buildPuddle, buildRubble, addCrashFx, buildDemonstration, buildOverturnedTruck, buildDripStand, buildOxygenBottle, paint, buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
 import { ParticlePool, setSegment } from './three-fx';
 import { bakeGroundChunks, buildGroundMeshes, groundHeight } from './three-ground';
 import { planarRoofUVs, roofTexture, scaleBoxUVs, wallTexture } from './three-textures';
@@ -208,6 +208,8 @@ export class Three3DRenderer implements GameRenderer {
     this.canvas.tabIndex = 0;
     (document.getElementById('game-root') ?? document.body).appendChild(this.canvas);
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; // filmic highlights and richer colour
+    this.renderer.toneMappingExposure = 1.08;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.camera = new THREE.PerspectiveCamera(48, 1, 0.5, 2500);
     this.scene.background = null;
@@ -274,6 +276,7 @@ export class Three3DRenderer implements GameRenderer {
     this.lastDt = dt;
     this.stepCamera(dt);
     this.env.update(snap.time, this.target, this.camera.position);
+    this.updateWet(snap.raining, dt);
     this.weather.update(this.time, dt, snap.raining, this.env.daylight, this.target, this.scene.fog as THREE.Fog, this.env.sun);
     this.anyDefusing = snap.incidents.some(i => i.defusing);
     this.syncVehicles(snap.vehicles);
@@ -290,6 +293,17 @@ export class Three3DRenderer implements GameRenderer {
     this.renderer.render(this.scene, this.camera);
   }
 
+  private wetRaw = 0;
+  private wet = 0;
+  /** Roads and pavements darken while it rains and dry out again afterwards. */
+  private updateWet(raining: boolean, dt: number): void {
+    const target = raining ? 1 : 0;
+    this.wetRaw += Math.max(-dt * 0.04, Math.min(dt * 0.08, target - this.wetRaw));
+    if (Math.abs(this.wetRaw - this.wet) < 0.02 || !this.groundMesh) return;
+    this.wet = this.wetRaw;
+    const k = 1 - 0.3 * this.wet;
+    this.groundMesh.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) (m.material as THREE.MeshLambertMaterial).color.setScalar(k); });
+  }
   screenToTile(sx: number, sy: number): { x: number; y: number } | null {
     const rect = this.canvas.getBoundingClientRect();
     const ndcX = (sx / (rect.width || this.canvas.width)) * 2 - 1;
@@ -325,7 +339,7 @@ export class Three3DRenderer implements GameRenderer {
   setShadows(on: boolean): void {
     this.shadows = on;
     this.renderer.shadowMap.enabled = on;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.env.sun.castShadow = on;
     this.scene.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.material) (Array.isArray(m.material) ? m.material : [m.material]).forEach(mm => { mm.needsUpdate = true; }); });
   }
@@ -608,7 +622,15 @@ export class Three3DRenderer implements GameRenderer {
     group.userData.kind = 'vehicle';
     group.userData.id = v.id;
     group.userData.parts = parts;
+    group.add(buildNightFx(v.size.length, v.size.width, true));
     return group;
+  }
+  private nightFx(obj: THREE.Object3D, on: boolean, lights: boolean): void {
+    const fx = obj.getObjectByName('nightfx');
+    if (!fx) return;
+    fx.visible = on;
+    if (!on) return;
+    for (const c of fx.children) if (c.userData.flash !== undefined) c.visible = lights && (Math.floor(this.time * 8) + c.userData.flash) % 2 === 0;
   }
   private animateParts(parts: VehicleParts | undefined, moving: boolean, lights: boolean, dt: number): void {
     if (!parts) return;
@@ -627,6 +649,7 @@ export class Three3DRenderer implements GameRenderer {
       obj.position.set(v.position.x, 0, v.position.z);
       obj.rotation.y = v.yaw;
       this.animateParts(obj.userData.parts as VehicleParts, v.moving, v.lights, this.lastDt);
+      this.nightFx(obj, this.env.night, v.lights);
       const ladder = obj.getObjectByName('ladder');
       if (ladder) { // raise, turn towards the building and extend while the crew is spraying
         const up = v.aerial ? 1 : 0;
@@ -833,8 +856,10 @@ export class Three3DRenderer implements GameRenderer {
     this.track(this.cars, list, c => {
       const { group, parts } = buildCivilianCar(c.model, c.id, c.type);
       group.userData.parts = parts;
+      if (c.type !== 'bike') group.add(buildNightFx(4.2, 1.8, false));
       return group;
     }, (obj, c) => {
+      this.nightFx(obj, this.env.night, false);
       const px = obj.position.x, pz = obj.position.z;
       obj.position.set(c.position.x, 0, c.position.z);
       obj.rotation.y = -c.heading;

@@ -653,10 +653,25 @@ export class World {
     return best ? this.routeVehicle(v, best.c) : false;
   }
 
+  /** Hospital beds: every admitted patient occupies a bed for a while (release times per hospital id). */
+  readonly hospitalBeds = new Map<string, number[]>();
+  static readonly BEDS = 4;
+  static readonly BED_SECONDS = 150;
+  bedsFree(h: Building): number {
+    const t = this.time;
+    const list = (this.hospitalBeds.get(h.id) ?? []).filter(r => r > t);
+    this.hospitalBeds.set(h.id, list);
+    return World.BEDS - list.length;
+  }
+  /** The nearest hospital; one with a free bed is preferred, a full one is the fallback so the ambulance still goes somewhere. */
   private nearestHospital(x: number, y: number): Building | null {
-    let best: Building | null = null, bd = Infinity;
-    for (const b of this.buildings.values()) if (b.type === 'hospital' && !b.destroyed) { const d = rectDist(b, x, y); if (d < bd) { bd = d; best = b; } }
-    return best;
+    let best: Building | null = null, bd = Infinity, free: Building | null = null, fd = Infinity;
+    for (const b of this.buildings.values()) if (b.type === 'hospital' && !b.destroyed) {
+      const d = rectDist(b, x, y);
+      if (d < bd) { bd = d; best = b; }
+      if (d < fd && this.bedsFree(b) > 0) { fd = d; free = b; }
+    }
+    return free ?? best;
   }
 
   private updateVehicle(v: Vehicle, dt: number): void {
@@ -1494,7 +1509,16 @@ export class World {
     const hospitals = [...this.buildings.values()].filter(b => b.type === 'hospital');
     for (const v of this.vehicles.values()) {
       if (!v.patients.length || v.path.length) continue;
-      if (!hospitals.some(h => rectDist(h, v.x, v.y) <= 6)) continue;
+      const here = hospitals.find(h => rectDist(h, v.x, v.y) <= 6);
+      if (!here) continue;
+      if (this.bedsFree(here) < v.patients.length) { // full: wait for a bed, or drive on to a hospital with room
+        const other = this.nearestHospital(v.x, v.y);
+        if (other && other !== here && this.bedsFree(other) >= v.patients.length) this.routeVehicle(v, { x: other.door.x, y: other.door.y });
+        continue;
+      }
+      const beds = this.hospitalBeds.get(here.id) ?? [];
+      for (let i = 0; i < v.patients.length; i++) beds.push(this.time + World.BED_SECONDS);
+      this.hospitalBeds.set(here.id, beds);
       for (const pid of v.patients) {
         const p = this.victims.get(pid);
         if (p) { p.transport = 'atHospital'; this.emit({ type: 'info', message: `Slachtoffer afgeleverd bij het ziekenhuis (${Math.round(p.health)}% gezondheid)` }); }

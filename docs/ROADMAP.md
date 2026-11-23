@@ -16,6 +16,8 @@ Derived from the [knowledge base](knowledge/README.md). Status: ✅ done · 🟡
 | R12 | Feasibility bot: every incident type solvable within its time limit (`tools/feasibility.ts`) | own | ✅ (see results in `docs/feasibility.md`) |
 | R13 | Close-up review of every incident type in 3D (`tools/screens3d-incidents.mjs`): fixed oversized smokestacks, added scene props (flood water, oil slick, gas cloud, rubble, waving callers at the door, tape at crime scenes, alarm beacons) | own | ✅ |
 | R5a | Weather-driven incidents: chain collisions on slippery roads and storm debris, 4x as likely in the rain | 112 Operator | ✅ (storms and flooding still open) |
+| R6 | Hospital capacity: 4 beds per hospital for 150 s per patient; ambulances prefer a hospital with a free bed and wait when all are full | 911 Operator | ✅ (specialisation still open) |
+| V1 | Visual realism: filmic tone mapping, soft shadows, headlight pools and flashing emergency glow on the road at night, wet darker roads in rain, brighter night ambience (`tools/screens3d-night.mjs`) | own | ✅ |
 
 ## Next
 
@@ -24,7 +26,6 @@ Derived from the [knowledge base](knowledge/README.md). Status: ✅ done · 🟡
 | R2 | Call queue: calls ring, ask 2-3 questions (what / where / how many hurt), recommended units depend on the answers | 911/112 Operator | extends `recommendedUnits`; needs a small call UI |
 | R4 | Districts with different incident mixes (industrial, residential, centre) | 112 Operator | weights per area in the map; map generator already knows building types |
 | R5 | Storms with wind damage across the map, flooding that grows, day/night mixes | 112 Operator | builds on R5a |
-| R6 | Hospital capacity and specialisation (trauma centre) | 911 Operator | patients are redirected when full |
 | R8 | Ballistic shields / entry team for armed incidents | LA mod | extra police roles and abilities |
 | R9 | Scene lighting vehicle (flood lights) for night operations | LA mod | night visibility effect + vehicle model |
 

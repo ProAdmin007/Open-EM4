@@ -390,7 +390,7 @@ export class Environment {
     (this.skyMat.uniforms.horizon.value as THREE.Color).copy(hor);
     this.fog.color.copy(hor);
     this.sky.position.copy(camPos);
-    this.hemi.intensity = 0.5 + 0.5 * day;
+    this.hemi.intensity = 0.75 + 0.3 * day;
     this.hemi.color.set(0x8fa4d8).lerp(new THREE.Color(0xcfe8ff), day);
     this.sun.intensity = 0.15 + 1.0 * day;
     this.sun.color.set(0xff9a5a).lerp(new THREE.Color(0xfff0d8), Math.min(1, day * 1.6));
