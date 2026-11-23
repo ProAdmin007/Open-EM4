@@ -9,7 +9,7 @@ Stuur brandweer, ambulances, politie en bergingsvoertuigen aan in een levende st
 [![CI](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml/badge.svg)](https://github.com/ProAdmin007/Open-EM4/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Phaser 4](https://img.shields.io/badge/Phaser-4-8A2BE2)](https://phaser.io)
-[![Tests](https://img.shields.io/badge/tests-148%20unit%20%2B%2016%20browser-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-150%20unit%20%2B%2016%20browser-brightgreen)](tests)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-proadmin007-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/proadmin007)
 
 [English](README.md) · **Nederlands**
@@ -45,6 +45,7 @@ Het spel is geïnspireerd op de gameplay van *Emergency 4* (2006), maar is een *
 - 🌧 **Levende wereld** – voorbijdrijvende wolken, regenbuien (het verkeer rijdt langzamer); ongevallen met knipperende alarmlichten, vonken, afgegane airbags en soms een omgevallen vrachtwagen; demonstraties met spandoeken en borden; geparkeerde voertuigen trekken naar de stoeprand; lichtbalken met extra flitsers, zichtbare bestuurders, fluorescerende hesjes.
 - 🚥 **Vloeiend verkeer, outfits per rol, GRIP afschalen** – stoplichten alleen op de grote kruispunten (met ontruimingstijd en zonder het kruispunt te blokkeren), voorrangsregels elders, auto's volgen elkaar op snelheid van de voorganger; hulpvoertuigen remmen voor bochten, prio 1 rijdt snel met sirene en zwaailichten, prio 2 rustiger met alleen zwaailichten; een stilstaand voertuig dat in de weg staat rijdt door om ruimte te maken; GRIP-eenheden vertrekken na elkaar en worden bij afschalen weer vrijgegeven; elke rol heeft eigen kleding (brandweertuig, gaspak, ME-uitrusting, bomwerend pak, overall van de arts, …); onbeheerde gebouwen branden pas na minuten af; de botsingscontrole is ongeveer drie keer sneller.
 - 👮 **Aanhouding zoals in het echt** – verdachten kunnen wegrennen als de politie nadert; de agent roept "Politie! Blijf staan!", trekt zijn pistool en de verdachte geeft zich over (handen omhoog) of wordt achterhaald; geboeide verdachten worden naar de surveillancewagen gebracht (2 plaatsen, ME-bus 8) en met de 🚔-knop naar het bureau gereden; omstanders kijken toe; hulpverleners knielen, houden vast, wuiven menigtes terug en richten op verdachten met zichtbare houdingen. De onderbalk is hoger.
+- 📞 **Meldkamer-ideeën** – valse meldingen die vanzelf eindigen (controleren kost geld), eerste-hulpinstructies via de telefoon, een dienstrapport met gemiddelde aanrijtijd op het eindscherm, meerdere ambulances/tankautospuiten aanbevolen bij grote incidenten; scène-props voor overstroming, olie, gaswolken, puin en melders die bij de deur zwaaien.
 - 🔄 **Overal keren** – elk voertuig, burger of hulpdienst, kan op straat keren; routes zijn de kortste, een geblokkeerd voertuig plant om de blokkade heen (of keert), en stilstaande voertuigen verlaten kruispunten weer, zodat het verkeer blijft rijden.
 - 🔦 **Verkenning** – bij een brand is onbekend of er nog iemand binnen is totdat een ploeg het pand heeft *verkend*; pas dan kun je de mensen binnen redden.
 - ⚰️ **Begrafenisondernemer** – als iemand overlijdt komt er een lijkwagen van het uitvaartcentrum, die de overledene ophaalt en meeneemt; de melding sluit pas daarna. **Berging** – een sleepwagen tilt het wrak op zijn laadbak (ongelukken vragen daar nu om). **Inladen** – de brancard schuift in een paar seconden de ambulance in, en niemand blijft nog achter.
@@ -116,7 +117,7 @@ Verdien punten en budget door meldingen snel op te lossen, bestel **versterking*
 - `src/game` – weergave, invoer, deeltjes, geluid. `src/ui` – Nederlandse HUD en menu's.
 - JSON-content in `src/data`, stadsgenerator in `tools/genmap.mjs`, benchmark in `tools/bench.ts`.
 
-Meer lezen: [architectuur](docs/architecture.md) · [modding](docs/modding.md) · [3D-plan](docs/3d.md) · [onderzoek](docs/research.md) · [prestaties](docs/performance.md) · [licenties](THIRD_PARTY.md).
+Meer lezen: [architectuur](docs/architecture.md) · [modding](docs/modding.md) · [3D-plan](docs/3d.md) · [onderzoek](docs/research.md) · [kennisbank](docs/knowledge/README.md) · [roadmap](docs/ROADMAP.md) · [haalbaarheid](docs/feasibility.md) · [prestaties](docs/performance.md) · [licenties](THIRD_PARTY.md).
 
 ## Modding
 

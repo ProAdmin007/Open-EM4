@@ -7,7 +7,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Commands, type SelectionHost } from './selection';
 import { Weather } from './three-weather';
-import { addCrashFx, buildDemonstration, buildOverturnedTruck, buildDripStand, buildOxygenBottle, paint, buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
+import { buildGasCloud, buildPuddle, buildRubble, addCrashFx, buildDemonstration, buildOverturnedTruck, buildDripStand, buildOxygenBottle, paint, buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
 import { ParticlePool, setSegment } from './three-fx';
 import { bakeGroundChunks, buildGroundMeshes, groundHeight } from './three-ground';
 import { planarRoofUVs, roofTexture, scaleBoxUVs, wallTexture } from './three-textures';
@@ -862,8 +862,30 @@ export class Three3DRenderer implements GameRenderer {
     return new THREE.CanvasTexture(c);
   }
   private beamMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  /** A person at the door waving for help (medical calls): arms are animated in syncIncidents. */
+  private makeCaller(seed: number): THREE.Object3D {
+    const fake = { id: seed * 11 + 5, kind: 'pedestrian', model: 'person/pedestrian_blue', x: 0, y: 0, position: { x: 0, y: 0, z: 0 }, heading: 0, state: 'idle' } as SnapPerson;
+    const p = this.makePerson(fake);
+    p.userData.caller = true;
+    return p;
+  }
   private propsFor(kind: string, seed: number): THREE.Group {
     const g = new THREE.Group();
+    if (/medical|cardiac|fall_injury|choking|childbirth|allergic|stroke|breathing|seizure|diabetic|overdose|burn_injury/.test(kind)) { // somebody waves the ambulance in at the front door
+      g.userData.place = 'door';
+      const c = this.makeCaller(seed); c.position.set(0.6, 0, 0.9); g.add(c);
+      return g;
+    }
+    if (/^(crime|burglary|armed_robbery|vandalism|fight|shoplifting|knife_threat|domestic_violence|car_break_in)$/.test(kind)) {
+      g.userData.place = 'door';
+      const t = buildBarrier(); t.scale.setScalar(0.6); t.position.set(0, 0, 1.2); g.add(t);
+      const d = buildDebris(seed); d.position.set(-1.2, 0, 0.8); g.add(d);
+      return g;
+    }
+    if (/gas_leak|hazmat_leak/.test(kind)) { g.userData.place = 'center'; g.add(buildGasCloud(seed, kind === 'gas_leak' ? 0xd8e04a : 0x8ae04a)); return g; }
+    if (/building_collapse|industrial_explosion/.test(kind)) { g.userData.place = 'door'; g.add(buildRubble(seed)); return g; }
+    if (kind === 'flooding') { g.add(buildPuddle('water', seed)); return g; }
+    if (kind === 'oil_spill') { g.add(buildPuddle('oil', seed)); return g; }
     if (/accident|collision|hit/.test(kind)) {
       g.add(buildAccidentDetail(seed));
       const w = buildWreck(seed); w.position.set(0, 0, 0); w.rotation.y = seed * 0.9; g.add(w); addCrashFx(w, seed);
@@ -906,6 +928,8 @@ export class Three3DRenderer implements GameRenderer {
         beam.position.set(p0.x, 20, p0.z);
         const props = this.propsFor(inc.kind, inc.id);
         props.position.set(p0.x + 3.2, 0, p0.z + 1.2);
+        if (inc.door && props.userData.place === 'door') { const dp = tileToWorld3D(inc.door.x + 0.5, inc.door.y + 0.5); props.position.set(dp.x, 0, dp.z); }
+        else if (props.userData.place === 'center') props.position.set(p0.x, 0, p0.z);
         if (inc.kind === 'demonstration') { // in front of the building, on the street side
           const bd = snap.buildings.find(x => Math.abs(x.x + x.w / 2 - inc.x) < 0.01 && Math.abs(x.y + x.h / 2 - inc.y) < 0.01);
           props.position.set(p0.x, 0, p0.z + ((bd ? bd.h : 3) / 2 + 1.6) * TILE_METERS);
@@ -921,7 +945,7 @@ export class Three3DRenderer implements GameRenderer {
         let steam: THREE.Vector3[] | undefined;
         if (/accident|collision|hit/.test(inc.kind)) steam = [new THREE.Vector3(props.position.x, 1.0, props.position.z)];
         let beacon: THREE.Mesh | undefined;
-        if (/burglary|armed_robbery/.test(inc.kind)) { // burglar alarm beacon on the front of the building
+        if (/burglary|armed_robbery|automatic_alarm|smoke_detector|car_break_in/.test(inc.kind)) { // alarm beacon on the front of the building
           const bb2 = snap.buildings.find(x => Math.abs(x.x + x.w / 2 - inc.x) < 0.01 && Math.abs(x.y + x.h / 2 - inc.y) < 0.01);
           beacon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.4), new THREE.MeshStandardMaterial({ color: 0xff2a1a, emissive: 0xff2a1a, emissiveIntensity: 1 }));
           beacon.position.set(p0.x, 3.8, p0.z + ((bb2 ? bb2.h : 3) / 2) * TILE_METERS + 0.3);
@@ -935,7 +959,9 @@ export class Three3DRenderer implements GameRenderer {
         if (fx.robot) { fx.robot.visible = inc.defusing; fx.robot.children.forEach((c, i) => { if (i === 5) c.rotation.z = -0.25 + Math.sin(this.time * 3) * 0.2; }); }
         fx.pack.visible = !inc.defused;
       }
-      fx.props.traverse(o => { // hazard lights blink, sparks flicker
+      fx.props.traverse(o => { // hazard lights blink, sparks flicker, gas and dust drift, the caller waves
+        if (o.userData.puff !== undefined) { const k = 1 + 0.08 * Math.sin(this.time * 0.8 + o.userData.puff * 1.7); o.userData.by ??= o.scale.y; o.scale.y = (o.userData.by as number) * k; }
+        if (o.userData.caller) { const arms = o.userData.arms as THREE.Mesh[] | undefined; if (arms) { arms[0].rotation.z = -2.7 + Math.sin(this.time * 7) * 0.35; arms[1].rotation.z = -2.5 - Math.sin(this.time * 7) * 0.35; } }
         if (o.userData.blink) ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).emissiveIntensity = Math.floor(this.time * 2.2) % 2 === 0 ? 2.2 : 0.15;
         else if (o.userData.spark !== undefined) o.visible = Math.sin(this.time * 23 + o.userData.spark * 2.1) > 0.6 && Math.sin(this.time * 1.3 + o.userData.spark) > -0.2;
       });

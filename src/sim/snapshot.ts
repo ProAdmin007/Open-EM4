@@ -87,6 +87,9 @@ export interface SnapIncident {
   defused: boolean;
   /** a wreck is being lifted onto this tow truck: progress 0..1 */
   clearing?: { t: number; vehicleId: number };
+  /** the front door of the building involved (for scene props) and the building's size in tiles */
+  door?: { x: number; y: number };
+  building?: { x: number; y: number; w: number; h: number };
 }
 export interface RenderSnapshot {
   time: number;
@@ -181,7 +184,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
     const veh = world.vehicles.get(r.vehicleId);
     if (veh && world.vehicleDef(veh).id === 'tow_truck') clearing.set(r.task.incidentId, { t: Math.min(1, r.task.progress), vehicleId: veh.id });
   }
-  for (const i of world.incidents.values()) snap.incidents.push({ id: i.id, kind: i.defId, severity: i.severity, x: i.x, y: i.y, secured: i.secured, defusing: defusing.has(i.id), defused: i.defused, clearing: clearing.get(i.id) });
+  for (const i of world.incidents.values()) snap.incidents.push({ id: i.id, kind: i.defId, severity: i.severity, x: i.x, y: i.y, secured: i.secured, defusing: defusing.has(i.id), defused: i.defused, clearing: clearing.get(i.id), ...(i.buildingId && world.buildings.get(i.buildingId) ? { door: world.buildings.get(i.buildingId)!.door, building: (({ x, y, w, h }) => ({ x, y, w, h }))(world.buildings.get(i.buildingId)!) } : {}) });
   for (const i of world.incidents.values()) for (const o of i.obstacle) snap.obstacles.push({ x: o.x, y: o.y, kind: i.defId });
   return snap;
 }

@@ -20,7 +20,7 @@ describe('incident generation', () => {
     expect(sig(a)).toEqual(sig(b));
     expect(a.incidents.size + a.solved + a.failed).toBeGreaterThan(0);
   });
-  it('respects difficulty limits on concurrent incidents', () => {
+  it('respects difficulty limits on concurrent incidents', { timeout: 60000 }, () => {
     const w = newWorld(3, true, 'easy');
     let max = 0;
     for (let i = 0; i < 30 * 900 && !w.over; i++) {

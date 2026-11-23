@@ -59,6 +59,8 @@ export interface IncidentDef {
   objectives: Objective[];
   escalation: { everySec: number };
   failAfterSec: number;
+  /** A call that needs no response: it ends by itself at the time limit; sending a unit to check it costs money. */
+  ignorable?: boolean;
   /** Seconds a bomb robot needs to render a device safe (objective device_defused). */
   defuseTime?: number;
   reward: { score: number; budget: number };
@@ -290,6 +292,10 @@ export interface Incident {
   pager: string;
   /** vehicle types the control room recommends for this call */
   units: string[];
+  /** first-aid instructions were given to the caller over the phone */
+  advised: boolean;
+  /** seconds after the call at which the first unit was on scene (null while nobody is there) */
+  arrivedAt: number | null;
   /** the vehicle types already sent (by the dispatch button or GRIP) */
   dispatched: boolean;
 }

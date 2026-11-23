@@ -32,3 +32,25 @@ describe('arrest: pistol, fleeing suspects, transport', () => {
     expect(w.suspects.has(s.id)).toBe(false);
   }, 60000);
 });
+
+describe('dispatcher-game ideas', () => {
+  it('phone instructions slow the casualties down, once', () => {
+    const w = newWorld(9);
+    const inc = w.spawnIncident('cardiac_arrest', { severity: 2 })!;
+    const v = w.victims.get(inc.victims[0])!;
+    const before = v.decay;
+    expect(w.adviseCaller(inc.id)).toBe(true);
+    expect(v.decay).toBeCloseTo(before * 0.6);
+    expect(w.adviseCaller(inc.id)).toBe(false);
+  });
+  it('a prank call ends by itself; sending a unit to check it costs money', () => {
+    const w = newWorld(9);
+    const inc = w.spawnIncident('prank_call', { severity: 1 })!;
+    expect(inc.units.length).toBe(0);
+    const budget = w.budget;
+    run(w, 90);
+    expect(w.incidents.has(inc.id)).toBe(false);
+    expect(w.failed).toBe(0);
+    expect(w.budget).toBe(budget);
+  });
+});

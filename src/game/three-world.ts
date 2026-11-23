@@ -279,8 +279,8 @@ export function decorateBuilding(group: THREE.Group, type: string, roofKind: str
     }
     case 'industrial': {
       b.box(3, 3.4, 0.15, -w * 0.25, 1.7, front * (d / 2 + 0.08), 0x4c5560); b.box(3, 3.4, 0.15, w * 0.25, 1.7, front * (d / 2 + 0.08), 0x4c5560);
-      b.cyl(1.0, 16, w * 0.38, flatTop + 7.5, -d * 0.25, 0x9c4a3a, 10); b.cyl(1.05, 1.5, w * 0.38, flatTop + 15, -d * 0.25, 0xe8e8e8, 10);
-      b.cyl(0.8, 12, -w * 0.38, flatTop + 5.7, -d * 0.2, 0x9c4a3a, 10);
+      b.cyl(0.5, 9, w * 0.38, flatTop + 4.5, -d * 0.25, 0x9c4a3a, 10); b.cyl(0.55, 0.9, w * 0.38, flatTop + 8.6, -d * 0.25, 0xe8e8e8, 10);
+      b.cyl(0.4, 7, -w * 0.38, flatTop + 3.5, -d * 0.2, 0x9c4a3a, 10);
       b.box(2.4, 1.2, 2.4, 0, flatTop + 0.6, d * 0.2, 0xaab0b6);
       break;
     }

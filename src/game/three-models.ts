@@ -686,6 +686,49 @@ export function buildDemonstration(seed: number): THREE.Group {
   box(g, 5.0, 0.9, 0.03, board('WIJ ZIJN ER KLAAR MEE', '#f2f2f2'), 0, 1.9, -3.4);
   return g;
 }
+/** A drifting cloud of toxic or flammable gas over a building (translucent puffs that slowly pulse). */
+export function buildGasCloud(seed: number, color: number): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false });
+  for (let i = 0; i < 7; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), mat);
+    const s = 2.2 + ((i + seed) % 3) * 0.8;
+    m.scale.set(s, s * 0.7, s);
+    m.position.set(Math.cos(i * 2.3 + seed) * 3.2, 4 + (i % 3) * 0.8, Math.sin(i * 2.3 + seed) * 3.2);
+    m.userData.puff = i;
+    g.add(m);
+  }
+  return g;
+}
+/** A flat pool on the road: water (flooding) or oil. */
+export function buildPuddle(kind: 'water' | 'oil', seed: number): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial(kind === 'water' ? { color: 0x3a78c8, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.62 } : { color: 0x0b0b0e, roughness: 0.15, metalness: 0.4, transparent: true, opacity: 0.88 });
+  const n = kind === 'water' ? 5 : 3;
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(1, 24), mat);
+    m.rotation.x = -Math.PI / 2;
+    const r = kind === 'water' ? 3 + (i % 3) * 1.2 : 1.8 + (i % 2) * 0.8;
+    m.scale.set(r, r * (0.7 + 0.1 * ((seed + i) % 3)), 1);
+    m.position.set(Math.cos(i * 2.1 + seed) * (kind === 'water' ? 2.2 : 1.2), 0.05 + i * 0.003, Math.sin(i * 2.1 + seed) * (kind === 'water' ? 1.2 : 0.8));
+    g.add(m);
+  }
+  return g;
+}
+/** Rubble where a building has partly come down: slabs, bricks, rebar and a cloud of dust. */
+export function buildRubble(seed: number): THREE.Group {
+  const g = new THREE.Group();
+  const cols = [0x8a8a86, 0x6e6a64, 0x9a8f80, 0x55524e];
+  for (let i = 0; i < 26; i++) {
+    const s = 0.4 + ((i * 7 + seed) % 5) * 0.35;
+    const m = box(g, s, s * 0.6, s * (0.7 + (i % 3) * 0.3), lambert(cols[i % 4]), Math.cos(i * 1.9 + seed) * (1 + i * 0.16), s * 0.3 + (i % 4) * 0.2, Math.sin(i * 1.9 + seed) * (1 + i * 0.12));
+    m.rotation.set((i % 3) * 0.3, i * 1.1, (i % 4) * 0.25);
+  }
+  for (let i = 0; i < 6; i++) { const r = box(g, 0.04, 2.2, 0.04, lambert(0x6a3a22), Math.cos(i * 2.6) * 2.4, 1.2, Math.sin(i * 2.6) * 2.4); r.rotation.z = 0.5 - (i % 3) * 0.4; }
+  const dust = new THREE.MeshBasicMaterial({ color: 0xbdb5a8, transparent: true, opacity: 0.25, depthWrite: false });
+  for (let i = 0; i < 5; i++) { const d = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), dust); d.scale.set(2.5, 1.6, 2.5); d.position.set(Math.cos(i * 2.4) * 2, 2 + (i % 2), Math.sin(i * 2.4) * 2); d.userData.puff = i; g.add(d); }
+  return g;
+}
 export function buildFallenTree(seed: number): THREE.Group {
   const g = new THREE.Group();
   const trunk = new THREE.Mesh(boxGeo(7, 0.7, 0.7), lambert(0x4e3a28));
