@@ -396,6 +396,9 @@ test('missions menu: start a mission and see its first incident', async ({ page 
   await page.getByRole('button', { name: /Missies/ }).click();
   await expect(page.locator('#screen')).toContainText('Eerste dienst');
   await page.locator('[data-mission="first_shift"]').click();
+  await expect(page.locator('#screen')).toContainText('Briefing');
+  await expect(page.locator('#screen')).toContainText('Woningbrand');
+  await page.getByRole('button', { name: /Start missie/ }).click();
   await page.locator('[data-act="speed4"]').click();
   await expect(page.locator('#incident-list .inc').first()).toContainText('Woningbrand', { timeout: 20_000 });
   expect(await page.evaluate(() => (window as any).__openrescue.world.mission?.id)).toBe('first_shift');

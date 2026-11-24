@@ -25,6 +25,7 @@ Derived from the [knowledge base](knowledge/README.md). Status: ✅ done · 🟡
 | R5b | Floods grow by a tile on every escalation (max 5) | 112 Operator | ✅ |
 | R8 | Armed suspects: arrests are 40% slower without a riot (ME) van within 14 tiles; the van is recommended for armed robbery / knife threat (full ballistic shield animation still open) | LA mod | ✅ (light) |
 | R7 | Trauma helicopter (air ambulance) at the Centrum hospital: flies in a straight line at 220 km/h over traffic, lands on open ground next to the scene, takes one patient to the nearest hospital with a free bed; recommended for 3+ casualties from severity 2; 3D model with spinning rotors, climbs and descends (winch rescue still open) | Emergency 4 | ✅ (light) |
+| R10 | Mission briefing screen before every mission: goals, failure limit, forecast of the incoming calls with the services needed, and tips (`src/sim/briefing.ts`; interludes between missions still open) | Emergency 4 | ✅ (light) |
 | T1 | Soak/fuzz test (`tools/soak.ts`: 24 runs x 12 min with random orders, invariants every 5 s, save/load round trip) and browser smoke test (`tools/smoke-browser.mjs`) | own | ✅ |
 
 ## Next
@@ -37,7 +38,7 @@ Derived from the [knowledge base](knowledge/README.md). Status: ✅ done · 🟡
 | # | Item | Source |
 |---|---|---|
 | R7b | Helicopter winch rescue, police helicopter | Emergency 4 |
-| R10 | Mission briefing screen and interludes before large operations | Emergency 4 |
+| R10b | Interludes / story between missions | Emergency 4 |
 | R14 | Career mode with ranks and unlocks | 112 Operator |
 | R15 | Voice commands | Emergency 4 Deluxe |
 | R11 | Co-op multiplayer | Emergency 4 |

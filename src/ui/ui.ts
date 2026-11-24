@@ -1,4 +1,5 @@
 import type { GameScene } from '../game/scene';
+import { missionBriefing } from '../sim/briefing';
 import { T } from '../game/scene';
 import { DIFFICULTY, World, type WorldOptions } from '../sim/world';
 import type { Ability, Category, Difficulty, GameEvent, Task } from '../sim/types';
@@ -349,8 +350,22 @@ export class UI {
       case 'missions': {
         const list = Object.values(this.scene.content.missions).map(m => `<button class="mission" data-mission="${esc(m.id)}"><b>${esc(m.name)}</b> ${'★'.repeat(m.level)}<small>${esc(m.description)}</small></button>`).join('');
         card(`<h2>🎯 Missies</h2><div class="sub">Los alle meldingen op. Meer dan een paar verloren meldingen betekent een mislukte missie.</div><div class="col">${list || '<div class="empty">Geen missies beschikbaar.</div>'}<button id="m-back">← Terug</button></div>`);
-        sc.querySelectorAll<HTMLElement>('[data-mission]').forEach(b => b.addEventListener('click', () => this.start({ seed: hashSeed(b.dataset.mission!), difficulty: this.settings.difficulty, freeplay: false, missionId: b.dataset.mission })));
+        sc.querySelectorAll<HTMLElement>('[data-mission]').forEach(b => b.addEventListener('click', () => this.showScreen('briefing', b.dataset.mission)));
         on('m-back', () => this.showScreen('main'));
+        break;
+      }
+      case 'briefing': {
+        const m = this.scene.content.missions[String(extra)];
+        if (!m) { this.showScreen('missions'); break; }
+        const b = missionBriefing(this.scene.content, m);
+        const mm = (t: number) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
+        card(`<h2>📋 Briefing: ${esc(b.title)} ${'★'.repeat(b.stars)}</h2><div class="sub">${esc(b.description)}</div>
+          <div class="brief"><h3>Doelen</h3><ul>${b.objectives.map(o => `<li>${esc(o)}</li>`).join('')}</ul>
+          <h3>Verwachte meldingen</h3><ul>${b.incoming.map(i => `<li><b>${mm(i.at)}</b> ${esc(i.name)} ${'⚠'.repeat(i.severity)} <small>${esc(i.services.join(' + '))}</small></li>`).join('')}</ul>
+          <h3>Tips</h3><ul>${b.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>
+          <div class="col"><button id="br-go" class="primary">▶ Start missie</button><button id="br-back">← Terug</button></div>`);
+        on('br-go', () => this.start({ seed: hashSeed(m.id), difficulty: this.settings.difficulty, freeplay: false, missionId: m.id }));
+        on('br-back', () => this.showScreen('missions'));
         break;
       }
       case 'scores': {

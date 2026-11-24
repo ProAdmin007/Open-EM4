@@ -96,3 +96,9 @@ button.primary:hover { background: #d32f2f; }
 .toast.mission_complete { border-color: #66bb6a; background: rgba(14, 50, 24, .93); }
 .mission { display: block; text-align: left; width: 100%; }
 .mission small { display: block; color: var(--dim); font-weight: 400; margin-top: 2px; }
+
+.brief { text-align: left; margin: 10px 0 14px; max-height: 46vh; overflow: auto; }
+.brief h3 { margin: 10px 0 4px; font-size: 14px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+.brief ul { margin: 0; padding-left: 18px; }
+.brief li { margin: 3px 0; }
+.brief small { color: var(--dim); }
