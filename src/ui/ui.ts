@@ -89,7 +89,7 @@ export class UI {
   private bind(): void {
     // pointerdown is used instead of click so periodic re-rendering cannot swallow a click
     document.addEventListener('pointerdown', ev => {
-      const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-act],[data-vid],[data-iid],[data-tab],[data-ability],[data-reinf],[data-backup],[data-grip],[data-dispatch],[data-advice]');
+      const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-act],[data-vid],[data-iid],[data-tab],[data-ability],[data-reinf],[data-backup],[data-grip],[data-dispatch],[data-advice],[data-question]');
       if (!target || ev.button !== 0) return;
       this.scene.audio?.play('click');
       const s = this.scene, w = s.world;
@@ -111,6 +111,7 @@ export class UI {
       else if (d.ability) s.cmdAbility(d.ability as Ability);
       else if (d.backup) s.cmdBackup(d.backup);
       else if (d.dispatch) s.cmdDispatch(Number(d.dispatch));
+      else if (d.question) { if (w.questionCaller(Number(d.question))) s.audio?.play('order'); }
       else if (d.advice) { if (w.adviseCaller(Number(d.advice))) s.audio?.play('order'); }
       else if (d.grip) { w.setGrip(Number(d.grip)); s.audio?.play('order'); }
       else if (d.act) this.act(d.act);
@@ -211,7 +212,7 @@ export class UI {
       if (def.objectives.includes('obstacle_cleared')) bits.push(i.cleared ? '✔ geruimd' : '○ ruimen');
       if (i.address) bits.unshift(`📍 ${esc(i.address)}`);
       return `<div class="inc s${i.severity}" data-iid="${i.id}"><div class="t"><span>${esc(def.icon ?? '')} ${esc(i.name)}</span><span>ernst ${i.severity}</span></div>` +
-        `${i.description ? `<div class="d">${esc(i.description)}</div>` : ''}<div class="d">${bits.join(' · ')} · nog ${Math.ceil(left)}s</div><div class="meter"><i class="${frac < 0.3 ? 'low' : ''}" style="width:${(frac * 100).toFixed(0)}%"></i></div>${!i.advised && i.victims.some(id => { const pv = w.victims.get(id); return pv && !pv.treated && pv.transport !== 'dead'; }) ? `<div class="d"><button data-advice="${i.id}" title="Eerste-hulpinstructies aan de telefoon: de slachtoffers verliezen langzamer gezondheid tot de hulp er is">☎ Instructies geven</button></div>` : ''}${i.units?.length ? `<div class="d"><button data-dispatch="${i.id}" class="${i.dispatched ? '' : 'primary'}" title="Stuurt de dichtstbijzijnde vrije voertuigen: ${esc([...new Set(i.units)].map(u => (w.content.vehicles[u]?.name ?? u) + (i.units.filter(x => x === u).length > 1 ? ' ×' + i.units.filter(x => x === u).length : '')).join(', '))}">🚨 Uitrukken: ${esc([...new Set(i.units)].map(u => (w.content.vehicles[u]?.name ?? u) + (i.units.filter(x => x === u).length > 1 ? ' ×' + i.units.filter(x => x === u).length : '')).join(', '))}</button></div>` : ''}</div>`;
+        `${i.description ? `<div class="d">${esc(i.description)}</div>` : ''}<div class="d">${bits.join(' · ')} · nog ${Math.ceil(left)}s</div><div class="meter"><i class="${frac < 0.3 ? 'low' : ''}" style="width:${(frac * 100).toFixed(0)}%"></i></div>${!i.advised && i.victims.some(id => { const pv = w.victims.get(id); return pv && !pv.treated && pv.transport !== 'dead'; }) ? `<div class="d"><button data-advice="${i.id}" title="Eerste-hulpinstructies aan de telefoon: de slachtoffers verliezen langzamer gezondheid tot de hulp er is">☎ Instructies geven</button></div>` : ''}${!i.questioned && i.victims.length ? `<div class="d"><button data-question="${i.id}" title="Vraag de melder wat er precies aan de hand is en hoeveel gewonden er zijn: de aanbevolen eenheden worden bijgewerkt">❓ Melder ondervragen</button></div>` : ''}${i.units?.length ? `<div class="d"><button data-dispatch="${i.id}" class="${i.dispatched ? '' : 'primary'}" title="Stuurt de dichtstbijzijnde vrije voertuigen: ${esc([...new Set(i.units)].map(u => (w.content.vehicles[u]?.name ?? u) + (i.units.filter(x => x === u).length > 1 ? ' ×' + i.units.filter(x => x === u).length : '')).join(', '))}">🚨 Uitrukken: ${esc([...new Set(i.units)].map(u => (w.content.vehicles[u]?.name ?? u) + (i.units.filter(x => x === u).length > 1 ? ' ×' + i.units.filter(x => x === u).length : '')).join(', '))}</button></div>` : ''}</div>`;
     }).join('');
     this.setHtml('incident-list', html || '<div class="empty">Geen actieve meldingen. Even rust…</div>');
   }

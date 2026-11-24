@@ -294,6 +294,8 @@ export interface Incident {
   units: string[];
   /** first-aid instructions were given to the caller over the phone */
   advised: boolean;
+  /** the caller has been questioned: the recommended units reflect the real size of the incident */
+  questioned: boolean;
   /** seconds after the call at which the first unit was on scene (null while nobody is there) */
   arrivedAt: number | null;
   /** the vehicle types already sent (by the dispatch button or GRIP) */

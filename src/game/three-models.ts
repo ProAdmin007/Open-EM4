@@ -111,6 +111,7 @@ const SPECS: Record<string, Spec> = {
   'vehicle/police_van': { shape: 'van', body: 0x233f7a, stripe: 0xf3f4f6, stripe2: 0xff8c1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
   'vehicle/police_motorcycle': { shape: 'bike', body: 0xf3f4f6, stripe: 0x1f4fb3, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
   'vehicle/bomb_squad': { shape: 'truck', body: 0x37474f, cab: 0x37474f, stripe: 0xff7a1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 3, extras: bombSquadExtras },
+  'vehicle/light_unit': { shape: 'truck', body: 0xef6c00, cab: 0xef6c00, stripe: 0xf2f2f2, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: lightMastExtras },
   'vehicle/ovd_car': { shape: 'car', body: 0xf6f4ea, stripe: 0xffd21a, stripe2: 0xd32f2f, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2 },
   'vehicle/lgh_car': { shape: 'car', body: 0xf6f4ea, stripe: 0x26c6da, stripe2: 0xffd21a, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: crossExtras },
   'vehicle/copi_unit': { shape: 'van', body: 0xf3f1e6, stripe: 0xffd21a, stripe2: 0xd32f2f, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: copiExtras },
@@ -281,6 +282,13 @@ function ambulanceExtras(g: THREE.Group, L: number, W: number, H: number): void 
     g.add(pivot);
   }
   box(g, 0.1, 0.5, W * 0.6, lambert(0x2c3138), -L / 2 - 0.02, 0.5, 0); // rear step
+}
+/** Telescopic mast with four floodlight heads on the load bed. */
+function lightMastExtras(g: THREE.Group, L: number, _W: number, H: number): void {
+  box(g, 0.14, 2.6, 0.14, lambert(0xcfcfcf), -L * 0.2, H + 1.3, 0);
+  box(g, 1.1, 0.12, 0.12, lambert(0x333333), -L * 0.2, H + 2.65, 0);
+  box(g, 0.12, 0.12, 1.1, lambert(0x333333), -L * 0.2, H + 2.7, 0);
+  for (const [dx, dz] of [[-0.5, 0], [0.5, 0], [0, -0.5], [0, 0.5]]) box(g, 0.3, 0.2, 0.3, glow(0xfff6d0, 1.4), -L * 0.2 + dx, H + 2.45, dz);
 }
 function copiExtras(g: THREE.Group, L: number, W: number, H: number): void {
   antennaExtras(g, L, W, H);
@@ -800,6 +808,16 @@ export function buildNightFx(length: number, width: number, emergency: boolean):
   }
   g.visible = false;
   return g;
+}
+
+let floodGeo: THREE.CircleGeometry | null = null;
+/** The big white pool of light a floodlight mast throws on the ground around the vehicle. */
+export function buildFloodPool(): THREE.Mesh {
+  if (!floodGeo) { floodGeo = new THREE.CircleGeometry(1, 24); floodGeo.rotateX(-Math.PI / 2); floodGeo.userData.shared = true; }
+  const m = new THREE.Mesh(floodGeo, beamMat(0xfff4d6, true));
+  m.scale.set(20, 1, 20);
+  m.position.set(0, 0.09, 0);
+  return m;
 }
 
 /** A soft round sprite texture for flames and smoke. */

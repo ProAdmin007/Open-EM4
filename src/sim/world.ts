@@ -1259,7 +1259,7 @@ export class World {
         const v = this.victims.get(t.victimId);
         if (!v || v.transport !== 'scene') return done();
         if (this.approachSlot(r, v.x, v.y, done)) {
-          t.progress += dt * (role.power >= 2 ? 2 : 1) * (1 + 0.6 * this.helpers(v)) * (this.commanderNear(r) ? 1.2 : 1);
+          t.progress += dt * (role.power >= 2 ? 2 : 1) * (1 + 0.6 * this.helpers(v)) * (this.commanderNear(r) ? 1.2 : 1) * (this.sceneLit(v.x, v.y) ? 1 : 0.7); // working in the dark is slower
           if (t.progress >= v.treatTime) {
             v.treated = true; v.conscious = true; v.health = Math.min(100, v.health + 10);
             this.emit({ type: 'info', message: `${r.name} heeft een slachtoffer gestabiliseerd` });
@@ -1552,6 +1552,17 @@ export class World {
   private tallWarned = new Set<string>();
 
   /** Weather: a deterministic rain shower now and then (everybody drives a little slower in it). */
+  /** Night time (same day cycle as the 3D sky: 1440 s per day, starting around 08:30). */
+  get isNight(): boolean {
+    const p = (0.35 + this.time / 1440) % 1;
+    return -Math.cos(p * Math.PI * 2) < 0.05;
+  }
+  /** A parked, working light unit within 10 tiles lights up the scene at night. */
+  sceneLit(x: number, y: number): boolean {
+    if (!this.isNight) return true;
+    for (const v of this.vehicles.values()) if (v.defId === 'light_unit' && !v.path.length && !v.returning && Math.hypot(v.x - x, v.y - y) <= 10) return true;
+    return false;
+  }
   get raining(): boolean {
     const t = this.time / 160 + this.opts.seed * 0.37;
     return Math.sin(t) + 0.6 * Math.sin(t * 0.43 + 2) > 1.15;
@@ -1565,13 +1576,13 @@ export class World {
   }
 
   /** The vehicle types the control room recommends for a call (also shown in the P2000 line). */
-  recommendedUnits(inc: Incident): string[] {
+  recommendedUnits(inc: Incident, prelim = false): string[] {
     const def = this.content.incidents[inc.defId];
     const b = inc.buildingId ? this.buildings.get(inc.buildingId) : null;
     const need = new Map<string, number>();
     const add = (id: string, n = 1) => { if (this.content.vehicles[id]) need.set(id, Math.max(need.get(id) ?? 0, n)); };
-    const victims = inc.victims.length;
-    const big = /high_rise|explosion|collapse|bus_crash|truck_collision/.test(inc.defId);
+    const victims = prelim ? Math.min(1, inc.victims.length) : inc.victims.length; // before the caller is questioned the control room only knows 'somebody is hurt'
+    const big = !prelim && /high_rise|explosion|collapse|bus_crash|truck_collision/.test(inc.defId);
     for (const cat of def.requires) {
       if (cat === 'fire') {
         add('fire_engine', big ? 3 : inc.severity >= 3 && def.fire ? 2 : 1);
@@ -1582,16 +1593,29 @@ export class World {
       else if (cat === 'police') add('patrol_car', big ? 2 : 1);
       else if (cat === 'tech') add('tow_truck', /bus_crash|truck_collision/.test(inc.defId) ? 2 : 1);
     }
-    if (inc.victims.some(id => this.victims.get(id)?.pinned)) { add('fire_engine'); add('rescue_vehicle'); }
+    if (!prelim && inc.victims.some(id => this.victims.get(id)?.pinned)) { add('fire_engine'); add('rescue_vehicle'); }
     if (/hazmat|explosion|chemical/.test(inc.defId)) add('hazmat_unit');
     if (/high_rise|explosion|collapse/.test(inc.defId)) { add('ovd_car'); add('water_tanker'); }
-    if (victims >= 4) add('lgh_car');
-    if (inc.suspects.length >= 3 || /riot|demonstration/.test(inc.defId)) add('riot_van');
+    if (victims >= 4) add('lgh_car'); // (never in the preliminary list)
+    if (!prelim && inc.suspects.length >= 3 || /riot|demonstration/.test(inc.defId)) add('riot_van');
     if (/suspicious_package/.test(inc.defId)) add('bomb_squad');
     if ((def.obstacle?.mass ?? 0) >= 1.6) add('crane_truck');
+    if (!prelim && this.isNight && inc.severity >= 2) add('light_unit');
     const out: string[] = [];
     for (const [id, n] of need) for (let k = 0; k < n; k++) out.push(id);
     return out;
+  }
+
+  /** Question the caller (what, where, how many hurt?): the control room then knows the real size and updates the recommended units. */
+  questionCaller(incidentId: number): boolean {
+    const inc = this.incidents.get(incidentId);
+    if (!inc || inc.questioned) return false;
+    inc.questioned = true;
+    const before = inc.units.length;
+    inc.units = this.recommendedUnits(inc);
+    const hurt = inc.victims.length;
+    this.emit({ type: 'info', message: `Melder ondervraagd (${inc.name}): ${hurt ? hurt + ' gewonde(n)' : 'geen gewonden'}${inc.units.length > before ? `, extra eenheden nodig (${inc.units.length - before})` : ''}`, speech: 'Kunt u vertellen wat er precies aan de hand is?' });
+    return true;
   }
 
   /** First-aid instructions over the phone (as in the dispatcher games): the casualties of this call lose health more slowly until help arrives. */
@@ -2038,7 +2062,7 @@ export class World {
     const scale = DIFFICULTY[this.opts.difficulty].timeScale;
     const inc: Incident = {
       id: this.newId(), defId, name: def.name, severity: sev, description: def.descriptions?.length ? this.rng.pick(def.descriptions) : '', x: 0, y: 0, buildingId: null, elapsed: 0,
-      nextEscalation: def.escalation.everySec * scale, status: 'active', secured: false, obstacle: [], victims: [], suspects: [], bystanders: [], deaths: 0, cleared: false, defused: false, address: '', scouted: false, pager: '', units: [], dispatched: false, advised: false, arrivedAt: null,
+      nextEscalation: def.escalation.everySec * scale, status: 'active', secured: false, obstacle: [], victims: [], suspects: [], bystanders: [], deaths: 0, cleared: false, defused: false, address: '', scouted: false, pager: '', units: [], dispatched: false, advised: false, questioned: false, arrivedAt: null,
     };
     let anchor: Vec;
     let b: Building | null = null;
@@ -2105,8 +2129,8 @@ export class World {
     inc.address = this.addressOf(b ? b.door.x + 0.5 : inc.x, b ? b.door.y + 0.5 : inc.y, !b);
     const prio = inc.severity >= 3 ? 'Prioriteit 1, spoed' : inc.severity === 2 ? 'Prioriteit 2' : 'Prioriteit 3';
     // P2000 pager line: ambulance A1 (urgent) / A2, fire and police with a priority (1 = lights and sirens)
-    inc.units = this.recommendedUnits(inc);
-    const abbr: Record<string, string> = { fire_engine: 'TS', aerial_ladder: 'HV', rescue_vehicle: 'HW', ambulance: 'AMB', patrol_car: 'PAT', tow_truck: 'BER', police_van: 'BUS', riot_van: 'ME', hazmat_unit: 'OGS', water_tanker: 'WTW', ovd_car: 'OvD', lgh_car: 'LGH', crane_truck: 'KRAAN', bomb_squad: 'EOD', mmt_car: 'MMT' };
+    inc.units = this.recommendedUnits(inc, true);
+    const abbr: Record<string, string> = { fire_engine: 'TS', aerial_ladder: 'HV', rescue_vehicle: 'HW', ambulance: 'AMB', patrol_car: 'PAT', tow_truck: 'BER', police_van: 'BUS', riot_van: 'ME', hazmat_unit: 'OGS', water_tanker: 'WTW', ovd_car: 'OvD', light_unit: 'LICHT', lgh_car: 'LGH', crane_truck: 'KRAAN', bomb_squad: 'EOD', mmt_car: 'MMT' };
     const urgent = inc.severity >= 2;
     inc.pager = def.category === 'ambulance' ? `${urgent ? 'A1' : 'A2'} Rendam ${inc.address} ${inc.name}`
       : def.category === 'fire' ? `Prio ${urgent ? 1 : 2} BRW Rendam ${inc.address} ${inc.name}`
@@ -2714,7 +2738,7 @@ export class World {
     for (const v of s.victims) w.victims.set(v.id, v);
     for (const x of s.suspects) { x.angle ??= 0; x.path ??= []; x.mode ??= 'idle'; x.runner ??= false; x.obey ??= true; x.fleeT ??= 0; x.escortedBy ??= null; x.vehicleId ??= null; w.suspects.set(x.id, x); }
     for (const b of s.bystanders ?? []) w.bystanders.set(b.id, b);
-    for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; i.address ??= ''; i.scouted ??= false; i.pager ??= ''; i.units ??= []; i.advised ??= false; i.arrivedAt ??= null; w.incidents.set(i.id, i); }
+    for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; i.address ??= ''; i.scouted ??= false; i.pager ??= ''; i.units ??= []; i.advised ??= false; i.questioned ??= true; i.arrivedAt ??= null; w.incidents.set(i.id, i); }
     w.obstacles = new Set(s.obstacles);
     w.rebuildCordon();
     w.script = s.script ?? [];

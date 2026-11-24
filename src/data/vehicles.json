@@ -349,6 +349,26 @@
     "cost": 600
   },
   {
+    "id": "light_unit",
+    "name": "Lichtmastwagen",
+    "category": "fire",
+    "maxSpeed": 55,
+    "capacity": 2,
+    "color": "#ef6c00",
+    "length": 2.0,
+    "equipment": [
+      "radio"
+    ],
+    "crew": [
+      {
+        "role": "firefighter",
+        "count": 2
+      }
+    ],
+    "patientCapacity": 0,
+    "cost": 400
+  },
+  {
     "id": "ovd_car",
     "name": "Officier van Dienst",
     "category": "fire",

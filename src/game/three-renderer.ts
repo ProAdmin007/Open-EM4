@@ -7,7 +7,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Commands, type SelectionHost } from './selection';
 import { Weather } from './three-weather';
-import { buildNightFx, buildGasCloud, buildPuddle, buildRubble, addCrashFx, buildDemonstration, buildOverturnedTruck, buildDripStand, buildOxygenBottle, paint, buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
+import { buildFloodPool, buildNightFx, buildGasCloud, buildPuddle, buildRubble, addCrashFx, buildDemonstration, buildOverturnedTruck, buildDripStand, buildOxygenBottle, paint, buildAccidentDetail, buildBloodPool, buildMedBag, buildStretcher, buildBarrier, buildBombRobot, buildCivilianCar, buildCone, buildDebris, buildFallenTree, buildFlare, buildSuspectPackage, buildVehicle, buildWreck, lambert, type VehicleParts } from './three-models';
 import { ParticlePool, setSegment } from './three-fx';
 import { bakeGroundChunks, buildGroundMeshes, groundHeight } from './three-ground';
 import { planarRoofUVs, roofTexture, scaleBoxUVs, wallTexture } from './three-textures';
@@ -650,6 +650,11 @@ export class Three3DRenderer implements GameRenderer {
       obj.rotation.y = v.yaw;
       this.animateParts(obj.userData.parts as VehicleParts, v.moving, v.lights, this.lastDt);
       this.nightFx(obj, this.env.night, v.lights);
+      { // floodlight pool of a light unit
+        let fl = obj.getObjectByName('flood');
+        if (v.flood && !fl) { fl = buildFloodPool(); fl.name = 'flood'; obj.add(fl); }
+        if (fl) fl.visible = v.flood;
+      }
       const ladder = obj.getObjectByName('ladder');
       if (ladder) { // raise, turn towards the building and extend while the crew is spraying
         const up = v.aerial ? 1 : 0;

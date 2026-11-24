@@ -8,6 +8,7 @@ const ORDER: Ability[] = ['recon', 'rescue', 'extinguish', 'treat', 'carry', 'ar
 export function runBot(w: World, incId: number, maxSeconds: number): { solvedAt: number | null; firstArrival: number | null; sent: number } {
   const t0 = w.time, failed0 = w.failed;
   const inc0 = w.incidents.get(incId)!;
+  w.questionCaller(incId);
   w.dispatchRecommended(incId);
   const sent = inc0.units.length;
   let firstArrival: number | null = null;
