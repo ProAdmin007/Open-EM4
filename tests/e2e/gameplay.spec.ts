@@ -56,7 +56,7 @@ test('scenario: send engine to a house fire, dismount, extinguish, incident disa
 
   await page.waitForTimeout(300); // let the camera apply centerOn/zoom before computing screen coordinates
   // The incident shows up in the incident list.
-  await expect(page.locator('#incident-list .inc')).toContainText('Woningbrand');
+  await expect(page.locator('#incident-list')).toContainText('Woningbrand', { timeout: 25_000 }); // the caller first only gives confused words and tells what it is after a few seconds
 
   // Select the fire engine from the dispatch bar and speed the game up.
   await page.locator(`[data-vid="${info.vid}"]`).click();
@@ -355,6 +355,7 @@ test('3D view: select engine, send to a house fire, dismount, extinguish, incide
     const or = (window as any).__openrescue;
     const w = or.world;
     const inc = w.spawnIncident('house_fire', { severity: 1 });
+    w.questionCaller(inc.id); // software GL runs the game slowly: do not wait for the caller to tell it all by themselves
     for (const id of inc.victims) w.victims.delete(id);
     inc.victims = [];
     const b = w.buildings.get(inc.buildingId);
@@ -365,7 +366,7 @@ test('3D view: select engine, send to a house fire, dismount, extinguish, incide
   });
   await page.waitForTimeout(400); // let the 3D camera render a few frames (matrixWorld) before reading screen coordinates
 
-  await expect(page.locator('#incident-list .inc')).toContainText('Woningbrand');
+  await expect(page.locator('#incident-list')).toContainText('Woningbrand', { timeout: 25_000 }); // the caller first only gives confused words and tells what it is after a few seconds
   await page.locator(`[data-vid="${info.vid}"]`).click();
   await expect(page.locator('#unit-panel')).toContainText('Tankautospuit');
   await page.locator('[data-act="speed4"]').click();

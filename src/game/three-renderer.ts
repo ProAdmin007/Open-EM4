@@ -199,6 +199,8 @@ export class Three3DRenderer implements GameRenderer {
   private obstacleKey = '';
   private incidentFx = new Map<number, { ring: THREE.Mesh; beam: THREE.Mesh; tape?: THREE.Group; props: THREE.Group; flares?: THREE.Vector3[]; steam?: THREE.Vector3[]; beacon?: THREE.Mesh; robot?: THREE.Group; pack?: THREE.Group }>();
   private hoseSegs: THREE.Mesh[] = [];
+  private hoseRings: THREE.Mesh[] = [];
+  private couplingMat = new THREE.MeshLambertMaterial({ color: 0xb08d2a });
   private hoseMat = new THREE.MeshLambertMaterial({ color: 0xf0b21a });
 
   constructor(private host: SelectionHost) {
@@ -625,6 +627,12 @@ export class Three3DRenderer implements GameRenderer {
     group.add(buildNightFx(v.size.length, v.size.width, true));
     return group;
   }
+  /** Heading smoothing: vehicles swing round a corner over a fraction of a second instead of snapping 90 degrees at a tile edge. */
+  private turnTo(obj: THREE.Object3D, target: number, rate: number): void {
+    if (obj.userData.yawSet !== true) { obj.rotation.y = target; obj.userData.yawSet = true; return; }
+    const d = Math.atan2(Math.sin(target - obj.rotation.y), Math.cos(target - obj.rotation.y));
+    obj.rotation.y = Math.abs(d) < 1e-3 ? target : obj.rotation.y + d * Math.min(1, this.lastDt * rate);
+  }
   private nightFx(obj: THREE.Object3D, on: boolean, lights: boolean): void {
     const fx = obj.getObjectByName('nightfx');
     if (!fx) return;
@@ -652,7 +660,7 @@ export class Three3DRenderer implements GameRenderer {
         obj.userData.spin = v.heli ? (obj.userData.spin ?? 0) + ((v.moving || v.lights ? 1 : 0) - (obj.userData.spin ?? 0)) * Math.min(1, this.lastDt * 0.8) : 0;
       }
       obj.position.set(v.position.x, v.heli ? (obj.userData.alt as number) * 38 : 0, v.position.z);
-      obj.rotation.y = v.yaw;
+      this.turnTo(obj, v.yaw, v.heli ? 3 : 9);
       if (v.heli) { // pitch forward when flying, spin the rotors
         const rotors = (obj.userData.parts as VehicleParts).rotors;
         if (rotors) { const sp = obj.userData.spin as number; rotors[0].rotation.y += 30 * sp * this.lastDt; rotors[1].rotation.z += 40 * sp * this.lastDt; }
@@ -877,7 +885,7 @@ export class Three3DRenderer implements GameRenderer {
       this.nightFx(obj, this.env.night, false);
       const px = obj.position.x, pz = obj.position.z;
       obj.position.set(c.position.x, 0, c.position.z);
-      obj.rotation.y = -c.heading;
+      this.turnTo(obj, -c.heading, 9);
       const parts = obj.userData.parts as VehicleParts;
       this.animateParts(parts, Math.hypot(c.position.x - px, c.position.z - pz) > 0.002, false, this.lastDt);
       if (parts.brake) parts.brake.emissiveIntensity = c.braking ? 2.2 : 0.45; // brake lights
@@ -1127,20 +1135,44 @@ export class Three3DRenderer implements GameRenderer {
   // ---------- hoses and water ----------
   private syncHoses(snap: RenderSnapshot): void {
     const live = this.host.state === 'playing';
-    let n = 0;
+    let n = 0, nr = 0;
     for (const p of snap.people) {
       if (!p.hose) continue;
-      const A = new THREE.Vector3(p.hose.fromX * TILE_METERS, 0.25, p.hose.fromY * TILE_METERS);
       const B = new THREE.Vector3(p.position.x, 0.25, p.position.z);
-      // sag the hose a little: two segments through a midpoint close to the ground
-      const M = A.clone().add(B).multiplyScalar(0.5); M.y = 0.12;
-      for (const [u, v] of [[A, M], [M, B]] as [THREE.Vector3, THREE.Vector3][]) {
-        let seg = this.hoseSegs[n];
-        if (!seg) { seg = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.hoseMat); seg.userData.shared = true; this.hoseSegs.push(seg); this.scene.add(seg); }
-        seg.visible = true;
-        setSegment(seg, u, v, 0.16);
-        n++;
+      const tr = p.hose.trail;
+      let A: THREE.Vector3;
+      if (tr && tr.length > 1) {
+        // the hose lies along the route the firefighter walked: flat on the ground, a little wavy, with a brass coupling every few metres
+        const pts = tr.map((q, i) => new THREE.Vector3(q.x * TILE_METERS + Math.sin(i * 2.3) * 0.12, 0.1, q.y * TILE_METERS + Math.cos(i * 1.7) * 0.12));
+        pts.push(new THREE.Vector3(B.x, 0.14, B.z));
+        for (let i = 1; i < pts.length; i++) {
+          let seg = this.hoseSegs[n];
+          if (!seg) { seg = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.hoseMat); seg.userData.shared = true; this.hoseSegs.push(seg); this.scene.add(seg); }
+          seg.visible = true;
+          setSegment(seg, pts[i - 1], pts[i], 0.16);
+          n++;
+          if (i % 5 === 0) {
+            let ring = this.hoseRings[nr];
+            if (!ring) { ring = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.couplingMat); ring.userData.shared = true; this.hoseRings.push(ring); this.scene.add(ring); }
+            ring.visible = true;
+            setSegment(ring, pts[i - 1].clone().lerp(pts[i], 0.35), pts[i - 1].clone().lerp(pts[i], 0.55), 0.24);
+            nr++;
+          }
+        }
+        A = pts[Math.max(0, pts.length - 2)];
+      } else {
+        A = new THREE.Vector3(p.hose.fromX * TILE_METERS, 0.25, p.hose.fromY * TILE_METERS);
+        // sag the hose a little: two segments through a midpoint close to the ground
+        const M = A.clone().add(B).multiplyScalar(0.5); M.y = 0.12;
+        for (const [u, v] of [[A, M], [M, B]] as [THREE.Vector3, THREE.Vector3][]) {
+          let seg = this.hoseSegs[n];
+          if (!seg) { seg = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.hoseMat); seg.userData.shared = true; this.hoseSegs.push(seg); this.scene.add(seg); }
+          seg.visible = true;
+          setSegment(seg, u, v, 0.16);
+          n++;
+        }
       }
+      void A;
       const sp = p.hose.spray;
       if (sp && live) { // water jet: ballistic droplets from the nozzle towards the burning building
         const nozzle = new THREE.Vector3(B.x, 1.2, B.z);
@@ -1169,6 +1201,7 @@ export class Three3DRenderer implements GameRenderer {
       }
     }
     for (let i = n; i < this.hoseSegs.length; i++) this.hoseSegs[i].visible = false;
+    for (let i = nr; i < this.hoseRings.length; i++) this.hoseRings[i].visible = false;
   }
 
   private labelTextures = new Map<string, THREE.CanvasTexture>();

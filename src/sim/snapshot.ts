@@ -52,7 +52,7 @@ export interface SnapPerson {
   /** victims: condition for the renderer (pale skin, blood, blanket, stretcher) */
   info?: { health: number; treated: boolean; incidentKind: string; /** the paramedic carrying this casualty (tile position and heading) */ carrier?: { x: number; y: number; heading: number }; /** being slid into a vehicle: progress 0..1 and the vehicle */ loading?: { t: number; vehicleId: number } };
   /** a firefighter whose hose is connected: the vehicle the hose comes from, and (once deployed) the point being sprayed */
-  hose?: { fromX: number; fromY: number; spray?: { x: number; y: number; buildingId: string } };
+  hose?: { fromX: number; fromY: number; /** the laid route of the hose, vehicle first */ trail?: { x: number; y: number }[]; spray?: { x: number; y: number; buildingId: string } };
 }
 export interface SnapCar {
   id: number;
@@ -157,6 +157,10 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
         person.hose = { fromX: ix(veh), fromY: iy(veh) };
         if (b && r.task.deploy >= 2.5) person.hose.spray = { x: Math.max(b.x, Math.min(b.x + b.w, r.x)), y: Math.max(b.y, Math.min(b.y + b.h, r.y)), buildingId: b.id };
       }
+    }
+    if (r.trail && r.trail.length > 1) {
+      const veh = world.vehicles.get(r.vehicleId);
+      person.hose = { ...(person.hose ?? { fromX: veh ? ix(veh) : r.trail[0].x, fromY: veh ? iy(veh) : r.trail[0].y }), trail: r.trail.map(p => ({ x: p.x, y: p.y })) };
     }
     snap.people.push(person);
   }

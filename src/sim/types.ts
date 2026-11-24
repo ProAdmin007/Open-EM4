@@ -201,6 +201,8 @@ export interface Responder extends Entity {
   carrying: number | null;
   /** the suspect this officer is covering with a drawn pistol */
   aiming: number | null;
+  /** the hose a firefighter pulled off the engine: points from the vehicle to where they are now (rolled up again when they board) */
+  trail?: Vec[];
 }
 export type Transport = 'trapped' | 'scene' | 'carried' | 'inAmbulance' | 'atHospital' | 'dead' | 'collected';
 export interface Victim extends Entity {
@@ -298,6 +300,12 @@ export interface Incident {
   advised: boolean;
   /** the caller has been questioned: the recommended units reflect the real size of the incident */
   questioned: boolean;
+  /** how much the caller has told so far: 0 vague first words, 1 what it is, 2 who is involved, 3 everything (= questioned) */
+  callStage: number;
+  /** what the caller said, in order */
+  callLog: string[];
+  /** game time of the next thing the caller tells on their own */
+  nextCallAt: number;
   /** the shield-team warning for armed suspects was already shown */
   shieldWarned?: boolean;
   /** seconds after the call at which the first unit was on scene (null while nobody is there) */

@@ -454,6 +454,7 @@ export class World {
     this.updateGrip(dt);
     this.updateHearses(dt);
     this.updateHospital();
+    this.updateCalls();
     this.updateFire(dt);
     for (const v of this.victims.values()) this.updateVictim(v, dt);
     for (const inc of [...this.incidents.values()]) this.updateIncident(inc, dt);
@@ -798,9 +799,18 @@ export class World {
           if (np) { v.path = np; v.passUntil = this.time + 8; continue; }
         }
       }
-      const blocker = v.ghost > 0 ? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, uturn ? def.length * 0.64 : halfWidth(def.length) * 0.5, PRIO_EMERGENCY, true) : this.gate(v, def.length) ?? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, uturn ? def.length * 0.64 : halfWidth(def.length), PRIO_EMERGENCY);
-      if (blocker) { v.speedNow = 0; this.jam.set(v.id, (this.jam.get(v.id) ?? 0) + dt); this.onBlocked(v, blocker, dt); this.breakJam(v, blocker); return; }
-      v.blocked = 0; this.jam.delete(v.id);
+      const blocker = v.ghost > 0 ? this.ghostBlocker(v, def.length, ux, uy, step, uturn) : this.gate(v, def.length) ?? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, uturn ? def.length * 0.64 : halfWidth(def.length), PRIO_EMERGENCY);
+      if (blocker) { v.speedNow = 0; if (!this.jam.has(v.id)) this.jamPos.set(v.id, { x: v.x, y: v.y }); this.jam.set(v.id, (this.jam.get(v.id) ?? 0) + dt); this.onBlocked(v, blocker, dt); this.breakJam(v, blocker); return; }
+      v.blocked = 0;
+      { // a jam only ends when the vehicle really got away from the spot (re-routing back and forth next to the blockage is not progress)
+        const jp = this.jamPos.get(v.id);
+        if (jp && Math.hypot(v.x - jp.x, v.y - jp.y) > 3) { this.jam.delete(v.id); this.jamPos.delete(v.id); }
+      }
+      // never drive into a junction when there is no room on the far side (it would block all four directions): wait a few seconds
+      if (this.isIntersection(v.path[0].x, v.path[0].y) && !this.isIntersection(Math.floor(v.x), Math.floor(v.y)) && d < 0.95 && this.exitBlocked(v.path, v.id)) {
+        const bw = (this.boxWait.get(v.id) ?? 0) + dt; this.boxWait.set(v.id, bw);
+        if (bw < 4) { v.speedNow = 0; return; }
+      } else if (this.boxWait.size && !this.isIntersection(v.path[0].x, v.path[0].y)) this.boxWait.delete(v.id);
       // prio 2 obeys the traffic lights like everybody else
       if (v.prio === 2 && this.isIntersection(v.path[0].x, v.path[0].y) && !this.isIntersection(Math.floor(v.x), Math.floor(v.y)) && d < 0.95) {
         if (!this.canGo(v.path[0].x, v.path[0].y, Math.abs(ux) > Math.abs(uy))) {
@@ -826,6 +836,20 @@ export class World {
       budget -= step;
       if (step >= d - 1e-6) { v.x = tx; v.y = ty; v.path.shift(); }
     }
+  }
+
+  /**
+   * While slipping past (ghost): only a real overlap stops us. After a long jam (30 s) two vehicles that are both trying to move
+   * and block each other (two U-turns across each other's lane) resolve it: the lower id goes through.
+   */
+  private ghostBlocker(v: Vehicle, len: number, ux: number, uy: number, step: number, uturn: boolean): Blocker | null {
+    const b = this.findBlocker(v, v.x, v.y, ux, uy, step, len, uturn ? len * 0.64 : halfWidth(len) * 0.5, PRIO_EMERGENCY, true);
+    if (b && b.kind === 'veh' && (this.jam.get(v.id) ?? 0) > 30) {
+      const o = this.vehicles.get(b.id ?? -1);
+      if (o && ((b.id ?? 0) > v.id && o.path.length > 0)) return null; // two vehicles that both want to move and block each other: the lower id goes through
+      if (o && !o.path.length && o.crew.some(id => this.responders.get(id)?.inVehicle === false)) return null; // a working vehicle that cannot move out of the way: squeeze through as a last resort
+    }
+    return b;
   }
 
   /**
@@ -911,13 +935,16 @@ export class World {
       // everybody within reach of the opposite lane strip (and oncoming traffic further ahead) blocks the manoeuvre
       const zone: { x: number; y: number; r: number }[] = o.map(t => ({ x: t.x + 0.5, y: t.y + 0.5, r: 1.25 }));
       const last = o[o.length - 1];
-      for (let j = 1; j <= 7; j++) zone.push({ x: last.x + 0.5 + d.x * j, y: last.y + 0.5 + d.y * j, r: 1.0 });
-      const hit = (px: number, py: number) => zone.some(z => Math.hypot(px - z.x, py - z.y) < z.r);
+      const ahead: { x: number; y: number; r: number }[] = [];
+      for (let j = 1; j <= 7; j++) ahead.push({ x: last.x + 0.5 + d.x * j, y: last.y + 0.5 + d.y * j, r: 1.0 });
+      // the strip itself must be empty; further ahead only oncoming traffic that is actually moving matters (a parked vehicle there is long behind us when we pull back in)
+      const hit = (px: number, py: number, moving = true) => zone.some(z => Math.hypot(px - z.x, py - z.y) < z.r) || (moving && ahead.some(z => Math.hypot(px - z.x, py - z.y) < z.r));
       // whatever stands in our own lane is what we are passing: only traffic in the opposite strip counts
       const ownLane = (px: number, py: number) => d.x !== 0 ? Math.abs(py - (cur.y + 0.5)) < 0.55 : Math.abs(px - (cur.x + 0.5)) < 0.55;
-      if ([...this.vehicles.values()].some(v => v.id !== selfId && !ownLane(v.x, v.y) && hit(v.x, v.y))) continue;
-      if (this.civilians.some(c => c.id !== selfId && !ownLane(c.x, c.y) && hit(c.x, c.y))) continue;
-      if ([...this.responders.values()].some(r => !r.inVehicle && hit(r.x, r.y)) || [...this.victims.values()].some(v => (v.transport === 'scene' || v.transport === 'dead') && hit(v.x, v.y)) || [...this.bystanders.values()].some(b => hit(b.x, b.y))) continue;
+      if ([...this.vehicles.values()].some(v => v.id !== selfId && !ownLane(v.x, v.y) && hit(v.x, v.y, v.path.length > 0 || v.speedNow > 0.3))) continue;
+      if (this.civilians.some(c => c.id !== selfId && !ownLane(c.x, c.y) && hit(c.x, c.y, c.v > 0.3))) continue;
+      const onRoad = (px: number, py: number) => this.isRoad(Math.floor(px), Math.floor(py)); // people on the pavement next to the lane do not stop us
+      if ([...this.responders.values()].some(r => !r.inVehicle && onRoad(r.x, r.y) && hit(r.x, r.y)) || [...this.victims.values()].some(v => (v.transport === 'scene' || v.transport === 'dead') && onRoad(v.x, v.y) && hit(v.x, v.y)) || [...this.bystanders.values()].some(b => onRoad(b.x, b.y) && hit(b.x, b.y))) continue;
       const back = { x: cur.x + d.x * (K - 1), y: cur.y + d.y * (K - 1) };
       return [...o, back, ...path.slice(K - 1)];
     }
@@ -954,13 +981,15 @@ export class World {
 
   /** Total time (s) a vehicle has been held up in a row, even when its route keeps being re-planned (which resets `blocked`). */
   private jam = new Map<number, number>();
+  private boxWait = new Map<number, number>();
+  private jamPos = new Map<number, Vec>();
   private lightWait = new Map<number, number>();
   /** Last resort for a long deadlock (two vehicles facing each other in a lane, boxed in at a junction): 20 s squeeze past, 90 s give up. */
   private breakJam(v: Vehicle, b: Blocker): void {
     const j = this.jam.get(v.id) ?? 0;
     if (b.kind === 'person') return;
     if (j > 20 && v.ghost <= 0) { v.ghost = 4; v.contraflow = false; }
-    if (j > 90) { v.path = []; v.dest = null; v.blocked = 0; this.jam.delete(v.id); this.emit({ type: 'warn', message: `${v.name} zit vast en blijft staan` }); }
+    if (j > 90) { v.path = []; v.dest = null; v.blocked = 0; this.jam.delete(v.id); this.jamPos.delete(v.id); this.emit({ type: 'warn', message: `${v.name} zit vast en blijft staan` }); }
   }
 
   private onBlocked(v: Vehicle, b: Blocker, dt: number): void {
@@ -979,7 +1008,7 @@ export class World {
     if (b.kind === 'veh' && b.halted && v.blocked > 2.2 && Math.floor(v.blocked / 2.2) !== Math.floor(before / 2.2)) this.makeWay(b.id ?? -1, v);
     // slow or stopped traffic ahead: overtake through the opposite lane when that is safe
     if (v.blocked > 0.7 && this.time > v.passUntil && (b.kind === 'civ' || (b.kind === 'veh' && b.halted))) {
-      const np = this.overtakePath(v.x, v.y, v.path, v.id);
+      const np = this.overtakePath(v.x, v.y, v.path, v.id) ?? (b.kind === 'veh' && v.blocked > 3 ? this.overtakePath(v.x, v.y, v.path, v.id, 4) ?? this.overtakePath(v.x, v.y, v.path, v.id, 3) : null); // a short pass when the long straight is not there
       if (np) { v.path = np; v.passUntil = this.time + 9; v.blocked = 0; return; }
     }
     // head-on or crossing standoff between two moving vehicles: the one with the higher id turns around and takes another way
@@ -1008,7 +1037,7 @@ export class World {
       }
     }
     if (b.kind === 'person' && !b.responder && v.blocked > 5 && v.path.length > 3) { // somebody lying or standing in the road and no way around: stop short, the crew walks the rest
-      v.path = []; v.dest = null; v.blocked = 0; this.jam.delete(v.id);
+      v.path = []; v.dest = null; v.blocked = 0; this.jam.delete(v.id); this.jamPos.delete(v.id);
       this.emit({ type: 'info', message: `${v.name} stopt voor iemand op de weg; de bemanning loopt verder` });
       return;
     }
@@ -1237,8 +1266,23 @@ export class World {
     }
   }
 
+  /** A firefighter pulling a hose lays it along the route they walk (it is rolled up again when they climb back in). */
+  private layHose(r: Responder): void {
+    const veh = this.vehicles.get(r.vehicleId);
+    if (!veh || !this.vehicleDef(veh).equipment.includes('fire_hose')) return;
+    const fireTask = r.task?.type === 'extinguish' || r.task?.type === 'cool';
+    if (!r.trail && !fireTask) return;
+    const tr = r.trail ?? (r.trail = [{ x: veh.x - Math.cos(veh.angle) * 0.8, y: veh.y - Math.sin(veh.angle) * 0.8 }]); // from the hose reel at the back of the engine
+    const last = tr[tr.length - 1];
+    if (tr.length >= 2 && Math.hypot(r.x - tr[tr.length - 2].x, r.y - tr[tr.length - 2].y) < 0.5) { tr.pop(); return; } // walking back: the hose is pulled in again
+    if (Math.hypot(r.x - last.x, r.y - last.y) >= 0.6) tr.push({ x: r.x, y: r.y });
+    let len = 0; for (let i = 1; i < tr.length; i++) len += Math.hypot(tr[i].x - tr[i - 1].x, tr[i].y - tr[i - 1].y);
+    if (len > HOSE_LENGTH * 2.5) r.trail = undefined; // somebody wandered far off: the hose is uncoupled and rolled up
+  }
+
   private updateResponder(r: Responder, dt: number): void {
-    if (r.inVehicle) return;
+    if (r.inVehicle) { if (r.trail) r.trail = undefined; return; }
+    this.layHose(r);
     const t = r.task;
     const done = () => { r.task = null; r.path = []; r.aiming = null; };
     if (r.aiming !== null && r.task?.type !== 'arrest') r.aiming = null;
@@ -1697,15 +1741,64 @@ export class World {
     return out;
   }
 
-  /** Question the caller (what, where, how many hurt?): the control room then knows the real size and updates the recommended units. */
+  /** What the caller says at each stage of the call: first vague, then clearer (as on the 112 / 911 line). */
+  private callWords(inc: Incident, stage: number): string {
+    const def = this.content.incidents[inc.defId];
+    const pick = (a: string[]) => a[inc.id % a.length];
+    if (stage === 0) {
+      if (/hazmat|chemical|gas|leak/.test(inc.defId)) return pick(['Het ruikt hier heel raar en ik word misselijk, ik weet niet wat het is.', 'Er hangt een vreemde lucht, mensen worden duizelig.']);
+      if (/bomb|suspicious|package/.test(inc.defId)) return pick(['Er staat een pakket dat er niet hoort, niemand durft het aan te raken.']);
+      if (/collision|accident|crash|pileup/.test(inc.defId)) return pick(['Ik hoorde een harde klap op de weg, ik zie rook en mensen die rondlopen.', 'Er is iets gebeurd op de weg, het is een chaos, ik weet niet precies wat.']);
+      if (def.category === 'fire') return pick(['Ik ruik rook en zie wolken, volgens mij is er iets aan de hand maar ik weet het niet zeker.', 'Er komt iets uit een raam, ik weet niet of het stoom of rook is.', 'Ik hoor een alarm en ruik brand.']);
+      if (def.category === 'ambulance') return pick(['Er ligt iemand op de grond, ik weet niet wat er is.', 'Mijn buurman voelt zich niet goed, ik weet niet wat ik moet doen.', 'Iemand is net omgevallen, ik denk dat het ernstig is.']);
+      if (def.category === 'police') return pick(['Ik hoor harde stemmen en iets dat klinkt als een knal, ik durf niet te kijken.', 'Er gebeurt iets verdachts hier, ik weet niet precies wat.']);
+      return pick(['Er is een probleem op straat, ik weet niet precies wat.', 'Er staat iets in de weg, het verkeer loopt vast.']);
+    }
+    const n = inc.victims.length;
+    if (stage === 1) return `Het lijkt op: ${inc.name.toLowerCase()}.${inc.description ? ' ' + inc.description + '.' : ''}`;
+    if (stage === 2) {
+      const trapped = def.victims?.location === 'trapped';
+      let t = n === 0 ? 'Voor zover ik kan zien is niemand gewond.' : n === 1 ? 'Ik zie één gewonde.' : `Ik zie ${n} gewonden.`;
+      if (trapped && n > 0) t += ' Er zouden nog mensen binnen zijn.';
+      if (inc.suspects.length) t += ` Er ${inc.suspects.length === 1 ? 'staat een verdachte' : 'staan ' + inc.suspects.length + ' verdachten'} in de buurt${/armed|knife|hostage|shoot/.test(inc.defId) ? ', ik denk dat er een wapen bij is' : ''}.`;
+      return t;
+    }
+    return (inc.severity >= 3 ? 'Het wordt snel erger, kom alstublieft snel!' : inc.severity === 2 ? 'Het lijkt erger te worden.' : 'Het lijkt onder controle, maar kom wel kijken.') + ' Ik blijf aan de lijn.';
+  }
+
+  /** The caller tells more (on their own after a while, or because the dispatcher keeps asking). */
+  private advanceCall(inc: Incident, quiet = false): void {
+    if (inc.callStage >= 3) return;
+    inc.callStage++;
+    const line = this.callWords(inc, inc.callStage);
+    inc.callLog.push(line);
+    inc.nextCallAt = this.time + 9 + (inc.id % 4);
+    if (inc.callStage === 1 && !quiet) {
+      const def = this.content.incidents[inc.defId];
+      const prio = inc.severity >= 3 ? 'Prioriteit 1, spoed' : inc.severity === 2 ? 'Prioriteit 2' : 'Prioriteit 3';
+      this.emit({ type: 'info', message: `📟 ${inc.pager}`, speech: `${inc.name}. ${inc.description ? inc.description + '. ' : ''}${prio}.` });
+      void def;
+    }
+    if (inc.callStage === 3) {
+      inc.questioned = true;
+      const before = inc.units.length;
+      inc.units = this.recommendedUnits(inc);
+      if (!quiet) this.emit({ type: 'info', message: `Melder (${inc.name}): ${inc.victims.length ? inc.victims.length + ' gewonde(n)' : 'geen gewonden'}${inc.units.length > before ? `, extra eenheden nodig (${inc.units.length - before})` : ''}`, speech: line });
+    } else if (!quiet) this.emit({ type: 'info', message: `📞 Melder: "${line}"`, speech: line });
+  }
+
+  private updateCalls(): void {
+    for (const inc of this.incidents.values()) if (inc.callStage < 3 && this.time >= inc.nextCallAt) this.advanceCall(inc);
+  }
+
+  /** Question the caller (what, where, how many hurt?): the caller tells everything at once and the recommended units are updated. */
   questionCaller(incidentId: number): boolean {
     const inc = this.incidents.get(incidentId);
     if (!inc || inc.questioned) return false;
-    inc.questioned = true;
     const before = inc.units.length;
-    inc.units = this.recommendedUnits(inc);
+    while (inc.callStage < 3) this.advanceCall(inc, true);
     const hurt = inc.victims.length;
-    this.emit({ type: 'info', message: `Melder ondervraagd (${inc.name}): ${hurt ? hurt + ' gewonde(n)' : 'geen gewonden'}${inc.units.length > before ? `, extra eenheden nodig (${inc.units.length - before})` : ''}`, speech: 'Kunt u vertellen wat er precies aan de hand is?' });
+    this.emit({ type: 'info', message: `Melder ondervraagd (${inc.name}): ${hurt ? hurt + ' gewonde(n)' : 'geen gewonden'}${inc.units.length > before ? `, extra eenheden nodig (${inc.units.length - before})` : ''}`, speech: 'Kunt u vertellen wat er precies is gebeurd en hoeveel gewonden er zijn?' });
     return true;
   }
 
@@ -2166,7 +2259,7 @@ export class World {
     const scale = DIFFICULTY[this.opts.difficulty].timeScale;
     const inc: Incident = {
       id: this.newId(), defId, name: def.name, severity: sev, description: def.descriptions?.length ? this.rng.pick(def.descriptions) : '', x: 0, y: 0, buildingId: null, elapsed: 0,
-      nextEscalation: def.escalation.everySec * scale, status: 'active', secured: false, obstacle: [], victims: [], suspects: [], bystanders: [], deaths: 0, cleared: false, defused: false, address: '', scouted: false, pager: '', units: [], dispatched: false, advised: false, questioned: false, arrivedAt: null,
+      nextEscalation: def.escalation.everySec * scale, status: 'active', secured: false, obstacle: [], victims: [], suspects: [], bystanders: [], deaths: 0, cleared: false, defused: false, address: '', scouted: false, pager: '', units: [], callStage: 0, callLog: [], nextCallAt: this.time + 8 + (this.nextId % 3), dispatched: false, advised: false, questioned: false, arrivedAt: null,
     };
     let anchor: Vec;
     let b: Building | null = null;
@@ -2232,7 +2325,6 @@ export class World {
     this.incidents.set(inc.id, inc);
     this.dispatchPatrols(inc, def, b);
     inc.address = this.addressOf(b ? b.door.x + 0.5 : inc.x, b ? b.door.y + 0.5 : inc.y, !b);
-    const prio = inc.severity >= 3 ? 'Prioriteit 1, spoed' : inc.severity === 2 ? 'Prioriteit 2' : 'Prioriteit 3';
     // P2000 pager line: ambulance A1 (urgent) / A2, fire and police with a priority (1 = lights and sirens)
     inc.units = this.recommendedUnits(inc, true);
     const abbr: Record<string, string> = { fire_engine: 'TS', aerial_ladder: 'HV', rescue_vehicle: 'HW', ambulance: 'AMB', patrol_car: 'PAT', tow_truck: 'BER', police_van: 'BUS', riot_van: 'ME', hazmat_unit: 'OGS', water_tanker: 'WTW', ovd_car: 'OvD', light_unit: 'LICHT', air_ambulance: 'TRAUMA', lgh_car: 'LGH', crane_truck: 'KRAAN', bomb_squad: 'EOD', mmt_car: 'MMT' };
@@ -2242,7 +2334,9 @@ export class World {
       : def.category === 'police' ? `Prio ${urgent ? 1 : 2} POL Rendam ${inc.address} ${inc.name}`
       : `Prio ${urgent ? 1 : 2} TECH Rendam ${inc.address} ${inc.name}`;
     inc.pager += ` ${inc.units.map(u => abbr[u] ?? u).join(' ')}`;
-    this.emit({ type: 'incident_started', incidentId: inc.id, message: `📟 ${inc.pager}`, speech: `Meldkamer. ${inc.name}. ${inc.description ? inc.description + '. ' : ''}Adres: ${inc.address}. ${prio}.` });
+    const first = this.callWords(inc, 0);
+    inc.callLog.push(first);
+    this.emit({ type: 'incident_started', incidentId: inc.id, message: `📞 Nieuwe melding, ${inc.address}: "${first}"`, speech: `Meldkamer. Nieuwe melding. ${first} Adres: ${inc.address}.` });
     return inc;
   }
 
@@ -2728,7 +2822,11 @@ export class World {
     const axis = Math.atan2(l.y, l.x), wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
     const d1 = wrap(axis - c.angle), d2 = wrap(axis + Math.PI - c.angle);
     const diff = Math.abs(d1) <= Math.abs(d2) ? d1 : d2;
-    if (Math.abs(diff) > 1e-3) c.angle += Math.max(-3 * dt, Math.min(3 * dt, diff));
+    if (Math.abs(diff) > 1e-3) {
+      const goal = c.angle + Math.max(-3 * dt, Math.min(3 * dt, diff));
+      // straightening up swings the body through the neighbouring space: only when nothing is there
+      if (Math.abs(diff) < 0.08 || !this.findBlocker(c, c.x, c.y, Math.cos(goal), Math.sin(goal), 0.01, c.len, c.hw + 0.04, PRIO_CIVILIAN)) c.angle = goal;
+    }
   }
 
   respawnCivilian(c: Civilian): void {
@@ -2743,7 +2841,11 @@ export class World {
   }
 
   private updateCivilian(c: Civilian, dt: number): void {
-    if (c.wait > 0) { c.wait -= dt; this.alignCivilian(c, dt); return; }
+    if (c.wait > 0) {
+      c.wait -= dt; this.alignCivilian(c, dt);
+      if (c.stuck > 1.5) { c.stuck += dt; if (c.stuck > 6) this.respawnCivilian(c); } // a jam keeps counting while the car waits to re-plan (otherwise a deadlocked pair stays overlapped for half a minute)
+      return;
+    }
     if (c.v < 0.05 && !c.path.length) this.alignCivilian(c, dt);
     if (!c.path.length) {
       const dest = this.rng.pick(this.roadList);
@@ -2857,7 +2959,7 @@ export class World {
     for (const v of s.victims) w.victims.set(v.id, v);
     for (const x of s.suspects) { x.angle ??= 0; x.path ??= []; x.mode ??= 'idle'; x.runner ??= false; x.obey ??= true; x.fleeT ??= 0; x.escortedBy ??= null; x.vehicleId ??= null; w.suspects.set(x.id, x); }
     for (const b of s.bystanders ?? []) w.bystanders.set(b.id, b);
-    for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; i.address ??= ''; i.scouted ??= false; i.pager ??= ''; i.units ??= []; i.advised ??= false; i.questioned ??= true; i.arrivedAt ??= null; w.incidents.set(i.id, i); }
+    for (const i of s.incidents) { i.bystanders ??= []; i.defused ??= false; i.address ??= ''; i.scouted ??= false; i.pager ??= ''; i.units ??= []; i.advised ??= false; i.callStage ??= 3; i.callLog ??= []; i.nextCallAt ??= 0; i.questioned ??= true; i.arrivedAt ??= null; w.incidents.set(i.id, i); }
     w.obstacles = new Set(s.obstacles);
     w.rebuildCordon();
     w.script = s.script ?? [];

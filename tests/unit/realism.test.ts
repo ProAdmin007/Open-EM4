@@ -317,9 +317,12 @@ describe('control room, random calls, ambulance return', () => {
     const inc = w.spawnIncident('house_fire', { severity: 3 })!;
     expect(inc.address).toMatch(/\S+ \d+$/);
     const ev = w.drainEvents().find(e => e.type === 'incident_started') as { speech?: string; message: string };
-    expect(ev.speech).toContain(inc.name);
     expect(ev.speech).toContain(inc.address);
-    expect(ev.speech).toContain('Prioriteit 1');
+    expect(ev.speech).not.toContain(inc.name); // at first the caller only gives confused first words
+    for (let i = 0; i < 30 * 12; i++) w.tick();
+    const next = w.drainEvents().find(e => /📟/.test(e.message)) as { speech?: string };
+    expect(next.speech).toContain(inc.name);
+    expect(next.speech).toContain('Prioriteit 1');
     const road = w.spawnIncident('car_accident', { severity: 1 })!;
     expect(road.address).toContain('ter hoogte van');
   });
@@ -569,7 +572,9 @@ describe('P2000-style calls, GRIP and the associated vehicles', () => {
     const fire = w.spawnIncident('house_fire', { severity: 3 })!;
     expect(fire.pager).toMatch(/^Prio 1 BRW /);
     const ev = w.drainEvents().find(e => e.type === 'incident_started' && (e as { incidentId: number }).incidentId === cardiac.id)!;
-    expect(ev.message).toContain('📟 A1');
+    expect(ev.message).toContain('📞 Nieuwe melding');
+    for (let i = 0; i < 30 * 12; i++) w.tick();
+    expect(w.drainEvents().some(e => e.message.includes('📟 A1'))).toBe(true); // the P2000 line follows when the call is clear
   });
 
   it('an automatic alarm is closed by a reconnaissance alone', () => {

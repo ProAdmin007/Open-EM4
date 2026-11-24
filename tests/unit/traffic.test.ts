@@ -89,7 +89,9 @@ describe('collisions', () => {
       w.tick(SIM_DT);
       if (i % 90 === 0) send();
       if (i % 3) continue;
-      const boxes: Box[] = [...w.vehicles.values()].map(boxOfVehicle).concat(w.civilians.map(boxOfCar));
+      // (the explicit deadlock breaker lets a vehicle that has been jammed for 30+ s slip through its blocker: not counted)
+      const jam = (w as unknown as { jam: Map<number, number> }).jam;
+      const boxes: Box[] = [...w.vehicles.values()].filter(v => (jam.get(v.id) ?? 0) <= 30).map(boxOfVehicle).concat(w.civilians.map(boxOfCar));
       for (let a = 0; a < boxes.length; a++) for (let b = a + 1; b < boxes.length; b++) {
         checks++;
         if (overlap(boxes[a], boxes[b], 0.1)) { overlaps++; if (samples.length < 5) samples.push({ t: (i / 30).toFixed(1), a: boxes[a], b: boxes[b] }); }
