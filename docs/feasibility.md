@@ -76,3 +76,7 @@ What this check found and fixed:
 | prank_call | 1 | 70 | 70 | 0 | TOO SLOW |
 | ice_pileup_collision | 3 | 380 | 84 | 6 | ok |
 | storm_debris | 2 | 250 | 44 | 2 | ok |
+
+## Note after districts (R4)
+
+Incidents on buildings now favour the busy district, which changes which building a given seed picks. With seed 3 the bot then fails `apartment_fire` and `industrial_explosion` (victims at that location are reached late, several casualties die), in addition to `building_collapse`. These are location-dependent, not systematic: the bot does not coordinate carrying, and `hazmat_leak` and `bus_crash` were fixed by letting a vehicle boxed in beside a working vehicle squeeze past after 6 s.

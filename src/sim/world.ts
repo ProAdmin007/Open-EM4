@@ -970,6 +970,7 @@ export class World {
       }
     }
     if (v.blocked > 8 && v.blocked < 8.2 && movingVeh && (b.id ?? 0) < v.id && (this.vehicles.get(b.id ?? -1)?.speedNow ?? 0) < 0.3) v.ghost = 2.5; // last resort for a deadlock between moving vehicles: slip past
+    if (v.blocked > 6 && v.blocked < 6.2 && b.kind === 'veh' && b.halted && v.dest && (this.vehicles.get(b.id ?? -1)?.crew.some(id => this.responders.get(id)?.inVehicle === false) ?? false)) v.ghost = 3; // (only past a vehicle whose crew is out working: it cannot make way) // boxed in beside a working vehicle that cannot move: squeeze past
     if (v.blocked > 12) { // never drive through anything: give up and let the player re-order
       v.path = [];
       v.dest = null;
@@ -1563,6 +1564,17 @@ export class World {
     for (const v of this.vehicles.values()) if (v.defId === 'light_unit' && !v.path.length && !v.returning && Math.hypot(v.x - x, v.y - y) <= 10) return true;
     return false;
   }
+  /** A heavy storm: the strongest part of a rain shower. Calls come faster and storm damage is likely. */
+  get storming(): boolean {
+    const t = this.time / 160 + this.opts.seed * 0.37;
+    return Math.sin(t) + 0.6 * Math.sin(t * 0.43 + 2) > 1.45;
+  }
+  private wasStorming = false;
+  /** The district that is busy right now (rotates every 6 minutes): incidents on buildings prefer it. 0 = NW, 1 = NE, 2 = SW, 3 = SE. */
+  get hotDistrict(): number { return (Math.floor(this.time / 360) + this.opts.seed) % 4; }
+  inDistrict(x: number, y: number, d: number): boolean {
+    return ((x < this.w / 2 ? 0 : 1) + (y < this.h / 2 ? 0 : 2)) === d;
+  }
   get raining(): boolean {
     const t = this.time / 160 + this.opts.seed * 0.37;
     return Math.sin(t) + 0.6 * Math.sin(t * 0.43 + 2) > 1.15;
@@ -1593,6 +1605,7 @@ export class World {
       else if (cat === 'police') add('patrol_car', big ? 2 : 1);
       else if (cat === 'tech') add('tow_truck', /bus_crash|truck_collision/.test(inc.defId) ? 2 : 1);
     }
+    if (victims > 0) add('ambulance', Math.min(6, Math.max(1, Math.ceil(victims / Math.max(1, this.content.vehicles.ambulance?.patientCapacity ?? 1))))); // anybody hurt needs an ambulance, whatever the call type
     if (!prelim && inc.victims.some(id => this.victims.get(id)?.pinned)) { add('fire_engine'); add('rescue_vehicle'); }
     if (/hazmat|explosion|chemical/.test(inc.defId)) add('hazmat_unit');
     if (/high_rise|explosion|collapse/.test(inc.defId)) { add('ovd_car'); add('water_tanker'); }
@@ -2016,14 +2029,20 @@ export class World {
     const d = DIFFICULTY[this.opts.difficulty];
     this.spawnTimer -= dt;
     if (this.spawnTimer > 0) return;
-    this.spawnTimer = this.rng.range(d.interval[0], d.interval[1]);
+    const storm = this.storming;
+    if (storm !== this.wasStorming) {
+      this.wasStorming = storm;
+      if (storm) this.emit({ type: 'warn', message: 'Code oranje: zware storm boven Rendam, verwacht stormschade en wateroverlast', speech: 'Waarschuwing: zware storm. Houd rekening met extra meldingen.' });
+      else this.emit({ type: 'info', message: 'De storm is gaan liggen' });
+    }
+    this.spawnTimer = this.rng.range(d.interval[0], d.interval[1]) * (storm ? 0.6 : 1);
     if (this.incidents.size >= d.maxConcurrent) return;
     const defs = Object.values(this.content.incidents);
     // anti-repeat: recently seen kinds and the category of the previous call are less likely, so the calls keep varying
     const last = this.recentDefs[this.recentDefs.length - 1];
     const lastCat = last ? this.content.incidents[last]?.category : null;
     const rain = this.raining; // weather-driven calls: slippery roads and storm damage come with the rain, and are rare otherwise
-    const wt = (x: IncidentDef) => x.weight * (this.recentDefs.includes(x.id) ? 0.12 : 1) * (x.category === lastCat ? 0.6 : 1) * (/^(ice_pileup_collision|storm_debris)$/.test(x.id) ? (rain ? 4 : 0.15) : 1);
+    const wt = (x: IncidentDef) => x.weight * (this.recentDefs.includes(x.id) ? 0.12 : 1) * (x.category === lastCat ? 0.6 : 1) * (/^(ice_pileup_collision|storm_debris)$/.test(x.id) ? (rain ? 4 : 0.15) * (this.storming && x.id === 'storm_debris' ? 2.5 : 1) : 1) * this.timeOfDayFactor(x);
     const total = defs.reduce((s, x) => s + wt(x), 0);
     if (total <= 0) return;
     let roll = this.rng.next() * total;
@@ -2033,6 +2052,13 @@ export class World {
     }
   }
   private recentDefs: string[] = [];
+  /** Day/night mix: crime, nuisance and alarms at night, traffic, shops and schools by day (the world clock matches the 3D sky). */
+  private timeOfDayFactor(x: IncidentDef): number {
+    const night = this.isNight;
+    if (/burglary|armed_robbery|vandalism|fight|car_break_in|noise|knife|domestic|automatic_alarm/.test(x.id)) return night ? 2.2 : 0.8;
+    if (/shoplifting|traffic|collision|school|elevator/.test(x.id)) return night ? 0.45 : 1.15;
+    return 1;
+  }
 
   /** A street address for a point: the nearest street (stable per street line) and a house number by position and side. */
   addressOf(x: number, y: number, onRoad = false): string {
@@ -2070,7 +2096,8 @@ export class World {
       if (o.buildingId) b = this.buildings.get(o.buildingId) ?? null;
       else {
         const cands = [...this.buildings.values()].filter(x => !x.destroyed && !x.incidentId && x.fire <= 0 && def.spawn.buildingTypes?.includes(x.type));
-        b = cands.length ? this.rng.pick(cands) : null;
+        const hot = cands.filter(x => this.inDistrict(x.x, x.y, this.hotDistrict));
+        b = cands.length ? this.rng.pick(hot.length && this.rng.chance(0.6) ? hot : cands) : null; // 60% of the calls come from the busy district
       }
       if (!b) return null;
       b.incidentId = inc.id;

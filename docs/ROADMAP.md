@@ -20,13 +20,13 @@ Derived from the [knowledge base](knowledge/README.md). Status: ✅ done · 🟡
 | V1 | Visual realism: filmic tone mapping, soft shadows, headlight pools and flashing emergency glow on the road at night, wet darker roads in rain, brighter night ambience (`tools/screens3d-night.mjs`) | own | ✅ |
 | R2 | Call questions: a new call only has a preliminary unit list (one unit per service); "❓ Melder ondervragen" reveals the real number of casualties and updates the recommended units (a full call queue UI is still open) | 911/112 Operator | ✅ (light) |
 | R9 | Light unit (Lichtmastwagen) at fire station 2: at night treating casualties is 30% slower unless a parked light unit is within 10 tiles; floodlight pool in 3D; recommended automatically at night for severity 2+ | LA mod | ✅ |
+| R4 | Busy district rotates every 6 minutes (60% of building calls come from it); night brings crime, noise and alarms, day brings traffic and shops | 112 Operator | ✅ (light: quadrants, not named districts) |
+| R5 | Heavy storms (the peak of a shower): Code oranje warning, calls 40% faster, storm damage 2.5x | 112 Operator | ✅ (growing floods still open) |
 
 ## Next
 
 | # | Item | Source | Notes |
 |---|---|---|---|
-| R4 | Districts with different incident mixes (industrial, residential, centre) | 112 Operator | weights per area in the map; map generator already knows building types |
-| R5 | Storms with wind damage across the map, flooding that grows, day/night mixes | 112 Operator | builds on R5a |
 | R8 | Ballistic shields / entry team for armed incidents | LA mod | extra police roles and abilities |
 
 ## Later

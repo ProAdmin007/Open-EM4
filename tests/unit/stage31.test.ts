@@ -36,3 +36,21 @@ describe('call questions, hospital beds, light unit', () => {
     expect(w.sceneLit(lu!.x + 60, lu!.y)).toBe(true);
   });
 });
+
+describe('districts and storms', () => {
+  it('the busy district rotates and covers the map', () => {
+    const w = newWorld(8);
+    const seen = new Set<number>();
+    for (let t = 0; t < 4 * 360; t += 360) { w.time = t; seen.add(w.hotDistrict); }
+    expect(seen.size).toBe(4);
+    expect(w.inDistrict(1, 1, 0)).toBe(true);
+    expect(w.inDistrict(w.w - 1, w.h - 1, 3)).toBe(true);
+  });
+  it('a storm is announced once and ends again', () => {
+    const w = newWorld(8);
+    let storms = 0;
+    for (let t = 0; t < 4000; t += 5) { w.time = t; if (w.storming) storms++; if (w.storming) expect(w.raining).toBe(true); }
+    expect(storms).toBeGreaterThan(0);
+    expect(storms).toBeLessThan(800 * 0.5);
+  });
+});

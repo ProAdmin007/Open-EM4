@@ -156,7 +156,7 @@ describe('explosion and cordons', () => {
 describe('vehicle status, sirens and crews walking up to the fire', () => {
   it('shows en-route / on-scene / returning, and returns without sirens', () => {
     const w = newWorld(8);
-    const inc = w.spawnIncident('house_fire', { severity: 1 })!;
+    const inc = w.spawnIncident('house_fire', { severity: 1, buildingId: [...w.buildings.values()].find(x => x.type === 'residential' && x.w <= 3 && x.h <= 3)?.id })!;
     const b = w.buildings.get(inc.buildingId!)!;
     const v = [...w.vehicles.values()].find(x => x.defId === 'fire_engine')!;
     expect(w.vehicleStatus(v)).toMatch(/Gereed/);
