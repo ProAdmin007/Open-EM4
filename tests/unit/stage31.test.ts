@@ -54,3 +54,27 @@ describe('districts and storms', () => {
     expect(storms).toBeLessThan(800 * 0.5);
   });
 });
+
+describe('growing floods and shield teams', () => {
+  it('a flood grows when it escalates', () => {
+    const w = newWorld(8);
+    const inc = w.spawnIncident('flooding', { severity: 1 })!;
+    const n = inc.obstacle.length;
+    inc.elapsed = inc.nextEscalation + 1;
+    for (let i = 0; i < 3; i++) w.tick();
+    expect(inc.obstacle.length).toBeGreaterThan(n);
+    for (const o of inc.obstacle) expect(w.obstacles.has(o.x + ',' + o.y) || w.obstacles.size > 0).toBe(true);
+  });
+  it('arresting an armed suspect is slower without the riot team, and a riot van is recommended', () => {
+    const w = newWorld(8);
+    const inc = w.spawnIncident('armed_robbery', { severity: 2 })!;
+    const s = w.suspects.get(inc.suspects[0])!;
+    expect(w.shieldFactor(s)).toBe(0.6);
+    expect(inc.units).not.toContain('riot_van');
+    w.questionCaller(inc.id);
+    expect(inc.units).toContain('riot_van');
+    const van = [...w.vehicles.values()].find(v => v.defId === 'riot_van')!;
+    van.x = s.x + 3; van.y = s.y; van.path = [];
+    expect(w.shieldFactor(s)).toBe(1);
+  });
+});

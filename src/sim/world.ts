@@ -1348,7 +1348,7 @@ export class World {
         if (this.approach(r, s.x, s.y, 1.2, done)) {
           r.angle = Math.atan2(s.y - r.y, s.x - r.x);
           s.angle = r.angle + Math.PI;
-          t.progress += dt;
+          t.progress += dt * this.shieldFactor(s);
           if (t.progress >= s.arrestTime) {
             s.arrested = true; s.mode = 'idle'; s.runner = false;
             this.emit({ type: 'info', message: `${r.name} heeft een verdachte gearresteerd` });
@@ -1564,6 +1564,14 @@ export class World {
     for (const v of this.vehicles.values()) if (v.defId === 'light_unit' && !v.path.length && !v.returning && Math.hypot(v.x - x, v.y - y) <= 10) return true;
     return false;
   }
+  /** Armed suspects are dangerous: officers arrest them 40% slower unless a riot-police (ME) shield team stands within 14 tiles. */
+  shieldFactor(s: Suspect): number {
+    const inc = this.incidents.get(s.incidentId);
+    if (!inc || !/armed_robbery|knife_threat|hostage/.test(inc.defId)) return 1;
+    for (const v of this.vehicles.values()) if (v.defId === 'riot_van' && !v.path.length && Math.hypot(v.x - s.x, v.y - s.y) <= 14) return 1;
+    if (!inc.shieldWarned) { inc.shieldWarned = true; this.emit({ type: 'warn', message: `${inc.name}: gewapende verdachte, wacht op het ME-schildenteam voor een veilige aanhouding` }); }
+    return 0.6;
+  }
   /** A heavy storm: the strongest part of a rain shower. Calls come faster and storm damage is likely. */
   get storming(): boolean {
     const t = this.time / 160 + this.opts.seed * 0.37;
@@ -1614,6 +1622,7 @@ export class World {
     if (/suspicious_package/.test(inc.defId)) add('bomb_squad');
     if ((def.obstacle?.mass ?? 0) >= 1.6) add('crane_truck');
     if (!prelim && this.isNight && inc.severity >= 2) add('light_unit');
+    if (!prelim && /armed_robbery|knife_threat|hostage/.test(inc.defId) && inc.severity >= 2) add('riot_van');
     const out: string[] = [];
     for (const [id, n] of need) for (let k = 0; k < n; k++) out.push(id);
     return out;
@@ -2221,6 +2230,7 @@ export class World {
       inc.severity++;
       inc.nextEscalation += def.escalation.everySec * scale;
       if (b && b.fire > 0) b.fire = Math.min(100, b.fire + 15);
+      if (inc.defId === 'flooding' && !inc.cleared) this.growFlood(inc);
       if (def.suspects && inc.suspects.length < 3) this.addSuspects(inc, 1, b ?? null, (def.suspects.arrestTime ?? 4) * sevFactor(inc.severity, 0.4));
       for (const id of inc.victims) { const v = this.victims.get(id); if (v && v.decay > 0) { v.decay *= 1.2; if (!v.treated) v.treatTime *= 1.15; } }
       for (const id of inc.suspects) { const x = this.suspects.get(id); if (x && !x.arrested) x.arrestTime *= 1.15; }
@@ -2252,6 +2262,19 @@ export class World {
       return this.endIncident(inc, 'failed', 'Te laat gereageerd');
     }
     if (this.objectivesMet(inc, def)) this.endIncident(inc, 'resolved', 'Afgerond');
+  }
+
+  /** The water keeps rising: the flooded stretch of road grows by one tile (up to 5) while nobody pumps it out. */
+  private growFlood(inc: Incident): void {
+    if (inc.obstacle.length >= 5) return;
+    const last = inc.obstacle[inc.obstacle.length - 1];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const x = last.x + dx, y = last.y + dy;
+      if (!this.isRoad(x, y) || this.isIntersection(x, y) || inc.obstacle.some(o => o.x === x && o.y === y) || this.obstacles.has(key(x, y))) continue;
+      inc.obstacle.push({ x, y }); this.obstacles.add(key(x, y)); this.roadVersion++;
+      this.emit({ type: 'warn', message: `Wateroverlast breidt zich uit (${inc.obstacle.length} tegels)` });
+      return;
+    }
   }
 
   private endIncident(inc: Incident, status: 'resolved' | 'failed', why: string): void {

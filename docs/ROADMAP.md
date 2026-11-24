@@ -21,13 +21,14 @@ Derived from the [knowledge base](knowledge/README.md). Status: ✅ done · 🟡
 | R2 | Call questions: a new call only has a preliminary unit list (one unit per service); "❓ Melder ondervragen" reveals the real number of casualties and updates the recommended units (a full call queue UI is still open) | 911/112 Operator | ✅ (light) |
 | R9 | Light unit (Lichtmastwagen) at fire station 2: at night treating casualties is 30% slower unless a parked light unit is within 10 tiles; floodlight pool in 3D; recommended automatically at night for severity 2+ | LA mod | ✅ |
 | R4 | Busy district rotates every 6 minutes (60% of building calls come from it); night brings crime, noise and alarms, day brings traffic and shops | 112 Operator | ✅ (light: quadrants, not named districts) |
-| R5 | Heavy storms (the peak of a shower): Code oranje warning, calls 40% faster, storm damage 2.5x | 112 Operator | ✅ (growing floods still open) |
+| R5 | Heavy storms (the peak of a shower): Code oranje warning, calls 40% faster, storm damage 2.5x | 112 Operator | ✅ (growing floods: see R5b) |
+| R5b | Floods grow by a tile on every escalation (max 5) | 112 Operator | ✅ |
+| R8 | Armed suspects: arrests are 40% slower without a riot (ME) van within 14 tiles; the van is recommended for armed robbery / knife threat (full ballistic shield animation still open) | LA mod | ✅ (light) |
 
 ## Next
 
 | # | Item | Source | Notes |
 |---|---|---|---|
-| R8 | Ballistic shields / entry team for armed incidents | LA mod | extra police roles and abilities |
 
 ## Later
 
