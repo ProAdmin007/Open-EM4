@@ -24,6 +24,7 @@ Derived from the [knowledge base](knowledge/README.md). Status: ✅ done · 🟡
 | R5 | Heavy storms (the peak of a shower): Code oranje warning, calls 40% faster, storm damage 2.5x | 112 Operator | ✅ (growing floods: see R5b) |
 | R5b | Floods grow by a tile on every escalation (max 5) | 112 Operator | ✅ |
 | R8 | Armed suspects: arrests are 40% slower without a riot (ME) van within 14 tiles; the van is recommended for armed robbery / knife threat (full ballistic shield animation still open) | LA mod | ✅ (light) |
+| T1 | Soak/fuzz test (`tools/soak.ts`: 24 runs x 12 min with random orders, invariants every 5 s, save/load round trip) and browser smoke test (`tools/smoke-browser.mjs`) | own | ✅ |
 
 ## Next
 

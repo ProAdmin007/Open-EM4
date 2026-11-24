@@ -501,7 +501,7 @@ export class World {
     const cx = x + 0.5, cy = y + 0.5;
     const near = (ox: number, oy: number, ang: number, v: number): boolean => Math.abs(oy - cy) < 1.7 && Math.abs(ox - cx) < 3.6 && Math.abs(Math.cos(ang)) > 0.6 && (v > 0.3 || Math.abs(ox - cx) < 1.6);
     for (const o of this.civilians) if (near(o.x, o.y, o.angle, o.v)) return true;
-    for (const o of this.vehicles.values()) if (near(o.x, o.y, o.angle, o.speedNow)) return true;
+    for (const o of this.vehicles.values()) if ((o.path.length || o.speedNow > 0.3) && near(o.x, o.y, o.angle, o.speedNow)) return true; // a parked vehicle beside the junction is not traffic
     return false;
   }
   /** Is the first stretch of road behind the junction occupied by a (nearly) stationary vehicle? Then do not enter: never block the box. */
@@ -764,12 +764,16 @@ export class World {
         }
       }
       const blocker = v.ghost > 0 ? null : this.gate(v, def.length) ?? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, uturn ? def.length * 0.64 : halfWidth(def.length), PRIO_EMERGENCY);
-      if (blocker) { v.speedNow = 0; this.onBlocked(v, blocker, dt); return; }
-      v.blocked = 0;
+      if (blocker) { v.speedNow = 0; this.jam.set(v.id, (this.jam.get(v.id) ?? 0) + dt); this.onBlocked(v, blocker, dt); this.breakJam(v, blocker); return; }
+      v.blocked = 0; this.jam.delete(v.id);
       // prio 2 obeys the traffic lights like everybody else
       if (v.prio === 2 && this.isIntersection(v.path[0].x, v.path[0].y) && !this.isIntersection(Math.floor(v.x), Math.floor(v.y)) && d < 0.95) {
-        if (!this.canGo(v.path[0].x, v.path[0].y, Math.abs(ux) > Math.abs(uy))) { v.speedNow = 0; return; }
-      }
+        if (!this.canGo(v.path[0].x, v.path[0].y, Math.abs(ux) > Math.abs(uy))) {
+          v.speedNow = 0;
+          const w8 = (this.lightWait.get(v.id) ?? 0) + dt; this.lightWait.set(v.id, w8);
+          if (w8 < 25) return; // after 25 s of waiting an impatient driver goes anyway (collision checks still apply)
+        } else this.lightWait.delete(v.id);
+      } else if (this.lightWait.size && this.isIntersection(Math.floor(v.x), Math.floor(v.y))) this.lightWait.delete(v.id); // through the junction: wait is over
       // U-turn: sliding into the opposite lane while rotating through 180 degrees
       const la = this.laneAt(Math.floor(v.x), Math.floor(v.y)), lb = this.laneAt(v.path[0].x, v.path[0].y);
       const sideStep = !!(la && lb && la.x === -lb.x && la.y === -lb.y && Math.abs(ux * la.x + uy * la.y) < 1e-6);
@@ -911,6 +915,17 @@ export class World {
       if (dd < 3 || taken.has(key(c.x, c.y)) || !this.clearStopTile(c.x, c.y)) continue;
       if (this.routeVehicle(o, c)) { o.silent = true; o.prio = 2; return; }
     }
+  }
+
+  /** Total time (s) a vehicle has been held up in a row, even when its route keeps being re-planned (which resets `blocked`). */
+  private jam = new Map<number, number>();
+  private lightWait = new Map<number, number>();
+  /** Last resort for a long deadlock (two vehicles facing each other in a lane, boxed in at a junction): 20 s squeeze past, 90 s give up. */
+  private breakJam(v: Vehicle, b: Blocker): void {
+    const j = this.jam.get(v.id) ?? 0;
+    if (b.kind === 'person') return;
+    if (j > 20 && v.ghost <= 0) { v.ghost = 4; v.contraflow = false; }
+    if (j > 90) { v.path = []; v.dest = null; v.blocked = 0; this.jam.delete(v.id); this.emit({ type: 'warn', message: `${v.name} zit vast en blijft staan` }); }
   }
 
   private onBlocked(v: Vehicle, b: Blocker, dt: number): void {
