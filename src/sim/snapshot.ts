@@ -23,6 +23,10 @@ export interface SnapVehicle {
   moving: boolean;
   /** a parked light unit with its mast floodlights on */
   flood: boolean;
+  /** a helicopter that is in the air (flying) */
+  air: boolean;
+  /** helicopter model: rotors turn while the engine runs */
+  heli: boolean;
   /** water in the tank / tank size (litres), hooked up to a hydrant, and the tile being sprayed by an aerial ladder crew */
   water: number;
   tank: number;
@@ -138,7 +142,7 @@ export function createSnapshot(world: World, alpha = 1): RenderSnapshot {
     const def = world.vehicleDef(v), x = ix(v), y = iy(v);
     snap.vehicles.push({
       id: v.id, model: modelId('vehicle', v.defId, def.model), category: v.category, x, y, position: tileToWorld3D(x, y), heading: v.angle, yaw: headingToYaw(v.angle),
-      size: vehicleDimensions(def), lights: v.lights, moving: v.path.length > 0, flood: v.defId === 'light_unit' && !v.path.length && !v.returning && world.isNight,
+      size: vehicleDimensions(def), lights: v.lights, moving: v.path.length > 0, air: !!def.flying && v.path.length > 0, heli: !!def.flying, flood: v.defId === 'light_unit' && !v.path.length && !v.returning && world.isNight,
       water: v.water, tank: def.tank ?? 0, hydrant: v.hydrant, aerial: aerial.get(v.id) ?? null, cargo: v.cargo, open: loading.has(v.id),
     });
   }

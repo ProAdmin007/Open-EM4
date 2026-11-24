@@ -39,6 +39,8 @@ export interface VehicleDef {
   /** Water tank in litres (fire vehicles); refilled at hydrants. */
   tank?: number;
   clearPowerBonus?: number;
+  /** Flies in a straight line (helicopter): ignores roads and traffic, lands on open ground. */
+  flying?: boolean;
 }
 export interface IncidentDef {
   id: string;

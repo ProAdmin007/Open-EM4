@@ -646,8 +646,18 @@ export class Three3DRenderer implements GameRenderer {
     this.lastVehicles.clear();
     for (const v of list) this.lastVehicles.set(v.id, v);
     this.track(this.vehicles, list, v => this.makeVehicle(v), (obj, v) => {
-      obj.position.set(v.position.x, 0, v.position.z);
+      { // a helicopter climbs while flying and settles on the ground when landed; its rotors keep turning until the engine is off
+        const k = Math.min(1, this.lastDt * 1.2);
+        obj.userData.alt = (obj.userData.alt ?? 0) + ((v.air ? 1 : 0) - (obj.userData.alt ?? 0)) * k;
+        obj.userData.spin = v.heli ? (obj.userData.spin ?? 0) + ((v.moving || v.lights ? 1 : 0) - (obj.userData.spin ?? 0)) * Math.min(1, this.lastDt * 0.8) : 0;
+      }
+      obj.position.set(v.position.x, v.heli ? (obj.userData.alt as number) * 38 : 0, v.position.z);
       obj.rotation.y = v.yaw;
+      if (v.heli) { // pitch forward when flying, spin the rotors
+        const rotors = (obj.userData.parts as VehicleParts).rotors;
+        if (rotors) { const sp = obj.userData.spin as number; rotors[0].rotation.y += 30 * sp * this.lastDt; rotors[1].rotation.z += 40 * sp * this.lastDt; }
+        obj.rotation.z = -0.12 * (v.air ? Math.min(1, v.moving ? 1 : 0) : 0);
+      }
       this.animateParts(obj.userData.parts as VehicleParts, v.moving, v.lights, this.lastDt);
       this.nightFx(obj, this.env.night, v.lights);
       { // floodlight pool of a light unit

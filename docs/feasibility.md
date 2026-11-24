@@ -80,3 +80,6 @@ What this check found and fixed:
 ## Note after districts (R4)
 
 Incidents on buildings now favour the busy district, which changes which building a given seed picks. With seed 3 the bot then fails `apartment_fire` and `industrial_explosion` (victims at that location are reached late, several casualties die), in addition to `building_collapse`. These are location-dependent, not systematic: the bot does not coordinate carrying, and `hazmat_leak` and `bus_crash` were fixed by letting a vehicle boxed in beside a working vehicle squeeze past after 6 s.
+
+## After the trauma helicopter (R7)
+Seed 3: 50/56 (truck_collision and high_rise_fire flipped); seed 4: 5 unsolved without the helicopter station, 7 with it, but a different set each time. Adding a vehicle shifts entity ids and therefore the random traffic, so the bot's pass rate moves by about two incidents either way. The cases that flip are ones where an idle crew member or victim stands in the road and blocks an ambulance route; the bot does not coordinate that.

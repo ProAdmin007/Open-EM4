@@ -53,7 +53,7 @@ describe('the irregular city', () => {
       return false;
     };
     for (const b of map.buildings) expect(near(b)).toBe(true);
-    for (const st of map.stations) for (const bay of st.bays!) expect(w.isRoad(bay.x, bay.y - 3)).toBe(true);
+    for (const st of map.stations.filter(x => x.id !== 'heli_base')) for (const bay of st.bays!) expect(w.isRoad(bay.x, bay.y - 3)).toBe(true);
   });
 });
 

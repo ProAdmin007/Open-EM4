@@ -353,7 +353,7 @@ export class World {
         const bay = st.bays?.[i];
         if (bay) {
           const v = this.createVehicle(def, st.id, bay.x + 0.5, bay.y + 0.5);
-          v.angle = -Math.PI / 2; // parked nose-out, facing the exit
+          v.angle = def.flying ? 0 : -Math.PI / 2; // parked nose-out, facing the exit
           return;
         }
         const spot = this.findSpot(st.buildingId, placed);
@@ -384,7 +384,7 @@ export class World {
   callReinforcement(defId: string, free = false): Vehicle | null {
     const def = this.content.vehicles[defId];
     if (!def || this.over) return null;
-    const stations = this.map.stations.filter(s => s.category === def.category);
+    const stations = this.map.stations.filter(s => s.category === def.category && (def.flying ? s.fleet.includes(defId) : !s.fleet.every(f => this.content.vehicles[f]?.flying)));
     if (!stations.length) { this.emit({ type: 'warn', message: `Geen post beschikbaar voor ${def.name}` }); return null; }
     const cost = free ? 0 : this.reinforcementCost(defId);
     if (this.budget < cost) { this.emit({ type: 'warn', message: `Onvoldoende middelen voor ${def.name} (€${cost})` }); return null; }
@@ -541,7 +541,7 @@ export class World {
     const set = new Set<number>();
     const mine = this.vehicleDef(except).length;
     for (const o of this.vehicles.values()) {
-      if (o === except) continue;
+      if (o === except || this.vehicleDef(o).flying) continue;
       const parked = !o.path.length;
       if (!parked && !o.dest) continue;
       const px = parked ? o.x : o.dest!.x + 0.5, py = parked ? o.y : o.dest!.y + 0.5;
@@ -560,6 +560,7 @@ export class World {
   }
 
   routeVehicle(v: Vehicle, dest: Vec, avoid: number[] = v.avoid): boolean {
+    if (this.vehicleDef(v).flying) { v.path = [{ x: dest.x, y: dest.y }]; v.dest = { x: dest.x, y: dest.y }; v.pathVersion = this.roadVersion; return true; } // straight line through the air
     const path = this.planRoute(v, dest, avoid);
     if (!path) return false;
     v.path = path;
@@ -570,6 +571,7 @@ export class World {
 
   /** The route a vehicle would take to `dest` (not assigned): lane-compliant, with a U-turn when that saves a long detour. */
   planRoute(v: Vehicle, dest: Vec, avoid: number[] = v.avoid): Vec[] | null {
+    if (this.vehicleDef(v).flying) return [{ x: dest.x, y: dest.y }];
     const idle = this.idleTiles(v);
     const skip = new Set(avoid);
     // a stopped vehicle in a lane can be overtaken through the opposite lane, so lane tiles stay routable (parking spots and junctions do not)
@@ -638,10 +640,29 @@ export class World {
     }
   }
 
+  /** Open ground for a helicopter near a point: not a road, not a building, nothing standing next to it. */
+  private landingSpot(v: Vehicle, x: number, y: number): Vec | null {
+    const home = v.home;
+    let best: Vec | null = null, bd = Infinity;
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    for (let j = y0 - 12; j <= y0 + 12; j++) for (let i = x0 - 12; i <= x0 + 12; i++) {
+      if (!this.isWalkable(i, j) || this.isRoad(i, j) || this.isParking(i, j)) continue;
+      let open = true;
+      for (let dj = -1; dj <= 1 && open; dj++) for (let di = -1; di <= 1; di++) if (!this.isWalkable(i + di, j + dj) || this.isRoad(i + di, j + dj)) { open = false; break; }
+      if (!open) continue;
+      if ([...this.vehicles.values()].some(o => o !== v && Math.hypot(o.x - (i + 0.5), o.y - (j + 0.5)) < 3.2)) continue;
+      if (this.incidentNear(i + 0.5, j + 0.5, 1.5)) continue;
+      const d = Math.hypot(i + 0.5 - x, j + 0.5 - y) + (i === home.x && j === home.y ? -2 : 0);
+      if (d < bd) { bd = d; best = { x: i, y: j }; }
+    }
+    return best;
+  }
+
   /** Drive to the best reachable tile near a point. */
   private driveNear(v: Vehicle, x: number, y: number): boolean {
     v.contraflow = false;
     v.avoid = [];
+    if (this.vehicleDef(v).flying) { const l = this.landingSpot(v, x, y); return l ? this.routeVehicle(v, l) : false; }
     // compare the real routes to the best few stopping places: the cheapest one wins, not just the nearest tile
     let best: { c: Vec; cost: number } | null = null;
     for (const c of this.candidateTiles(x, y, v, 18, 14)) {
@@ -676,7 +697,7 @@ export class World {
 
   private updateVehicle(v: Vehicle, dt: number): void {
     if (v.ghost > 0) v.ghost -= dt;
-    if (v.dest && v.pathVersion !== this.roadVersion) {
+    if (v.dest && v.pathVersion !== this.roadVersion && !this.vehicleDef(v).flying) {
       // roads changed (blockade): recompute the route
       if (!this.routeVehicle(v, v.dest)) { v.path = []; v.dest = null; this.emit({ type: 'warn', message: `${v.name}: geen route meer naar de bestemming` }); }
     }
@@ -737,8 +758,22 @@ export class World {
     }
   }
 
+  /** A helicopter flies straight to its next waypoint: fast, no lanes, no traffic. */
+  private flyVehicle(v: Vehicle, def: VehicleDef, dt: number): void {
+    const tx = v.path[0].x + 0.5, ty = v.path[0].y + 0.5;
+    const dx = tx - v.x, dy = ty - v.y, d = Math.hypot(dx, dy);
+    const vmax = Math.min(def.maxSpeed * KMH_TO_TILES * (v.prio === 2 ? 0.85 : 1.15), Math.sqrt(2 * 5 * d) + 0.4);
+    v.speedNow = Math.max(0, Math.min(vmax, v.speedNow + (v.speedNow < vmax ? 5 : -10) * dt));
+    if (v.speedNow < 0.4) v.speedNow = 0.4;
+    const step = Math.min(v.speedNow * dt, d);
+    if (d > 0.3) { const want = Math.atan2(dy, dx); const diff = Math.atan2(Math.sin(want - v.angle), Math.cos(want - v.angle)); v.angle += Math.max(-3 * dt, Math.min(3 * dt, diff)); }
+    if (d < 1e-4 || step >= d - 1e-6) { v.x = tx; v.y = ty; v.path.shift(); v.speedNow = 0; return; }
+    v.x += (dx / d) * step; v.y += (dy / d) * step;
+  }
+
   private driveVehicle(v: Vehicle, dt: number): void {
     const def = this.vehicleDef(v);
+    if (def.flying) { this.flyVehicle(v, def, dt); return; }
     // speed: prio 1 drives hard, prio 2 calmly; accelerate from a standstill, brake for the next corner
     let vmax = def.maxSpeed * KMH_TO_TILES * (v.prio === 2 ? 0.85 : 1.15) * (this.raining ? 0.9 : 1);
     const cd = this.cornerDistance(v);
@@ -763,7 +798,7 @@ export class World {
           if (np) { v.path = np; v.passUntil = this.time + 8; continue; }
         }
       }
-      const blocker = v.ghost > 0 ? null : this.gate(v, def.length) ?? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, uturn ? def.length * 0.64 : halfWidth(def.length), PRIO_EMERGENCY);
+      const blocker = v.ghost > 0 ? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, uturn ? def.length * 0.64 : halfWidth(def.length) * 0.5, PRIO_EMERGENCY, true) : this.gate(v, def.length) ?? this.findBlocker(v, v.x, v.y, ux, uy, step, def.length, uturn ? def.length * 0.64 : halfWidth(def.length), PRIO_EMERGENCY);
       if (blocker) { v.speedNow = 0; this.jam.set(v.id, (this.jam.get(v.id) ?? 0) + dt); this.onBlocked(v, blocker, dt); this.breakJam(v, blocker); return; }
       v.blocked = 0; this.jam.delete(v.id);
       // prio 2 obeys the traffic lights like everybody else
@@ -810,7 +845,7 @@ export class World {
       return lat < 0.9 && along > -(half + 1.2) && along < half + 0.3;
     };
     for (const o of this.vehicles.values()) {
-      if (o === v) continue;
+      if (o === v || this.vehicleDef(o).flying) continue;
       const lo = this.vehicleDef(o).length;
       if (this.isRoad(Math.floor(o.x), Math.floor(o.y)) && inWindow(o.x, o.y, lo)) return { kind: 'veh', id: o.id, x: o.x, y: o.y, halted: false };
       // another vehicle about to pull onto (nearly) the same stretch of road: the lower id goes first, so nobody ends up with their nose in the lane
@@ -972,11 +1007,26 @@ export class World {
         }
       }
     }
+    if (b.kind === 'person' && !b.responder && v.blocked > 5 && v.path.length > 3) { // somebody lying or standing in the road and no way around: stop short, the crew walks the rest
+      v.path = []; v.dest = null; v.blocked = 0; this.jam.delete(v.id);
+      this.emit({ type: 'info', message: `${v.name} stopt voor iemand op de weg; de bemanning loopt verder` });
+      return;
+    }
     if (b.kind === 'person' && v.blocked > 1) {
       if (b.responder && !b.responder.task && !b.responder.path.length) {
         // idle crew standing in the road steps onto the pavement
         b.responder.task = { type: 'move' };
-        if (!this.walkTo(b.responder, (x, y) => !this.isRoad(x, y) && !this.isParking(x, y))) { b.responder.task = null; b.responder.path = []; }
+        if (!this.walkTo(b.responder, (x, y) => !this.isRoad(x, y) && !this.isParking(x, y))) {
+          b.responder.task = null; b.responder.path = [];
+          if (v.blocked > 3) { // nowhere to walk to: step aside onto the nearest bit of pavement
+            const r0 = b.responder; let best: Vec | null = null, bd = Infinity;
+            for (let j = Math.floor(r0.y) - 3; j <= Math.floor(r0.y) + 3; j++) for (let i = Math.floor(r0.x) - 3; i <= Math.floor(r0.x) + 3; i++) {
+              if (!this.isWalkable(i, j) || this.isRoad(i, j) || this.isParking(i, j) || this.insideAnyVehicle(i + 0.5, j + 0.5, 0.3)) continue;
+              const d = Math.hypot(i + 0.5 - r0.x, j + 0.5 - r0.y); if (d < bd) { bd = d; best = { x: i, y: j }; }
+            }
+            if (best) { r0.x = best.x + 0.5; r0.y = best.y + 0.5; r0.px = r0.x; r0.py = r0.y; }
+          }
+        }
       } else if (v.dest && Math.floor(v.blocked / 2) !== Math.floor(before / 2)) {
         // somebody working in the way (or a casualty): plan around them
         v.avoid = [...v.avoid.slice(-8), ...this.blockerTiles(b)];
@@ -999,7 +1049,7 @@ export class World {
    * Uses oriented footprints: a "near" box (the vehicle itself) can never overlap anything, a "far" box (a short
    * look-ahead) keeps a following distance and, for crossing traffic, lets the lower priority wait.
    */
-  private findBlocker(self: { id: number }, sx: number, sy: number, ux: number, uy: number, step: number, len: number, hw: number, prio: number): Blocker | null {
+  private findBlocker(self: { id: number }, sx: number, sy: number, ux: number, uy: number, step: number, len: number, hw: number, prio: number, squeeze = false): Blocker | null {
     const cx = sx + ux * step, cy = sy + uy * step, LOOK = 0.9;
     const near: Obb = { x: cx, y: cy, ux, uy, hl: len / 2 + 0.04, hw: hw + 0.04 };
     const far: Obb = { x: cx + ux * LOOK / 2, y: cy + uy * LOOK / 2, ux, uy, hl: len / 2 + LOOK / 2, hw: hw + 0.04 };
@@ -1008,6 +1058,7 @@ export class World {
       if (Math.abs(o.x - cx) > rr || Math.abs(o.y - cy) > rr) return null;
       const hx = Math.cos(o.angle), hy = Math.sin(o.angle);
       const ob: Obb = { x: o.x, y: o.y, ux: hx, uy: hy, hl: lo / 2, hw: ho };
+      if (squeeze) return obbOverlap(near, ob) ? { kind, id: o.id, x: o.x, y: o.y, civ, halted: Math.hypot(o.x - o.px, o.y - o.py) <= 1e-4 } : null; // squeezing past: only a real overlap stops us
       if (!obbOverlap(far, ob)) return null;
       const res: Blocker = { kind, id: o.id, x: o.x, y: o.y, civ, halted: Math.hypot(o.x - o.px, o.y - o.py) <= 1e-4 };
       if (obbOverlap(near, ob)) return res; // never drive into an overlap
@@ -1019,6 +1070,7 @@ export class World {
     for (const o of this.vehicles.values()) {
       if (o.id === self.id) continue;
       const od = this.vehicleDef(o);
+      if (od.flying) continue; // overhead
       const r = check(o, od.length, halfWidth(od.length), PRIO_EMERGENCY, 'veh');
       if (r) return r;
     }
@@ -1031,7 +1083,8 @@ export class World {
     // people on the pavement are not in the way of traffic; only people on the road or in a parking lot block
     const reachP = len / 2 + 0.7;
     const person = (o: { x: number; y: number }, responder?: Responder): Blocker | null =>
-      Math.abs(o.x - cx) > reachP || Math.abs(o.y - cy) > reachP ? null : !this.isRoad(Math.floor(o.x), Math.floor(o.y)) && !this.isParking(Math.floor(o.x), Math.floor(o.y)) ? null : obbOverlap(lookP, { x: o.x, y: o.y, ux: 1, uy: 0, hl: 0.26, hw: 0.26 }) ? { kind: 'person', x: o.x, y: o.y, halted: true, responder } : null;
+      Math.abs(o.x - cx) > reachP || Math.abs(o.y - cy) > reachP || (o.x - sx) * ux + (o.y - sy) * uy < -0.15 ? null : // (somebody behind the middle of the vehicle is not in its way)
+ !this.isRoad(Math.floor(o.x), Math.floor(o.y)) && !this.isParking(Math.floor(o.x), Math.floor(o.y)) ? null : obbOverlap(lookP, { x: o.x, y: o.y, ux: 1, uy: 0, hl: 0.26, hw: 0.26 }) ? { kind: 'person', x: o.x, y: o.y, halted: true, responder } : null;
     for (const o of this.responders.values()) { if (!o.inVehicle) { const r = person(o, o); if (r) return r; } }
     for (const o of this.victims.values()) { if (o.transport === 'scene' || o.transport === 'dead') { const r = person(o); if (r) return r; } }
     for (const o of this.suspects.values()) { if (o.mode === 'boarded') continue; const r = person(o); if (r) return r; }
@@ -1041,7 +1094,7 @@ export class World {
 
   // ---- vehicle footprints (people never stand on or walk through vehicles) ----
   private vehicleBoxes(): { x: number; y: number; ux: number; uy: number; hl: number; hw: number }[] {
-    return [...this.vehicles.values()].map(v => {
+    return [...this.vehicles.values()].filter(v => !(this.vehicleDef(v).flying && v.path.length)).map(v => {
       const d = this.vehicleDef(v);
       return { x: v.x, y: v.y, ux: Math.cos(v.angle), uy: Math.sin(v.angle), hl: d.length / 2, hw: halfWidth(d.length) };
     });
@@ -1632,6 +1685,7 @@ export class World {
     if (!prelim && inc.victims.some(id => this.victims.get(id)?.pinned)) { add('fire_engine'); add('rescue_vehicle'); }
     if (/hazmat|explosion|chemical/.test(inc.defId)) add('hazmat_unit');
     if (/high_rise|explosion|collapse/.test(inc.defId)) { add('ovd_car'); add('water_tanker'); }
+    if (!prelim && victims >= 3 && inc.severity >= 2) add('air_ambulance'); // a trauma helicopter for mass casualties
     if (victims >= 4) add('lgh_car'); // (never in the preliminary list)
     if (!prelim && inc.suspects.length >= 3 || /riot|demonstration/.test(inc.defId)) add('riot_van');
     if (/suspicious_package/.test(inc.defId)) add('bomb_squad');
@@ -2181,7 +2235,7 @@ export class World {
     const prio = inc.severity >= 3 ? 'Prioriteit 1, spoed' : inc.severity === 2 ? 'Prioriteit 2' : 'Prioriteit 3';
     // P2000 pager line: ambulance A1 (urgent) / A2, fire and police with a priority (1 = lights and sirens)
     inc.units = this.recommendedUnits(inc, true);
-    const abbr: Record<string, string> = { fire_engine: 'TS', aerial_ladder: 'HV', rescue_vehicle: 'HW', ambulance: 'AMB', patrol_car: 'PAT', tow_truck: 'BER', police_van: 'BUS', riot_van: 'ME', hazmat_unit: 'OGS', water_tanker: 'WTW', ovd_car: 'OvD', light_unit: 'LICHT', lgh_car: 'LGH', crane_truck: 'KRAAN', bomb_squad: 'EOD', mmt_car: 'MMT' };
+    const abbr: Record<string, string> = { fire_engine: 'TS', aerial_ladder: 'HV', rescue_vehicle: 'HW', ambulance: 'AMB', patrol_car: 'PAT', tow_truck: 'BER', police_van: 'BUS', riot_van: 'ME', hazmat_unit: 'OGS', water_tanker: 'WTW', ovd_car: 'OvD', light_unit: 'LICHT', air_ambulance: 'TRAUMA', lgh_car: 'LGH', crane_truck: 'KRAAN', bomb_squad: 'EOD', mmt_car: 'MMT' };
     const urgent = inc.severity >= 2;
     inc.pager = def.category === 'ambulance' ? `${urgent ? 'A1' : 'A2'} Rendam ${inc.address} ${inc.name}`
       : def.category === 'fire' ? `Prio ${urgent ? 1 : 2} BRW Rendam ${inc.address} ${inc.name}`

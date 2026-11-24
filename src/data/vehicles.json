@@ -524,5 +524,32 @@
     ],
     "patientCapacity": 0,
     "cost": 1100
+  },
+  {
+    "id": "air_ambulance",
+    "name": "Traumahelikopter",
+    "category": "ambulance",
+    "maxSpeed": 220,
+    "capacity": 3,
+    "color": "#fdd835",
+    "length": 2.6,
+    "equipment": [
+      "medical_kit",
+      "advanced_life_support",
+      "stretcher"
+    ],
+    "crew": [
+      {
+        "role": "doctor",
+        "count": 1
+      },
+      {
+        "role": "paramedic",
+        "count": 1
+      }
+    ],
+    "patientCapacity": 1,
+    "cost": 2500,
+    "flying": true
   }
 ]

@@ -31,7 +31,7 @@ describe('parking', () => {
     for (const v of w.vehicles.values()) {
       expect(w.isParking(Math.floor(v.x), Math.floor(v.y))).toBe(true);
       expect(w.isRoad(Math.floor(v.x), Math.floor(v.y))).toBe(false);
-      expect(v.angle).toBeCloseTo(-Math.PI / 2);
+      if (!w.vehicleDef(v).flying) expect(v.angle).toBeCloseTo(-Math.PI / 2); // (a helicopter sits on its pad, not in a bay)
     }
   });
   it('parked vehicles do not overlap each other or any building', () => {

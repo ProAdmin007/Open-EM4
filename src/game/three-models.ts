@@ -84,11 +84,13 @@ export interface VehicleParts {
   brake?: THREE.MeshStandardMaterial;
   blinkL?: THREE.MeshStandardMaterial;
   blinkR?: THREE.MeshStandardMaterial;
+  /** helicopter rotors: [main, tail] (spin around their own axis while the engine runs) */
+  rotors?: THREE.Object3D[];
 }
 
 interface Spec {
   /** `truck` = cab + box body, `van` = one box with a short bonnet, `car` = low body with cabin, `bike` = motorcycle */
-  shape: 'truck' | 'van' | 'car' | 'bike';
+  shape: 'truck' | 'van' | 'car' | 'bike' | 'heli';
   body: number;
   cab?: number;
   stripe?: number;
@@ -111,6 +113,7 @@ const SPECS: Record<string, Spec> = {
   'vehicle/police_van': { shape: 'van', body: 0x233f7a, stripe: 0xf3f4f6, stripe2: 0xff8c1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
   'vehicle/police_motorcycle': { shape: 'bike', body: 0xf3f4f6, stripe: 0x1f4fb3, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 2 },
   'vehicle/bomb_squad': { shape: 'truck', body: 0x37474f, cab: 0x37474f, stripe: 0xff7a1a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 3, extras: bombSquadExtras },
+  'vehicle/air_ambulance': { shape: 'heli', body: 0xf6f4ea, stripe: 0xff7a1a, stripe2: 0xffd21a, accent: 0x2f6bff, accent2: 0xff2a2a, wheels: 0 },
   'vehicle/light_unit': { shape: 'truck', body: 0xef6c00, cab: 0xef6c00, stripe: 0xf2f2f2, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: lightMastExtras },
   'vehicle/ovd_car': { shape: 'car', body: 0xf6f4ea, stripe: 0xffd21a, stripe2: 0xd32f2f, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2 },
   'vehicle/lgh_car': { shape: 'car', body: 0xf6f4ea, stripe: 0x26c6da, stripe2: 0xffd21a, accent: 0x2f6bff, accent2: 0x2f6bff, wheels: 2, extras: crossExtras },
@@ -353,6 +356,8 @@ export function buildVehicle(model: string, category: string, size: { length: nu
   const bodyMat = paint(spec.body), dark = lambert(0x24262a);
   const bottom = wr * 0.85;
 
+  if (spec.shape === 'heli') return buildHelicopter(spec, L, W, H);
+
   if (spec.shape === 'bike') {
     const frame = box(g, L * 0.55, 0.28, 0.28, bodyMat, 0, 0.62, 0);
     frame.rotation.z = 0.04;
@@ -497,6 +502,40 @@ export function buildVehicle(model: string, category: string, size: { length: nu
   }
 
   spec.extras?.(g, L, W, H, wr);
+  return { group: g, parts };
+}
+
+/** Trauma helicopter: pod, tail boom, skids, spinning main and tail rotor, strobes. Nose points to +x. */
+function buildHelicopter(spec: Spec, L: number, W: number, H: number): { group: THREE.Group; parts: VehicleParts } {
+  const g = new THREE.Group();
+  const parts: VehicleParts = { wheels: [], beacons: [], rotors: [] };
+  const body = paint(spec.body), stripe = lambert(spec.stripe ?? 0xff7a1a), dark = lambert(0x24262a), glassM = glassMat();
+  const ph = H * 1.05, py = 0.45 + ph / 2; // pod height / centre
+  rbox(g, L * 0.34, ph, W * 0.9, 0.5, body, L * 0.12, py + 0.2, 0); // cabin pod
+  rbox(g, L * 0.2, ph * 0.55, W * 0.84, 0.35, body, L * 0.33, py - 0.05, 0); // nose
+  box(g, 0.06, ph * 0.55, W * 0.8, glassM, L * 0.43, py + 0.18, 0).rotation.z = 0.5; // windscreen
+  for (const s2 of [-1, 1]) {
+    rbox(g, L * 0.16, ph * 0.38, 0.05, 0.05, glassM, L * 0.2, py + 0.4, s2 * (W * 0.45 + 0.012));
+    box(g, L * 0.34, 0.2, 0.03, stripe, L * 0.12, py - 0.2, s2 * (W * 0.45 + 0.015)); // livery band
+    box(g, 0.04, 0.5, 0.04, dark, L * 0.04, 0.2, s2 * W * 0.4); // skid struts
+    box(g, 0.04, 0.5, 0.04, dark, L * 0.22, 0.2, s2 * W * 0.4);
+    box(g, L * 0.44, 0.09, 0.12, dark, L * 0.13, 0.08, s2 * W * 0.4); // skids
+  }
+  box(g, L * 0.42, 0.34, 0.34, body, -L * 0.28, py + 0.45, 0); // tail boom
+  box(g, 0.1, 0.9, 0.3, body, -L * 0.48, py + 0.9, 0); // tail fin
+  const hub = box(g, 0.3, 0.3, 0.3, dark, L * 0.1, py + ph / 2 + 0.55, 0);
+  box(g, 0.14, 0.4, 0.14, dark, L * 0.1, py + ph / 2 + 0.3, 0); // mast
+  const main = new THREE.Group(); main.position.copy(hub.position); g.add(main);
+  for (let i = 0; i < 4; i++) { const b = box(main, L * 0.9, 0.04, 0.22, dark, 0, 0.18, 0); b.rotation.y = (i * Math.PI) / 2 + 0.2; b.position.set(0, 0.18, 0); b.geometry = b.geometry.clone(); b.geometry.translate(L * 0.45, 0, 0); }
+  const tail = new THREE.Group(); tail.position.set(-L * 0.5, py + 0.9, W * 0.2); g.add(tail);
+  for (let i = 0; i < 2; i++) { const b = box(tail, 0.05, 1.7, 0.16, dark, 0, 0, 0); b.rotation.z = (i * Math.PI) / 2; }
+  parts.rotors!.push(main, tail);
+  // strobes: belly + tail light, alternating blue / red
+  const l = box(g, 0.24, 0.16, 0.24, glow(spec.accent, 0.3), L * 0.1, py + ph / 2 + 0.05, W * 0.3);
+  const r = box(g, 0.24, 0.16, 0.24, glow(spec.accent2, 0.3), L * 0.1, py + ph / 2 + 0.05, -W * 0.3);
+  l.material = own(l.material as THREE.Material); r.material = own(r.material as THREE.Material);
+  parts.beacons.push({ mesh: l, on: 2.4, off: 0.15, phase: 0 }, { mesh: r, on: 2.4, off: 0.15, phase: 1 });
+  box(g, 0.06, 0.14, 0.3, glow(0xfff3c0, 1.2), L * 0.46, py - 0.15, 0); // landing light
   return { group: g, parts };
 }
 
