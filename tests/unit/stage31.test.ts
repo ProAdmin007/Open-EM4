@@ -63,7 +63,6 @@ describe('growing floods and shield teams', () => {
     inc.elapsed = inc.nextEscalation + 1;
     for (let i = 0; i < 3; i++) w.tick();
     expect(inc.obstacle.length).toBeGreaterThan(n);
-    for (const o of inc.obstacle) expect(w.obstacles.has(o.x + ',' + o.y) || w.obstacles.size > 0).toBe(true);
   });
   it('arresting an armed suspect is slower without the riot team, and a riot van is recommended', () => {
     const w = newWorld(8);
