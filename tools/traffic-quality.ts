@@ -65,8 +65,10 @@ for (const difficulty of ['normal', 'hard'] as const) for (let seed = 1; seed <=
     for (const e of w.events.slice(eventsSeen > w.events.length ? 0 : eventsSeen)) {
       if (/komt er niet door|zit vast/.test(e.message ?? '')) { tot.giveUps++; note(`${ctx} t=${w.time.toFixed(0)} ${e.message}`); }
       if (/geen route/.test(e.message ?? '')) tot.noRoute++;
+      if (process.env.TQ_EV && ctx === process.env.TQ_EV) console.log('EV', w.time.toFixed(0), e.message);
     }
     eventsSeen = w.events.length;
+    if (process.env.TQ_DUMP) { const [dc, dt0] = process.env.TQ_DUMP.split('@'); if (dc === ctx && Math.abs(w.time - Number(dt0)) < 0.02) for (const v of w.vehicles.values()) if (!w.vehicleDef(v).flying && Math.hypot(v.x - Number(process.env.TQ_X), v.y - Number(process.env.TQ_Y)) < 6) console.log('DUMP', w.vehicleDef(v).id, v.id, v.x.toFixed(2), v.y.toFixed(2), 'ang', v.angle.toFixed(2), 'path', v.path.length, 'dest', JSON.stringify(v.dest), 'blocked', v.blocked.toFixed(1), 'jam', (w as any).jam.get(v.id), 'ghost', v.ghost.toFixed(1), 'cf', v.contraflow, 'state', v.state, 'ret', v.returning, 'speed', v.speedNow.toFixed(2)); }
     const boxes: (Box & { label: string; air: boolean })[] = [];
     for (const v of w.vehicles.values()) {
       const def = w.vehicleDef(v);
