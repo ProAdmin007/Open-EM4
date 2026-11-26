@@ -2840,6 +2840,19 @@ export class World {
     }
   }
 
+  /** Is a vehicle with its siren on coming up behind this car in the same lane (within ~9 tiles)? */
+  private sirenBehind(c: Civilian, ux: number, uy: number): boolean {
+    for (const v of this.vehicles.values()) {
+      if (v.silent || !v.path.length || v.speedNow < 1.5 || !this.groundVehicle(v)) continue;
+      const rx = c.x - v.x, ry = c.y - v.y, along = rx * ux + ry * uy, lat = Math.abs(rx * uy - ry * ux);
+      if (along > 0.5 && along < 9 && lat < 0.7) {
+        const h = v.path[0]; const hx = h.x + 0.5 - v.x, hy = h.y + 0.5 - v.y, hl = Math.hypot(hx, hy) || 1;
+        if ((hx * ux + hy * uy) / hl > 0.8) return true;
+      }
+    }
+    return false;
+  }
+
   private updateCivilian(c: Civilian, dt: number): void {
     if (c.wait > 0) {
       c.wait -= dt; this.alignCivilian(c, dt);
@@ -2870,6 +2883,7 @@ export class World {
     const after = c.path[1];
     const turning = !!after && (after.x - next.x !== next.x - Math.floor(c.x) || after.y - next.y !== next.y - Math.floor(c.y)) && d < 1.2;
     if (turning) target = Math.min(target, 1.3);
+    else if (this.sirenBehind(c, ux, uy)) target = Math.min(c.speed * 1.45, 5.6); // a siren close behind: step on it and clear the lane (and the junction)
     c.signal = 0;
     for (let k = 0; k < Math.min(3, c.path.length - 1); k++) { // indicator on for a turn within the next tiles
       const a = c.path[k], b = c.path[k + 1], cx0 = k === 0 ? Math.floor(c.x) : c.path[k - 1].x, cy0 = k === 0 ? Math.floor(c.y) : c.path[k - 1].y;
